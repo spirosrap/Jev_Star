@@ -25,7 +25,7 @@ from .macro_navigation import MacroNavigation
 
 
 class JevProtossBot(MacroExecution, MacroNavigation, Protoss_Bot):
-    def __init__(self, jev_client, output_dir: Path, decision_interval=1.0,
+    def __init__(self, jev_client, output_dir: Path, decision_interval=2.5,
                  max_decision_age=4.0, max_requests=2000, run_log=None):
         super().__init__({}, threading.Lock(), threading.Event())
         self.military_unit_types.update({U.SENTRY, U.MOTHERSHIP})

@@ -22,6 +22,45 @@ ENDPOINT = os.environ.get(
     "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
 ).strip()
 QUESTION = "next_macro_action"
+# Fields Jev needs for the next macro order. Navigation, scouting memory and
+# economy history stay with Astra; they were most of the refused payloads.
+_RESOURCE_KEYS = (
+    "game_time", "mineral", "gas", "supply_left", "supply_cap",
+    "supply_used", "worker_supply", "army_supply",
+)
+_PLAN_KEYS = (
+    "plan_id", "objective", "guidance", "army_posture", "priority",
+    "production_priority", "goals", "remaining_goals", "worker_target",
+    "base_target", "attack_min_army", "retreat_below_army",
+    "expires_game_seconds", "allowed_spending_actions",
+    "reserve_for_action", "reserved_minerals", "reserved_gas",
+    "reservation_suspended_reason", "min_posture_seconds",
+)
+
+
+def compact_state(state: dict) -> dict:
+    """Minerals, gas, supply, what is already building, and the current plan."""
+    if "resource" not in state and "building" not in state:
+        return state
+    resource = state.get("resource") or {}
+    plan = state.get("strategic_plan")
+    slim_plan = None
+    if isinstance(plan, dict):
+        slim_plan = {key: plan[key] for key in _PLAN_KEYS if key in plan}
+    compact = {
+        "game_loop": state.get("game_loop"),
+        "resource": {key: resource.get(key) for key in _RESOURCE_KEYS},
+        "building": state.get("building"),
+        "planning": state.get("planning"),
+        "unit": state.get("unit"),
+        "enemy": state.get("enemy"),
+        "strategic_plan": slim_plan,
+        "execution_directive": state.get("execution_directive"),
+        "base_under_attack": state.get("base_under_attack"),
+        "army_intent": state.get("army_intent"),
+        "supply_forecast": state.get("supply_forecast"),
+    }
+    return {key: value for key, value in compact.items() if value is not None}
 INSTRUCTIONS = (
     "You execute immediate Protoss macro decisions in real-time StarCraft II. Choose ONE "
     "available action that advances the current mission. Priorities: imminent survival "
@@ -91,7 +130,7 @@ class JevClient:
             )
         return {
             "model": self.model,
-            "state": state,
+            "state": compact_state(state),
             "questions": {QUESTION: {
                 "type": "choice", "instructions": instructions,
                 "criteria": {str(k): v for k, v in choices.items()},
@@ -152,16 +191,18 @@ class Decision:
     response: dict
     latency_ms: float
     plan_id: Optional[int] = None
+    replay: bool = False
 
 
 class DecisionScheduler:
     """Game callbacks poll finished work; they never await an in-flight model call."""
 
-    def __init__(self, client, emit: Callable, interval=1.0, max_age=4.0,
+    def __init__(self, client, emit: Callable, interval=2.5, max_age=4.0,
                  max_requests=2000, clock=time.monotonic):
         if interval <= 0 or max_age <= 0 or max_requests < 1:
             raise ValueError("Decision interval, max age and request budget must be positive.")
         self.client, self.emit, self.clock = client, emit, clock
+        self.base_interval = interval
         self.interval, self.max_age, self.max_requests = interval, max_age, max_requests
         self.task = None
         self.request_id = 0
@@ -174,6 +215,10 @@ class DecisionScheduler:
         self.consecutive_errors = 0
         self.last_game_loop = 0
         self.pending_plan_id = None
+        self.retry_of = None
+        self._inflight_payload = None
+        self._inflight_loop = 0
+        self._inflight_replay = False
 
     @property
     def ready(self):
@@ -183,22 +228,35 @@ class DecisionScheduler:
     def submit(self, game_loop: int, state: dict, choices: dict) -> bool:
         if not self.ready:
             return False
-        # The live Bot state can change while the HTTP task is suspended.
-        payload = copy.deepcopy(self.client.payload(state, choices))
-        plan_id = (state.get("strategic_plan") or {}).get("plan_id")
+        replay = self.retry_of
+        if replay is not None:
+            # One retry of the decision the gateway refused, not a new observation.
+            payload, plan_id, game_loop = replay
+            self.retry_of = None
+            self._inflight_replay = True
+            self.stats["replays"] += 1
+        else:
+            # The live Bot state can change while the HTTP task is suspended.
+            payload = copy.deepcopy(self.client.payload(state, choices))
+            plan_id = (state.get("strategic_plan") or {}).get("plan_id")
+            self._inflight_replay = False
+        self._inflight_payload = payload
+        self._inflight_loop = game_loop
         self.pending_plan_id = plan_id
         self.last_game_loop = game_loop
         self.request_id += 1
         request_id, started_at = self.request_id, self.clock()
         self.next_request_at = started_at + self.interval
         self.stats["requests"] += 1
-        self.emit("request", request_id=request_id, game_loop=game_loop, plan_id=plan_id, payload=payload)
+        self.emit("request", request_id=request_id, game_loop=game_loop, plan_id=plan_id,
+                  replay=self._inflight_replay, payload=payload)
+        is_replay = self._inflight_replay
 
         async def request():
             response = await self.client.choose(payload)
             return Decision(request_id, game_loop, started_at,
                             int(response["answer"]["choice"]), response,
-                            (self.clock() - started_at) * 1000, plan_id)
+                            (self.clock() - started_at) * 1000, plan_id, is_replay)
 
         self.task = asyncio.create_task(request())
         return True
@@ -213,15 +271,25 @@ class DecisionScheduler:
         except JevError as exc:
             self.stats["api_errors"] += 1
             self.consecutive_errors += 1
-            # Never retry an old state. Back off and later submit a fresh observation.
-            self.next_request_at = self.clock() + max(
-                exc.retry_after, min(30, 2 ** min(self.consecutive_errors, 5)))
             self.disabled = exc.status in (400, 401, 402, 403, 404, 422)
             self.disabled_status = exc.status if self.disabled else None
+            replayable = exc.status == 503 and not self._inflight_replay and not self.disabled
+            if replayable:
+                self.retry_of = (self._inflight_payload, self.pending_plan_id, self._inflight_loop)
+                delay = max(exc.retry_after, 3.0)
+            elif exc.status == 429:
+                # A refusal means the steady rate was too high. Stay slower
+                # after the cooldown instead of returning to the base interval.
+                self.interval = max(self.interval, 3.0)
+                delay = max(exc.retry_after, self.interval, min(30.0, 2 ** min(self.consecutive_errors, 5)))
+            else:
+                delay = max(exc.retry_after, min(30.0, 2 ** min(self.consecutive_errors, 5)))
+            self.next_request_at = self.clock() + (0 if self.disabled else delay)
             self.emit("api_error", request_id=self.request_id, error=str(exc),
                       game_loop=game_loop, plan_id=self.pending_plan_id,
                       status=exc.status, disabled=self.disabled,
                       error_category="billing" if exc.status == 402 else "configuration" if self.disabled else "transient",
+                      will_retry_same_state=replayable,
                       retry_in_seconds=0 if self.disabled else max(0, self.next_request_at - self.clock()))
             return None
         self.consecutive_errors = 0
@@ -231,7 +299,10 @@ class DecisionScheduler:
         self.latencies.append(decision.latency_ms)
         wall_age = self.clock() - decision.started_at
         game_age = (game_loop - decision.game_loop) / 22.4
-        stale = wall_age > self.max_age or game_age > self.max_age or game_age < 0
+        # A replay already waited out the gateway. Judge it by game time,
+        # with a wider wall-clock allowance than a fresh decision.
+        wall_limit = 12.0 if decision.replay else self.max_age
+        stale = wall_age > wall_limit or game_age > self.max_age or game_age < 0
         self.emit("response", request_id=decision.request_id, game_loop=game_loop,
                   plan_id=decision.plan_id,
                   observation_game_loop=decision.game_loop, latency_ms=decision.latency_ms,

@@ -16,7 +16,7 @@ The current version, `macro-v2.2.1`, controls full Protoss games. It retains the
 | [macro_execution.py](sc2_rl_agent/starcraftenv_test/env/bot/macro_execution.py) | Production, research, abilities, and order feedback |
 | [macro_navigation.py](sc2_rl_agent/starcraftenv_test/env/bot/macro_navigation.py) | Scouting and persistent army stances |
 
-Run `python jev_star.py macro ...` from the repository root; see the [main README](../README.md#english) for setup. By default, the controller starts at most one JEV request per second. Games use `realtime=True` and continue advancing while the model is processing. JEV results are checked against the latest state and plan version; stale results are discarded. Planning runs in the background.
+Run `python jev_star.py macro ...` from the repository root; see the [main README](../README.md#english) for setup. By default, the controller starts at most one JEV request every 2.5 seconds, and stays at 3 seconds after a rate limit. A 503 is retried once with the same state. Games use `realtime=True` and continue advancing while the model is processing. JEV results are checked against the latest state and plan version; stale results are discarded. Planning runs in the background.
 
 Action IDs: 0–18 cover unit production and Archon merging; 19–33 buildings; 34–59 research; 60–63 scouting; 64 attack, 65 retreat, and 72 defend; 66–70 Chronoboost; 71 wait. The planner does not directly emit per-unit commands. Micro skills are limited to the executor's implemented capabilities; writing an instruction in a plan does not add a new executable skill.
 
@@ -40,7 +40,7 @@ This directory excludes legacy Gym registration, chat models, retrieval memory, 
 | [macro_execution.py](sc2_rl_agent/starcraftenv_test/env/bot/macro_execution.py) | 生产、研究、能力、订单反馈 |
 | [macro_navigation.py](sc2_rl_agent/starcraftenv_test/env/bot/macro_navigation.py) | 侦察与持续军队姿态 |
 
-从仓库根目录运行 `python jev_star.py macro ...`；安装方法见 [总说明](../README.md#简体中文)。默认每秒最多发起一次 JEV 请求，游戏 `realtime=True`，模型等待期间继续推进。JEV 结果按最新状态和计划版本复核，过期结果丢弃；计划调用在后台执行。
+从仓库根目录运行 `python jev_star.py macro ...`；安装方法见 [总说明](../README.md#简体中文)。默认每 2.5 秒最多发起一次 JEV 请求，遇到限流后保持 3 秒一次；503 会用同一状态重试一次。游戏 `realtime=True`，模型等待期间继续推进。JEV 结果按最新状态和计划版本复核，过期结果丢弃；计划调用在后台执行。
 
 动作 ID：0–18 单位生产及 Archon，19–33 建筑，34–59 研究，60–63 侦察，64 进攻、65 撤退、72 防守，66–70 Chronoboost，71 等待。规划模型不直接输出逐单位命令。实际微操技能只覆盖已实现的执行能力，不能把文字计划当作额外技能接口。
 
