@@ -19,7 +19,7 @@ def reply(choice="0", probabilities=None):
 class NativeApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_native_contract_and_valid_choice(self):
         def handler(request):
-            self.assertEqual(str(request.url), "https://api.typesafe.ai/v1/systemone")
+            self.assertEqual(str(request.url), "https://ai-gateway.vercel.sh/typesafe/v1/systemone")
             self.assertEqual(request.headers["authorization"], "Bearer test-only")
             body = json.loads(request.content)
             self.assertNotIn("messages", body)

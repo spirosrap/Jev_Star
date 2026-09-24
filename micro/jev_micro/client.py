@@ -9,7 +9,12 @@ from pathlib import Path
 import httpx
 
 
-ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+# Vercel AI Gateway's TypeSafe-compatible route. Same Jev model and
+# /v1/systemone payload; TypeSafe's own console is not required.
+ENDPOINT = os.environ.get(
+    "JEV_API_ENDPOINT",
+    "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+).strip()
 
 
 class JevError(RuntimeError):
@@ -17,13 +22,14 @@ class JevError(RuntimeError):
 
 
 def load_api_key(config_file: Path) -> str:
-    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+    key = (os.environ.get("AI_GATEWAY_API_KEY", "").strip()
+           or os.environ.get("TYPESAFE_API_KEY", "").strip())
     if not key and config_file.is_file():
         match = re.search(r"(?m)^api\s*:\s*(\S+)\s*$",
                           config_file.read_text(encoding="utf-8-sig"))
         key = match.group(1) if match else ""
     if not key:
-        raise JevError("Set TYPESAFE_API_KEY or supply a config file with an api: entry.")
+        raise JevError("Set AI_GATEWAY_API_KEY or supply a config file with an api: entry.")
     return key
 
 

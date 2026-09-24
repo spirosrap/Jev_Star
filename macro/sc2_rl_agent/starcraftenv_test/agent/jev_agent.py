@@ -15,7 +15,12 @@ from typing import Callable, Optional
 import httpx
 
 
-ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+# Vercel AI Gateway's TypeSafe-compatible route. Same Jev model and
+# /v1/systemone payload; TypeSafe's own console is not required.
+ENDPOINT = os.environ.get(
+    "JEV_API_ENDPOINT",
+    "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+).strip()
 QUESTION = "next_macro_action"
 INSTRUCTIONS = (
     "You execute immediate Protoss macro decisions in real-time StarCraft II. Choose ONE "
@@ -40,13 +45,14 @@ INSTRUCTIONS = (
 
 
 def load_api_key(config_file: Optional[Path] = None) -> str:
-    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+    key = (os.environ.get("AI_GATEWAY_API_KEY", "").strip()
+           or os.environ.get("TYPESAFE_API_KEY", "").strip())
     if not key and config_file is not None and config_file.is_file():
         match = re.search(r"(?m)^api\s*:\s*(\S+)\s*$", config_file.read_text(encoding="utf-8-sig"))
         if match:
             key = match.group(1)
     if not key:
-        raise ValueError("Set TYPESAFE_API_KEY or provide a config file containing an api: entry.")
+        raise ValueError("Set AI_GATEWAY_API_KEY or provide a config file containing an api: entry.")
     return key
 
 
