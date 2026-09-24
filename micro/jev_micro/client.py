@@ -9,11 +9,11 @@ from pathlib import Path
 import httpx
 
 
-# Vercel AI Gateway's TypeSafe-compatible route. Same Jev model and
-# /v1/systemone payload; TypeSafe's own console is not required.
+# OpenRouter's TypeSafe-compatible route. Same Jev model and /v1/systemone
+# payload. Override with JEV_API_ENDPOINT.
 ENDPOINT = os.environ.get(
     "JEV_API_ENDPOINT",
-    "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+    "https://openrouter.ai/api/v1/systemone",
 ).strip()
 
 
@@ -22,14 +22,20 @@ class JevError(RuntimeError):
 
 
 def load_api_key(config_file: Path) -> str:
-    key = (os.environ.get("AI_GATEWAY_API_KEY", "").strip()
-           or os.environ.get("TYPESAFE_API_KEY", "").strip())
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key and config_file.is_file():
-        match = re.search(r"(?m)^api\s*:\s*(\S+)\s*$",
+        match = re.search(r"(?m)^openrouter\s*:\s*(\S+)\s*$",
                           config_file.read_text(encoding="utf-8-sig"))
         key = match.group(1) if match else ""
     if not key:
-        raise JevError("Set AI_GATEWAY_API_KEY or supply a config file with an api: entry.")
+        key = (os.environ.get("AI_GATEWAY_API_KEY", "").strip()
+               or os.environ.get("TYPESAFE_API_KEY", "").strip())
+        if not key and config_file.is_file():
+            match = re.search(r"(?m)^api\s*:\s*(\S+)\s*$",
+                              config_file.read_text(encoding="utf-8-sig"))
+            key = match.group(1) if match else ""
+    if not key:
+        raise JevError("Set OPENROUTER_API_KEY or supply a config file with an openrouter: entry.")
     return key
 
 
@@ -58,9 +64,11 @@ def validate_response(data, payload):
             clean[key] = {"type": "choice", "choice": answer["choice"],
                           "confidence": answer["confidence"],
                           "probabilities": dict(probabilities)}
-        usage = data.get("usage", {})
-        if not isinstance(usage, dict) or any(type(v) is not int or v < 0
-                                             for v in usage.values()):
+        raw_usage = data.get("usage", {})
+        if not isinstance(raw_usage, dict):
+            raise ValueError("usage")
+        usage = {k: v for k, v in raw_usage.items() if type(v) is int}
+        if any(v < 0 for v in usage.values()):
             raise ValueError("usage")
         return {"model": data.get("model"), "answers": clean, "usage": usage}
     except (KeyError, TypeError, ValueError, AttributeError):

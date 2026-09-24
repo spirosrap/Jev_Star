@@ -19,7 +19,7 @@ def reply(choice="0", probabilities=None):
 class NativeApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_native_contract_and_valid_choice(self):
         def handler(request):
-            self.assertEqual(str(request.url), "https://ai-gateway.vercel.sh/typesafe/v1/systemone")
+            self.assertEqual(str(request.url), "https://openrouter.ai/api/v1/systemone")
             self.assertEqual(request.headers["authorization"], "Bearer test-only")
             body = json.loads(request.content)
             self.assertNotIn("messages", body)
@@ -177,7 +177,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.now += 40
         self.assertTrue(self.scheduler.ready)
 
-    async def test_service_unavailable_retries_the_same_state_once(self):
+    async def test_refused_call_uses_a_fresh_observation(self):
         calls = {"n": 0}
 
         def handler(request):
@@ -199,70 +199,17 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(JevError):
             await self.scheduler.task
         self.scheduler.poll(20)
-        self.assertEqual(self.requests[0]["state"]["resource"]["mineral"], 50)
-        self.assertNotIn("navigation", self.requests[0]["state"])
-        self.assertNotIn("goal_counts_at_observation", self.requests[0]["state"]["strategic_plan"])
-        self.now += 3
+        self.assertIn("navigation", self.requests[0]["state"])
+        self.assertIn("goal_counts_at_observation", self.requests[0]["state"]["strategic_plan"])
+        self.now += 2
         self.assertTrue(self.scheduler.submit(
-            80, {"resource": {"mineral": 999}, "building": {}}, self.choices))
+            80, {"resource": {"mineral": 80}, "building": {}, "navigation": {"huge": False}},
+            self.choices))
         await self.scheduler.task
         decision = self.scheduler.poll(90)
         self.assertEqual(decision.action_id, 0)
-        self.assertTrue(decision.replay)
-        self.assertEqual(self.requests[1]["state"]["resource"]["mineral"], 50)
-        self.now += self.scheduler.interval
-        self.assertTrue(self.scheduler.submit(
-            100, {"resource": {"mineral": 80}, "building": {}}, self.choices))
-        await self.scheduler.task
-        self.assertEqual(self.requests[2]["state"]["resource"]["mineral"], 80)
-
-    async def test_replay_is_kept_through_the_backoff_game_time(self):
-        calls = {"n": 0}
-
-        def handler(request):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                return httpx.Response(503)
-            return httpx.Response(200, json=reply())
-
-        await self.client.close()
-        self.client = JevClient("test-only", transport=httpx.MockTransport(handler))
-        self.scheduler.client = self.client
-        self.scheduler.submit(10, {}, self.choices)
-        with self.assertRaises(JevError):
-            await self.scheduler.task
-        self.scheduler.poll(20)
-        self.now += 3
-        self.assertTrue(self.scheduler.submit(140, {}, self.choices))
-        await self.scheduler.task
-        decision = self.scheduler.poll(140)
-        self.assertIsNotNone(decision)
-        self.assertTrue(decision.replay)
-        self.assertEqual(self.scheduler.stats["stale_results"], 0)
-
-    async def test_rate_limit_keeps_the_slower_interval(self):
-        calls = {"n": 0}
-
-        def handler(request):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                return httpx.Response(429, headers={"Retry-After": "1"})
-            return httpx.Response(200, json=reply())
-
-        await self.client.close()
-        self.client = JevClient("test-only", transport=httpx.MockTransport(handler))
-        self.scheduler.client = self.client
-        self.scheduler.max_requests = 5
-        self.scheduler.submit(10, {}, self.choices)
-        with self.assertRaises(JevError):
-            await self.scheduler.task
-        self.scheduler.poll(11)
-        self.assertGreaterEqual(self.scheduler.interval, 3)
-        self.now += 3
-        self.assertTrue(self.scheduler.submit(20, {}, self.choices))
-        await self.scheduler.task
-        self.assertIsNotNone(self.scheduler.poll(21))
-        self.assertGreaterEqual(self.scheduler.interval, 3)
+        self.assertEqual(self.requests[1]["state"]["resource"]["mineral"], 80)
+        self.assertEqual(self.scheduler.interval, 1)
 
 
 if __name__ == "__main__":

@@ -89,7 +89,7 @@ def main():
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--step-mul", type=int, default=8)
-    parser.add_argument("--model", default="typesafe-ai/jev")
+    parser.add_argument("--model", default="typesafe/jev-1.13")
     parser.add_argument("--request-timeout", type=positive, default=10.0)
     parser.add_argument("--max-requests", type=int, help="Per-map limit; otherwise derived from map step limit and maximum unit batches")
     parser.add_argument("--batch-concurrency", type=int, default=4)

@@ -217,7 +217,7 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
         calls = []
         def handle(request):
             calls.append(json.loads(request.content))
-            self.assertEqual(request.url.path, "/v1/systemone")
+            self.assertEqual(request.url.path, "/api/v1/systemone")
             return httpx.Response(200, json=self.response)
         client = JevClient("dummy", transport=httpx.MockTransport(handle))
         try:

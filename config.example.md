@@ -1,10 +1,9 @@
 # Local JEV credentials
 
 Copy this file to `config.md` and replace the placeholder, or set the
-`AI_GATEWAY_API_KEY` environment variable. `config.md` is ignored by Git.
+`OPENROUTER_API_KEY` environment variable. `config.md` is ignored by Git.
 
-Jev is called through Vercel AI Gateway's TypeSafe-compatible route
-(`https://ai-gateway.vercel.sh/typesafe/v1/systemone`). Create the key in
-the Vercel dashboard under AI Gateway. `TYPESAFE_API_KEY` is still accepted.
+Jev is called through OpenRouter's TypeSafe-compatible route
+(`https://openrouter.ai/api/v1/systemone`), model `typesafe/jev-1.13`.
 
-api: REPLACE_WITH_YOUR_AI_GATEWAY_API_KEY
+openrouter: REPLACE_WITH_YOUR_OPENROUTER_API_KEY

@@ -376,7 +376,7 @@ def main():
     parser.add_argument("--poll-seconds", type=positive, default=0.01)
     parser.add_argument("--max-game-loops", type=int)
     parser.add_argument("--simulated-latency-ms", type=float, default=0)
-    parser.add_argument("--model", default="typesafe-ai/jev")
+    parser.add_argument("--model", default="typesafe/jev-1.13")
     parser.add_argument("--request-timeout", type=positive, default=5)
     parser.add_argument("--max-requests", type=int, default=500)
     parser.add_argument("--batch-concurrency", type=int, default=4)

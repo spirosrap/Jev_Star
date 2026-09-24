@@ -15,52 +15,13 @@ from typing import Callable, Optional
 import httpx
 
 
-# Vercel AI Gateway's TypeSafe-compatible route. Same Jev model and
-# /v1/systemone payload; TypeSafe's own console is not required.
+# OpenRouter's TypeSafe-compatible route. Same Jev model and /v1/systemone
+# payload. Override with JEV_API_ENDPOINT.
 ENDPOINT = os.environ.get(
     "JEV_API_ENDPOINT",
-    "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+    "https://openrouter.ai/api/v1/systemone",
 ).strip()
 QUESTION = "next_macro_action"
-# Fields Jev needs for the next macro order. Navigation, scouting memory and
-# economy history stay with Astra; they were most of the refused payloads.
-_RESOURCE_KEYS = (
-    "game_time", "mineral", "gas", "supply_left", "supply_cap",
-    "supply_used", "worker_supply", "army_supply",
-)
-_PLAN_KEYS = (
-    "plan_id", "objective", "guidance", "army_posture", "priority",
-    "production_priority", "goals", "remaining_goals", "worker_target",
-    "base_target", "attack_min_army", "retreat_below_army",
-    "expires_game_seconds", "allowed_spending_actions",
-    "reserve_for_action", "reserved_minerals", "reserved_gas",
-    "reservation_suspended_reason", "min_posture_seconds",
-)
-
-
-def compact_state(state: dict) -> dict:
-    """Minerals, gas, supply, what is already building, and the current plan."""
-    if "resource" not in state and "building" not in state:
-        return state
-    resource = state.get("resource") or {}
-    plan = state.get("strategic_plan")
-    slim_plan = None
-    if isinstance(plan, dict):
-        slim_plan = {key: plan[key] for key in _PLAN_KEYS if key in plan}
-    compact = {
-        "game_loop": state.get("game_loop"),
-        "resource": {key: resource.get(key) for key in _RESOURCE_KEYS},
-        "building": state.get("building"),
-        "planning": state.get("planning"),
-        "unit": state.get("unit"),
-        "enemy": state.get("enemy"),
-        "strategic_plan": slim_plan,
-        "execution_directive": state.get("execution_directive"),
-        "base_under_attack": state.get("base_under_attack"),
-        "army_intent": state.get("army_intent"),
-        "supply_forecast": state.get("supply_forecast"),
-    }
-    return {key: value for key, value in compact.items() if value is not None}
 INSTRUCTIONS = (
     "You execute immediate Protoss macro decisions in real-time StarCraft II. Choose ONE "
     "available action that advances the current mission. Priorities: imminent survival "
@@ -84,14 +45,21 @@ INSTRUCTIONS = (
 
 
 def load_api_key(config_file: Optional[Path] = None) -> str:
-    key = (os.environ.get("AI_GATEWAY_API_KEY", "").strip()
-           or os.environ.get("TYPESAFE_API_KEY", "").strip())
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key and config_file is not None and config_file.is_file():
-        match = re.search(r"(?m)^api\s*:\s*(\S+)\s*$", config_file.read_text(encoding="utf-8-sig"))
+        text = config_file.read_text(encoding="utf-8-sig")
+        match = re.search(r"(?m)^openrouter\s*:\s*(\S+)\s*$", text)
         if match:
             key = match.group(1)
     if not key:
-        raise ValueError("Set AI_GATEWAY_API_KEY or provide a config file containing an api: entry.")
+        key = (os.environ.get("AI_GATEWAY_API_KEY", "").strip()
+               or os.environ.get("TYPESAFE_API_KEY", "").strip())
+        if not key and config_file is not None and config_file.is_file():
+            match = re.search(r"(?m)^api\s*:\s*(\S+)\s*$", config_file.read_text(encoding="utf-8-sig"))
+            if match:
+                key = match.group(1)
+    if not key:
+        raise ValueError("Set OPENROUTER_API_KEY or provide a config file containing an openrouter: entry.")
     return key
 
 
@@ -105,7 +73,7 @@ class JevError(Exception):
 
 
 class JevClient:
-    def __init__(self, api_key: str, model="typesafe-ai/jev", timeout=2.5, transport=None):
+    def __init__(self, api_key: str, model="typesafe/jev-1.13", timeout=2.5, transport=None):
         self.model = model
         self.timeout = timeout
         self.http = httpx.AsyncClient(
@@ -130,7 +98,7 @@ class JevClient:
             )
         return {
             "model": self.model,
-            "state": compact_state(state),
+            "state": state,
             "questions": {QUESTION: {
                 "type": "choice", "instructions": instructions,
                 "criteria": {str(k): v for k, v in choices.items()},
@@ -170,8 +138,9 @@ class JevClient:
                 raise ValueError("range")
             if not math.isclose(sum(probabilities.values()), 1, abs_tol=0.02):
                 raise ValueError("distribution")
-            usage = data.get("usage", {})
-            if any(type(v) is not int or v < 0 for v in usage.values()):
+            # OpenRouter adds a float cost beside the token counts.
+            usage = {k: v for k, v in (data.get("usage") or {}).items() if type(v) is int}
+            if any(v < 0 for v in usage.values()):
                 raise ValueError("usage")
             # Keep only documented, non-sensitive response fields.
             return {"model": data.get("model"), "answer": answer, "usage": usage}
@@ -191,18 +160,16 @@ class Decision:
     response: dict
     latency_ms: float
     plan_id: Optional[int] = None
-    replay: bool = False
 
 
 class DecisionScheduler:
     """Game callbacks poll finished work; they never await an in-flight model call."""
 
-    def __init__(self, client, emit: Callable, interval=2.5, max_age=4.0,
+    def __init__(self, client, emit: Callable, interval=1.0, max_age=4.0,
                  max_requests=2000, clock=time.monotonic):
         if interval <= 0 or max_age <= 0 or max_requests < 1:
             raise ValueError("Decision interval, max age and request budget must be positive.")
         self.client, self.emit, self.clock = client, emit, clock
-        self.base_interval = interval
         self.interval, self.max_age, self.max_requests = interval, max_age, max_requests
         self.task = None
         self.request_id = 0
@@ -215,10 +182,6 @@ class DecisionScheduler:
         self.consecutive_errors = 0
         self.last_game_loop = 0
         self.pending_plan_id = None
-        self.retry_of = None
-        self._inflight_payload = None
-        self._inflight_loop = 0
-        self._inflight_replay = False
 
     @property
     def ready(self):
@@ -228,35 +191,22 @@ class DecisionScheduler:
     def submit(self, game_loop: int, state: dict, choices: dict) -> bool:
         if not self.ready:
             return False
-        replay = self.retry_of
-        if replay is not None:
-            # One retry of the decision the gateway refused, not a new observation.
-            payload, plan_id, game_loop = replay
-            self.retry_of = None
-            self._inflight_replay = True
-            self.stats["replays"] += 1
-        else:
-            # The live Bot state can change while the HTTP task is suspended.
-            payload = copy.deepcopy(self.client.payload(state, choices))
-            plan_id = (state.get("strategic_plan") or {}).get("plan_id")
-            self._inflight_replay = False
-        self._inflight_payload = payload
-        self._inflight_loop = game_loop
+        # The live Bot state can change while the HTTP task is suspended.
+        payload = copy.deepcopy(self.client.payload(state, choices))
+        plan_id = (state.get("strategic_plan") or {}).get("plan_id")
         self.pending_plan_id = plan_id
         self.last_game_loop = game_loop
         self.request_id += 1
         request_id, started_at = self.request_id, self.clock()
         self.next_request_at = started_at + self.interval
         self.stats["requests"] += 1
-        self.emit("request", request_id=request_id, game_loop=game_loop, plan_id=plan_id,
-                  replay=self._inflight_replay, payload=payload)
-        is_replay = self._inflight_replay
+        self.emit("request", request_id=request_id, game_loop=game_loop, plan_id=plan_id, payload=payload)
 
         async def request():
             response = await self.client.choose(payload)
             return Decision(request_id, game_loop, started_at,
                             int(response["answer"]["choice"]), response,
-                            (self.clock() - started_at) * 1000, plan_id, is_replay)
+                            (self.clock() - started_at) * 1000, plan_id)
 
         self.task = asyncio.create_task(request())
         return True
@@ -271,25 +221,16 @@ class DecisionScheduler:
         except JevError as exc:
             self.stats["api_errors"] += 1
             self.consecutive_errors += 1
+            # Never retry an old state. Back off and later submit a fresh observation.
             self.disabled = exc.status in (400, 401, 402, 403, 404, 422)
             self.disabled_status = exc.status if self.disabled else None
-            replayable = exc.status == 503 and not self._inflight_replay and not self.disabled
-            if replayable:
-                self.retry_of = (self._inflight_payload, self.pending_plan_id, self._inflight_loop)
-                delay = max(exc.retry_after, 3.0)
-            elif exc.status == 429:
-                # A refusal means the steady rate was too high. Stay slower
-                # after the cooldown instead of returning to the base interval.
-                self.interval = max(self.interval, 3.0)
-                delay = max(exc.retry_after, self.interval, min(30.0, 2 ** min(self.consecutive_errors, 5)))
-            else:
-                delay = max(exc.retry_after, min(30.0, 2 ** min(self.consecutive_errors, 5)))
-            self.next_request_at = self.clock() + (0 if self.disabled else delay)
+            delay = 0 if self.disabled else max(
+                exc.retry_after, min(30.0, 2 ** min(self.consecutive_errors, 5)))
+            self.next_request_at = self.clock() + delay
             self.emit("api_error", request_id=self.request_id, error=str(exc),
                       game_loop=game_loop, plan_id=self.pending_plan_id,
                       status=exc.status, disabled=self.disabled,
                       error_category="billing" if exc.status == 402 else "configuration" if self.disabled else "transient",
-                      will_retry_same_state=replayable,
                       retry_in_seconds=0 if self.disabled else max(0, self.next_request_at - self.clock()))
             return None
         self.consecutive_errors = 0
@@ -299,11 +240,7 @@ class DecisionScheduler:
         self.latencies.append(decision.latency_ms)
         wall_age = self.clock() - decision.started_at
         game_age = (game_loop - decision.game_loop) / 22.4
-        # A replay already spent the backoff. Those seconds of game time are
-        # the wait we asked for, so they do not by themselves make the answer stale.
-        wall_limit = 12.0 if decision.replay else self.max_age
-        game_limit = self.max_age + 4.0 if decision.replay else self.max_age
-        stale = wall_age > wall_limit or game_age > game_limit or game_age < 0
+        stale = wall_age > self.max_age or game_age > self.max_age or game_age < 0
         self.emit("response", request_id=decision.request_id, game_loop=game_loop,
                   plan_id=decision.plan_id,
                   observation_game_loop=decision.game_loop, latency_ms=decision.latency_ms,

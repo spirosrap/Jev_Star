@@ -59,7 +59,7 @@ The players at the top of this README show three complete winning games. [Media 
 
 The validated setup is **Windows, Python 3.10, and SC2 5.0.16.97563 installed for the Asia region (`kr`)**. Install the SC2 client separately; matches are created through the local SC2 API. The two modules use separate virtual environments to keep their SC2 SDK dependencies isolated.
 
-Jev requests go to Vercel AI Gateway's TypeSafe-compatible endpoint, `https://ai-gateway.vercel.sh/typesafe/v1/systemone`. It is the same `jev-1.13` model. Set `AI_GATEWAY_API_KEY` from the Vercel AI Gateway dashboard. Override the URL with `JEV_API_ENDPOINT` if needed.
+Jev requests go to OpenRouter's TypeSafe-compatible endpoint, `https://openrouter.ai/api/v1/systemone`, model `typesafe/jev-1.13`. Set `OPENROUTER_API_KEY`, or an `openrouter:` line in `config.md`. Override the URL with `JEV_API_ENDPOINT` if needed.
 
 ```powershell
 git clone https://github.com/sc2musa/Jev_Star.git
@@ -68,7 +68,7 @@ py -3.10 scripts/setup_environment.py macro
 py -3.10 scripts/setup_environment.py micro --video
 
 $env:SC2PATH = 'C:\game\StarCraft II'
-$env:AI_GATEWAY_API_KEY = '<your Vercel AI Gateway key>'
+$env:OPENROUTER_API_KEY = '<your OpenRouter key>'
 py -3.10 scripts/install_maps.py all
 ```
 
@@ -167,7 +167,7 @@ py -3.10 scripts/setup_environment.py macro
 py -3.10 scripts/setup_environment.py micro --video
 
 $env:SC2PATH = 'C:\game\StarCraft II'
-$env:AI_GATEWAY_API_KEY = '<your Vercel AI Gateway key>'
+$env:OPENROUTER_API_KEY = '<your OpenRouter key>'
 py -3.10 scripts/install_maps.py all
 ```
 
