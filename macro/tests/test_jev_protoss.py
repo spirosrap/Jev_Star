@@ -28,6 +28,7 @@ from sc2_rl_agent.starcraftenv_test.env.bot.jev_protoss_bot import JevProtossBot
 class FakeUnit:
     def __init__(self, tag, kind, position=(10, 10)):
         self.tag, self.type_id, self.position = tag, kind, Point2(position)
+        self.position_tuple = (self.position.x, self.position.y)
         self._proto = SimpleNamespace(pos=SimpleNamespace(x=self.position.x, y=self.position.y))
         self.is_ready = self.is_idle = self.is_powered = self.is_visible = True
         self.is_gathering = kind == U.PROBE
@@ -52,6 +53,9 @@ class FakeUnit:
 
     def attack(self, target):
         self.commands.append(("attack", target))
+
+    def __getitem__(self, index):
+        return self.position[index]
 
     def distance_to(self, target):
         return self.position.distance_to(target.position if hasattr(target, "position") else target)
@@ -158,6 +162,23 @@ class ProtossAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.handle_action_65()
         self.assertEqual(self.bot.army_intent, "retreat")
         self.assertEqual(army.commands, [("move", self.nexus.position)])
+
+    async def test_defense_shoots_the_enemy_in_the_base(self):
+        army = FakeUnit(3, U.STALKER, (11, 11))
+        army.can_attack = True
+        ultra = FakeUnit(9, U.ULTRALISK, (12, 12))
+        ultra.can_attack = True
+        self.bot.units = Units([self.probe, army], self.bot)
+        self.bot.enemy_units = Units([ultra], self.bot)
+        self.bot.army_intent = "defend"
+        self.bot._issue_army_intent()
+        self.assertEqual(army.commands, [("attack", ultra)])
+        army.is_idle = False
+        self.bot._issue_army_intent()
+        self.assertEqual(len(army.commands), 1)
+        army.is_idle = True
+        self.bot._issue_army_intent()
+        self.assertEqual(army.commands[-1], ("attack", ultra))
 
     async def test_worker_distribution_cannot_override_new_builder_command(self):
         self.bot.actions = [SimpleNamespace(unit=self.probe)]

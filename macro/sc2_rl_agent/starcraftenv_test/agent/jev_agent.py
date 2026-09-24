@@ -299,10 +299,11 @@ class DecisionScheduler:
         self.latencies.append(decision.latency_ms)
         wall_age = self.clock() - decision.started_at
         game_age = (game_loop - decision.game_loop) / 22.4
-        # A replay already waited out the gateway. Judge it by game time,
-        # with a wider wall-clock allowance than a fresh decision.
+        # A replay already spent the backoff. Those seconds of game time are
+        # the wait we asked for, so they do not by themselves make the answer stale.
         wall_limit = 12.0 if decision.replay else self.max_age
-        stale = wall_age > wall_limit or game_age > self.max_age or game_age < 0
+        game_limit = self.max_age + 4.0 if decision.replay else self.max_age
+        stale = wall_age > wall_limit or game_age > game_limit or game_age < 0
         self.emit("response", request_id=decision.request_id, game_loop=game_loop,
                   plan_id=decision.plan_id,
                   observation_game_loop=decision.game_loop, latency_ms=decision.latency_ms,

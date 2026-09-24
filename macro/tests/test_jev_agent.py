@@ -216,6 +216,30 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         await self.scheduler.task
         self.assertEqual(self.requests[2]["state"]["resource"]["mineral"], 80)
 
+    async def test_replay_is_kept_through_the_backoff_game_time(self):
+        calls = {"n": 0}
+
+        def handler(request):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(503)
+            return httpx.Response(200, json=reply())
+
+        await self.client.close()
+        self.client = JevClient("test-only", transport=httpx.MockTransport(handler))
+        self.scheduler.client = self.client
+        self.scheduler.submit(10, {}, self.choices)
+        with self.assertRaises(JevError):
+            await self.scheduler.task
+        self.scheduler.poll(20)
+        self.now += 3
+        self.assertTrue(self.scheduler.submit(140, {}, self.choices))
+        await self.scheduler.task
+        decision = self.scheduler.poll(140)
+        self.assertIsNotNone(decision)
+        self.assertTrue(decision.replay)
+        self.assertEqual(self.scheduler.stats["stale_results"], 0)
+
     async def test_rate_limit_keeps_the_slower_interval(self):
         calls = {"n": 0}
 

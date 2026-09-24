@@ -14,6 +14,7 @@ class MacroNavigation:
         self._army_destination = None
         self._resolved_army_target_id = None
         self._unit_destinations = {}
+        self._unit_focus = {}
         self._scouts = {}
         self._last_scout_order = 0
         self._base_integrity = {}
@@ -51,6 +52,7 @@ class MacroNavigation:
         alive = {u.tag for u in self.units}
         self._scouts = {tag: mission for tag, mission in self._scouts.items() if tag in alive}
         self._unit_destinations = {tag: pos for tag, pos in self._unit_destinations.items() if tag in alive}
+        self._unit_focus = {tag: enemy for tag, enemy in self._unit_focus.items() if tag in alive}
 
     def _threat_units(self):
         nearby = self.enemy_units.filter(lambda e: e.is_visible and e.can_attack
@@ -129,6 +131,7 @@ class MacroNavigation:
         army = self._combat_units().filter(lambda u: u.tag not in self.unit_tags_received_action and u.tag not in self._scouts)
         if not army:
             return
+        focus = None
         if self.army_intent == "attack":
             target_id, target = self._attack_position()
         elif self.army_intent == "retreat":
@@ -140,8 +143,11 @@ class MacroNavigation:
         else:
             target_id, target = "home", self._defense_position()
             threats = self._threat_units().closer_than(30, target)
-            if threats:
-                target = threats.closest_to(target).position
+            # Shoot the enemy in the base. A ground point lets units arrive and then stand there.
+            focus = threats.closest_to(target) if threats else None
+            if focus is not None:
+                target = focus.position
+                target_id = f"enemy_{focus.tag}"
         if self._army_destination is None or self._army_destination.distance_to(target) > 6:
             self.log("army_target_changed", game_loop=self.state.game_loop, intent=self.army_intent,
                      target_id=target_id, position=list(target))
@@ -152,6 +158,16 @@ class MacroNavigation:
             changed = previous is None or previous.distance_to(target) > 6
             if not include_busy and not changed and not unit.is_idle:
                 continue
+            if focus is not None:
+                # Keep firing at that unit once in range, and again if the shot was dropped.
+                if self._unit_focus.get(unit.tag) == focus.tag and not unit.is_idle:
+                    self._unit_destinations[unit.tag] = target
+                    continue
+                unit.attack(focus)
+                self._unit_focus[unit.tag] = focus.tag
+                self._unit_destinations[unit.tag] = target
+                continue
+            self._unit_focus.pop(unit.tag, None)
             if unit.distance_to(target) < 4 and self.army_intent != "attack":
                 continue
             if self.army_intent == "retreat":
