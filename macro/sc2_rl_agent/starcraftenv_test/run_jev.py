@@ -26,7 +26,7 @@ def main():
     parser.add_argument("--map", default="Altitude LE")
     parser.add_argument("--opponent-race", choices=["Zerg", "Terran", "Protoss", "Random"], default="Zerg")
     parser.add_argument("--difficulty", choices=["VeryEasy", "Easy", "Medium", "MediumHard", "Hard", "Harder", "VeryHard", "CheatVision", "CheatMoney", "CheatInsane"], default="Easy")
-    parser.add_argument("--model", default="jev-1.13.0")
+    parser.add_argument("--model", default="typesafe-ai/jev")
     parser.add_argument("--decision-interval", type=positive_float, default=1.0, help="Minimum wall seconds between request starts")
     parser.add_argument("--request-timeout", type=positive_float, default=2.5)
     parser.add_argument("--max-decision-age", type=positive_float, default=4.0, help="Maximum age in both wall and game seconds")

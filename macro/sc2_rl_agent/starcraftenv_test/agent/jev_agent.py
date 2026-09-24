@@ -66,7 +66,7 @@ class JevError(Exception):
 
 
 class JevClient:
-    def __init__(self, api_key: str, model="jev-1.13.0", timeout=2.5, transport=None):
+    def __init__(self, api_key: str, model="typesafe-ai/jev", timeout=2.5, transport=None):
         self.model = model
         self.timeout = timeout
         self.http = httpx.AsyncClient(
