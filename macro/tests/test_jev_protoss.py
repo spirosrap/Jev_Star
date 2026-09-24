@@ -163,6 +163,21 @@ class ProtossAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot.army_intent, "retreat")
         self.assertEqual(army.commands, [("move", self.nexus.position)])
 
+    async def test_game_over_keeps_the_match_result(self):
+        from sc2.data import Result
+        from sc2.protocol import ProtocolError
+
+        self.bot.client = SimpleNamespace(_player_id=1, _game_result={1: Result.Victory})
+        self.bot.log.fail = Mock()
+
+        async def ended(_iteration):
+            raise ProtocolError("['Not supported if game has already ended']")
+
+        self.bot._step = ended
+        await self.bot.on_step(1)
+        self.bot.log.fail.assert_not_called()
+        self.assertEqual(self.bot.actions, [])
+
     async def test_defense_shoots_the_enemy_in_the_base(self):
         army = FakeUnit(3, U.STALKER, (11, 11))
         army.can_attack = True

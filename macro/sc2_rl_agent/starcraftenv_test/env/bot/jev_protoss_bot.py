@@ -6,6 +6,7 @@ import time
 from collections import Counter, deque
 from pathlib import Path
 
+from sc2.protocol import ProtocolError
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
 from sc2.dicts.unit_trained_from import UNIT_TRAINED_FROM
 from sc2.dicts.unit_research_abilities import RESEARCH_INFO
@@ -283,9 +284,35 @@ class JevProtossBot(MacroExecution, MacroNavigation, Protoss_Bot):
         return {"ability": command.ability.name, "unit_tag": command.unit.tag,
                 "target": target, "queue": bool(getattr(command, "queue", False))}
 
+    async def _pull_match_result(self):
+        """Read Victory or Defeat after StarCraft has already closed the match."""
+        client = self.client
+        results = getattr(client, "_game_result", None) or {}
+        player_id = getattr(client, "_player_id", None)
+        if player_id in results:
+            return results[player_id]
+        try:
+            await client.observation()
+        except ProtocolError:
+            return None
+        results = getattr(client, "_game_result", None) or {}
+        return results.get(player_id)
+
     async def on_step(self, iteration):
         try:
             await self._step(iteration)
+        except ProtocolError as exc:
+            if not exc.is_game_over_error:
+                if self.log.failure is None:
+                    self.log.fail(exc)
+                raise
+            result = await self._pull_match_result()
+            self.actions.clear()
+            if result is None:
+                if self.log.failure is None:
+                    self.log.fail(exc)
+                raise
+            return
         except Exception as exc:
             if self.log.failure is None:
                 self.log.fail(exc)
