@@ -178,7 +178,7 @@ class HierarchicalMixin:
         action, reason = primary_action(plan, choices, self.army_intent, resource["ready_army_supply"],
                                          target_changed=self._planned_target() != self._army_target_id,
                                          acknowledged_actions={key[1] for key in self._acknowledged_priorities},
-                                         contract=self.contract)
+                                         contract=self.contract, minerals=resource["mineral"])
         if action is not None:
             key = (plan["plan_id"], action)
             previous = self._execution_directive

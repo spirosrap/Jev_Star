@@ -109,8 +109,8 @@ class TerranContractTests(unittest.TestCase):
     def test_banked_minerals_allow_army_beyond_the_plan(self):
         plan = terran_plan(reserve_for_action=None)
         catalog = terran_catalog()
-        rich = (plan, catalog, resource(mineral=900), "defend", 0, 100, False)
-        poor = (plan, catalog, resource(mineral=700), "defend", 0, 100, False)
+        rich = (plan, catalog, resource(mineral=650), "defend", 0, 100, False)
+        poor = (plan, catalog, resource(mineral=550), "defend", 0, 100, False)
         self.assertEqual(policy_reason(7, *poor, contract=TERRAN), "plan_spending_not_allowed")
         self.assertIsNone(policy_reason(7, *rich, contract=TERRAN))
         self.assertIsNone(policy_reason(19, *rich, contract=TERRAN))
@@ -145,6 +145,21 @@ class TerranContractTests(unittest.TestCase):
                          (66, "apply_army_order_before_optional_production"))
         # Below the Terran attack floor the plan's lower threshold does not start an attack.
         self.assertEqual(primary_action(plan, {66: "MULTI-ATTACK"}, "defend", 30, contract=TERRAN)[0], None)
+
+    def test_banked_minerals_recommend_another_barracks(self):
+        plan = terran_plan(reserve_for_action=None)
+        choices = {1: "TRAIN MARINE", 19: "BUILD BARRACKS", 69: "EMPTY ACTION"}
+        self.assertEqual(primary_action(plan, choices, "defend", 5, contract=TERRAN, minerals=650),
+                         (19, "spend_banked_minerals"))
+        self.assertEqual(primary_action(plan, choices, "defend", 5, contract=TERRAN, minerals=500)[0], None)
+        # An army order and the commander's own priority come first.
+        attack = terran_plan(army_posture="attack", attack_min_army=40, reserve_for_action=None)
+        self.assertEqual(primary_action(attack, {**choices, 66: "MULTI-ATTACK"}, "defend", 50,
+                                        contract=TERRAN, minerals=650)[0], 66)
+        priority = terran_plan(priority_action=1, reserve_for_action=None)
+        self.assertEqual(primary_action(priority, choices, "defend", 5, contract=TERRAN, minerals=650)[0], 1)
+        # Protoss has no bank recommendation.
+        self.assertEqual(PROTOSS.bank_spend_actions, ())
 
     def test_attack_needs_forty_ready_army_supply(self):
         plan = terran_plan(army_posture="attack", attack_min_army=28, reserve_for_action=None)

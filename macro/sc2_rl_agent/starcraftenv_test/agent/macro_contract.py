@@ -35,6 +35,8 @@ class RaceContract:
     # With this many minerals banked, these purchases may exceed the plan's lists and ceilings.
     bank_minerals: int = 800
     bank_override_actions: frozenset = frozenset()
+    # Recommended to Jev, in order, while minerals are banked (more production).
+    bank_spend_actions: tuple = ()
     # Keep enough for the supply building when supply is about to block production.
     supply_reserve: bool = False
     # Ready army supply below which no attack starts, whatever the plan says.
@@ -134,7 +136,8 @@ def _terran():
         limits=_limits(kinds, actions, unit_limits, building_limits),
         bank_override_actions=frozenset(ids[n] for n in (
             "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")),
-        supply_reserve=True, min_attack_army=40)
+        supply_reserve=True, min_attack_army=40, bank_minerals=600,
+        bank_spend_actions=(ids["BUILD BARRACKS"],))
 
 
 PROTOSS = _protoss()
@@ -150,7 +153,7 @@ ACTION_LIMITS = PROTOSS.limits
 
 
 def primary_action(plan, choices, army_intent, ready_army_supply, target_changed=False, acknowledged_actions=(),
-                   contract=PROTOSS):
+                   contract=PROTOSS, minerals=0):
     """Recommend a legal next action; Jev still selects the actual command."""
     desired = contract.action_for(plan["army_posture"])
     ready = (plan["army_posture"] != "attack"
@@ -160,6 +163,10 @@ def primary_action(plan, choices, army_intent, ready_army_supply, target_changed
     preferred = plan.get("priority_action")
     if preferred in choices and preferred != contract.empty_action and preferred not in acknowledged_actions:
         return preferred, "commander_priority"
+    if minerals >= contract.bank_minerals:
+        for action in contract.bank_spend_actions:
+            if action in choices:
+                return action, "spend_banked_minerals"
     for action in plan.get("production_priority", []):
         if action in choices:
             return action, "first_attainable_production_priority"

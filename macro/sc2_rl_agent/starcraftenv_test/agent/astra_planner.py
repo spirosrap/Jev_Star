@@ -163,9 +163,9 @@ automatically. Include the reserved action in goals and allowed_spending_actions
 reserve only when its prerequisites are ready, so saving does not deadlock tech.
 Urgent Supply Depots and combat production for an attacked base may override the
 spending budget; everything must still be legal and affordable in the game.
-With 800 or more minerals banked, Jev may also buy Barracks, Marines, Marauders,
+With 600 or more minerals banked, Jev may also buy Barracks, Marines, Marauders,
 Siege Tanks and Medivacs beyond allowed_spending_actions and goal ceilings (the
-reserve still applies). Up to two Barracks, Factories or Starports and two Supply
+reserve still applies), and another Barracks is recommended to Jev. Up to two Barracks, Factories or Starports and two Supply
 Depots may be under construction at once. Plan enough production for the income.
 When supply is nearly blocked and no Depot is coming, other purchases keep 100
 minerals back for the Depot.

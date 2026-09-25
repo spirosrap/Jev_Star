@@ -83,7 +83,7 @@ TERRAN_PLAN_INSTRUCTIONS = (
     "worker/base targets and the effective spending reservation. Prioritize the "
     "reserved goal when affordable. Ignore a suspended reservation until its "
     "reported blocker clears. Urgent supply and defense may override the budget. "
-    "With 800 or more minerals banked, spend them on offered army production or "
+    "With 600 or more minerals banked, spend them on offered army production or "
     "Barracks instead of waiting. "
     "Scouts search expansions automatically after assignment; repeated scouting is "
     "not necessary every decision."
