@@ -157,7 +157,9 @@ class FakeTerranUnit(support.FakeUnit):
         super().__init__(tag, kind, position)
         self.orders = []
         self.has_add_on = self.has_techlab = self.has_reactor = False
-        self.is_carrying_resource = self.is_flying = False
+        self.is_carrying_resource = self.is_flying = self.is_carrying_vespene = False
+        self.is_constructing_scv = self.is_repairing = False
+        self.order_target = None
         self.is_gathering = kind == U.SCV
         self.can_attack = kind in {U.MARINE, U.SIEGETANK, U.SIEGETANKSIEGED}
         self.build = Mock()
@@ -205,6 +207,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
             U.COMMANDCENTER, U.ORBITALCOMMAND, U.PLANETARYFORTRESS}], self.bot)
         self.bot.enemy_units = Units(list(enemies), self.bot)
         self.bot.enemy_structures = Units([], self.bot)
+        self.bot.gas_buildings = Units([s for s in structures if s.type_id == U.REFINERY], self.bot)
 
     async def asyncTearDown(self):
         await self.bot.shutdown("test")
@@ -359,6 +362,38 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.minerals = 100
         self.bot._repair()
         self.assertEqual(sum(1 for w in [self.scv, *helpers] if w.commands == [(A.EFFECT_REPAIR_SCV, bunker)]), 2)
+
+    async def test_builder_is_never_a_gas_worker(self):
+        refinery = FakeTerranUnit(3, U.REFINERY, (40, 40))
+        to_gas = FakeTerranUnit(4, U.SCV, (39, 39))
+        to_gas.order_target = refinery.tag
+        carrying = FakeTerranUnit(5, U.SCV, (41, 41))
+        carrying.is_carrying_vespene = True
+        self.set_world([self.scv, to_gas, carrying], [self.cc, refinery])
+        self.assertIs(self.bot._builder(Point2((40, 38))), self.scv)
+
+    async def test_marines_and_miners_step_away_from_banelings(self):
+        baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
+        near, far = FakeTerranUnit(3, U.MARINE, (22, 20)), FakeTerranUnit(4, U.MARINE, (40, 20))
+        miner = FakeTerranUnit(5, U.SCV, (20, 23))
+        builder = FakeTerranUnit(6, U.SCV, (19, 20))
+        builder.is_constructing_scv = True
+        self.set_world([near, far, miner, builder], [self.cc], [baneling])
+        self.bot._fast_micro()
+        (kind, target), = near.commands
+        self.assertEqual(kind, "move")
+        self.assertGreater(target.distance_to(baneling.position), near.distance_to(baneling))
+        self.assertEqual(far.commands, [])
+        self.assertEqual(miner.commands[0][0], "move")
+        self.assertGreater(miner.commands[0][1].distance_to(baneling.position), miner.distance_to(baneling))
+        self.assertEqual(builder.commands, [])
+
+    async def test_neighbouring_marines_spread_to_different_sides(self):
+        baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
+        a, b = FakeTerranUnit(3, U.MARINE, (23, 20)), FakeTerranUnit(4, U.MARINE, (23, 20))
+        self.set_world([a, b], [self.cc], [baneling])
+        self.bot._fast_micro()
+        self.assertNotEqual(a.commands[0][1].y, b.commands[0][1].y)
 
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)

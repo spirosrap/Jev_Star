@@ -262,6 +262,7 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
             if len(choices) > 1:
                 self.scheduler.submit(self.state.game_loop, self._snapshot(), choices)
                 self.log("action_mask", request_id=self.scheduler.request_id, blocked=blocked)
+        self._fast_micro()
         if self.time - self._last_maintenance >= 1:
             await self._maintain_local_behaviors()
             self._last_maintenance = self.time
@@ -277,6 +278,9 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
 
     async def _maintain_local_behaviors(self):
         pass
+
+    def _fast_micro(self):
+        """Reactions that cannot wait for the once-per-second upkeep; runs every step."""
 
     async def _set_posture(self, action):
         self._set_army_intent(self.contract.army_actions[action])

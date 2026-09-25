@@ -176,8 +176,8 @@ emergency retreat allowed. A defend plan permits withdrawal and local defense.
 There is NO automatic production/build order. Local code distributes workers,
 calls down MULEs, lowers Supply Depots, resumes unfinished buildings, loads nearby
 Marines into a Bunker when ground enemies approach and unloads them to attack,
-sends two SCVs to repair a damaged Bunker or Planetary Fortress under fire, carries out
-army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
+sends two SCVs to repair a damaged Bunker or Planetary Fortress under fire, moves Marines
+and mining SCVs away from nearby Banelings, carries out army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
 uses Stimpack in combat once researched, continues assigned expansion scouting,
 and moves Medivacs and one Raven with the army. Jev chooses all new production,
 construction and research. Enemy knowledge is partial; last-seen observations are

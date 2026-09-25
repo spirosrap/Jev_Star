@@ -39,6 +39,9 @@ DEPOTS = {U.SUPPLYDEPOT, U.SUPPLYDEPOTLOWERED}
 MODE_HOLD = 3
 # Seconds a build spot the engine rejected stays excluded from placement.
 REJECTED_SPOT_SECONDS = 120
+# Marines and SCVs this close to a Baneling step away from it.
+BANELING_DODGE_RANGE = 5
+BANELING_DODGE_STEP = 3
 
 
 class TerranObservation(BotAI):
@@ -80,6 +83,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     stationary_army_types = frozenset({U.SIEGETANKSIEGED, U.WIDOWMINEBURROWED})
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
+                        "baneling_dodge",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -305,9 +309,18 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self._addon_blocked[host.tag] = self.time + REJECTED_SPOT_SECONDS
         self.record_failure(action, "no_space_for_addon")
 
+    def _free_workers(self):
+        """SCVs that can take an order now: not scouting, and not on the gas run.
+
+        A worker inside a Refinery rejects orders (NotSupported), so gas workers are left alone.
+        """
+        gas = {g.tag for g in self.gas_buildings}
+        return self.workers.filter(lambda w: (w.is_gathering or w.is_idle) and w.tag not in self._scouts
+                                   and w.tag not in self.unit_tags_received_action
+                                   and not w.is_carrying_vespene and w.order_target not in gas)
+
     def _builder(self, position):
-        workers = self.workers.filter(lambda w: (w.is_gathering or w.is_idle) and w.tag not in self._scouts
-                                      and w.tag not in self.unit_tags_received_action)
+        workers = self._free_workers()
         if not workers:
             return None
         return workers.closest_to(position)
@@ -475,6 +488,29 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self.log("construction_resumed", game_loop=self.state.game_loop, structure=structure.type_id.name,
                          structure_tag=structure.tag, worker_tag=worker.tag)
 
+    def _fast_micro(self):
+        self._dodge_banelings()
+
+    def _dodge_banelings(self):
+        banelings = [e for e in self.enemy_units if e.type_id == U.BANELING and e.is_visible]
+        if not banelings:
+            return
+        builders = {w.tag for w in self.workers if w.is_constructing_scv or w.is_repairing}
+        dodgers = list(self.units(U.MARINE).ready) + [w for w in self.workers
+                                                        if w.tag not in builders and w.tag not in self._scouts]
+        for unit in dodgers:
+            if unit.tag in self.unit_tags_received_action:
+                continue
+            baneling = min(banelings, key=lambda b: unit.distance_to(b))
+            if unit.distance_to(baneling) >= BANELING_DODGE_RANGE:
+                continue
+            away = unit.position.towards(baneling.position, -BANELING_DODGE_STEP)
+            # Alternate sides so neighbours spread out instead of running in a clump.
+            dx, dy = away.x - unit.position.x, away.y - unit.position.y
+            side = 1 if unit.tag % 2 else -1
+            unit.move(Point2((away.x - dy * side * .5, away.y + dx * side * .5)))
+            self._action_stats["baneling_dodges"] += 1
+
     def _ground_threats(self):
         return [e for e in self.enemy_units if e.is_visible and e.can_attack and not e.is_flying
                 and not e.type_id.name.startswith("CHANGELING")]
@@ -504,9 +540,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             if target.health_percentage >= 1 or not any(e.distance_to(target) < 12 for e in threats):
                 continue
             busy = sum(1 for w in self.workers if w.is_repairing and w.distance_to(target) < 4)
-            helpers = sorted((w for w in self.workers
-                              if (w.is_gathering or w.is_idle) and w.tag not in self._scouts
-                              and w.tag not in self.unit_tags_received_action and w.distance_to(target) < 25),
+            helpers = sorted((w for w in self._free_workers() if w.distance_to(target) < 25),
                              key=lambda w: w.distance_to(target))
             for worker in helpers[:max(0, 2 - busy)]:
                 worker(A.EFFECT_REPAIR_SCV, target)
