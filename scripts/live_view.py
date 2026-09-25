@@ -255,6 +255,8 @@ def load_state():
     economy = {}
     plan_text = ""
     result = ""
+    planner_failures = 0
+    planner_last_error = ""
     if events_path.exists():
         for line in events_path.read_text(errors="replace").splitlines():
             try:
@@ -278,6 +280,11 @@ def load_state():
                 plan_text = event.get("guidance") or event.get("objective") or plan_text
             elif kind == "heartbeat":
                 economy = event.get("economy") or economy
+            elif kind == "planner_error":
+                planner_failures += 1
+                planner_last_error = str(event.get("error") or "")
+            elif kind == "plan_accepted":
+                planner_failures = 0
             elif kind == "run_failure":
                 failure = event.get("failure") or {}
                 error = f"Match stopped: {failure.get('type', 'error')} {failure.get('message', '')}"
@@ -305,6 +312,10 @@ def load_state():
                  f"{settings.get('opponent_race')} · {settings.get('map')}")
     except (OSError, json.JSONDecodeError):
         pass
+    if not error and ("authentication" in planner_last_error and planner_failures or planner_failures >= 3):
+        # Jev keeps playing without plans; make a broken Codex login visible instead of silent.
+        error = (f"Astra unavailable: {planner_failures} planner requests failed in a row "
+                 f"({planner_last_error}). Jev is playing without new plans; check `codex login`.")
     if running and events_path.exists():
         # StarCraft under Wine sometimes stops simulating; say so instead of showing a frozen page.
         quiet = time.time() - events_path.stat().st_mtime
