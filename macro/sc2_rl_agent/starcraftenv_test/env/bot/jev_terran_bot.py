@@ -160,6 +160,22 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 return producer
         return None
 
+    def _train_slots(self, unit_type):
+        """Every free production slot for this unit, a Reactor counting twice."""
+        sources = UNIT_TRAINED_FROM.get(unit_type, set())
+        slots = []
+        for producer in sorted((p for p in self._producers if p.type_id in sources and self._producer_free(p)),
+                               key=lambda p: len(p.orders)):
+            info = TRAIN_INFO[producer.type_id][unit_type]
+            if info.get("requires_techlab") and not producer.has_techlab:
+                continue
+            if self._has_ability(producer, info["ability"]):
+                slots += [producer] * ((2 if producer.has_reactor else 1) - len(producer.orders))
+        return slots
+
+    def _banked(self):
+        return self.minerals >= self.contract.bank_minerals
+
     def _build_reason(self, unit_type, worker, ignore_resources=False):
         if not worker:
             return "no_available_builder"
@@ -168,7 +184,10 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         info = TRAIN_INFO[U.SCV].get(unit_type)
         if not info or not self._has_ability(worker, info["ability"], ignore_resources=ignore_resources):
             return "missing_build_ability_or_technology"
-        if self.already_pending(unit_type) >= (2 if unit_type == U.SUPPLYDEPOT or unit_type in PRODUCTION else 1):
+        # Production buildings take 46-60 seconds; with a large bank allow more of them at once.
+        pending_limit = (4 if unit_type in PRODUCTION and self._banked()
+                         else 2 if unit_type == U.SUPPLYDEPOT or unit_type in PRODUCTION else 1)
+        if self.already_pending(unit_type) >= pending_limit:
             return "already_pending"
         limit = self.contract.building_limits.get(unit_type.name)
         if limit is not None and self._count_with_pending(unit_type) >= limit:
@@ -283,11 +302,23 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             return
         name = self.contract.kind_name(action)
         if kind == "train":
-            producer = self._train_producer(U[name])
+            unit_type = U[name]
+            producer = self._train_producer(unit_type)
             if producer is None:
                 self.record_failure(action, "no_ready_producer_with_available_ability")
+            elif self._banked() and action in self.contract.bank_override_actions:
+                # One decision per second cannot keep a dozen producers busy; fill every free slot.
+                limit = self.contract.unit_limits.get(name)
+                count = self._count_with_pending(unit_type)
+                trained = 0
+                for slot in self._train_slots(unit_type):
+                    if not self.can_afford(unit_type) or (limit is not None and count + trained >= limit):
+                        break
+                    slot.train(unit_type)
+                    trained += 1
+                self._action_stats["batch_trained_units"] += trained
             else:
-                producer.train(U[name])
+                producer.train(unit_type)
         elif kind == "build":
             await self._build_one(action, U[name])
         elif kind == "addon":

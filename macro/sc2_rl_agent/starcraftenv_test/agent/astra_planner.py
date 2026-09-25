@@ -165,8 +165,11 @@ Urgent Supply Depots and combat production for an attacked base may override the
 spending budget; everything must still be legal and affordable in the game.
 With 600 or more minerals banked, Jev may also buy Barracks, Marines, Marauders,
 Siege Tanks and Medivacs beyond allowed_spending_actions and goal ceilings (the
-reserve still applies), and another Barracks is recommended to Jev. Up to two Barracks, Factories or Starports and two Supply
-Depots may be under construction at once. Plan enough production for the income.
+reserve still applies), and another Barracks is recommended to Jev. While banked, one
+Marine, Marauder, Siege Tank or Medivac choice fills every free producer, and up to four
+Barracks, Factories or Starports may be under construction at once. Otherwise at most
+two of each production building and two Supply Depots may be under construction at once.
+Plan enough production for the income.
 When supply is nearly blocked and no Depot is coming, other purchases keep 100
 minerals back for the Depot.
 army_posture guides Jev's attack/retreat/defend decisions. attack_min_army is the minimum

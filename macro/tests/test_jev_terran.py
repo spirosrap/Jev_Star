@@ -472,6 +472,54 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(shooters), 3)
         self.assertEqual(shooters, marines[:3])
 
+    def barracks_world(self):
+        plain, reactor = FakeTerranUnit(3, U.BARRACKS), FakeTerranUnit(4, U.BARRACKS)
+        reactor.has_add_on = reactor.has_reactor = True
+        busy = FakeTerranUnit(5, U.BARRACKS)
+        busy.is_idle, busy.orders = False, [SimpleNamespace()]
+        self.set_world([self.scv], [self.cc, plain, reactor, busy])
+        marine = TRAIN_INFO[U.BARRACKS][U.MARINE]["ability"]
+        for rax in (plain, reactor, busy):
+            self.abilities[rax.tag] = {marine}
+        return plain, reactor, busy
+
+    async def test_banked_marine_choice_fills_every_free_slot(self):
+        plain, reactor, busy = self.barracks_world()
+        await self.bot._refresh_abilities()
+        self.bot.minerals = 700
+        await self.bot._perform(1)
+        self.assertEqual(plain.train.call_count + reactor.train.call_count, 3)  # Reactor trains two.
+        self.assertEqual(reactor.train.call_count, 2)
+        busy.train.assert_not_called()
+        self.assertEqual(self.bot._action_stats["batch_trained_units"], 3)
+
+    async def test_marine_choice_trains_one_without_a_bank(self):
+        plain, reactor, _ = self.barracks_world()
+        await self.bot._refresh_abilities()
+        self.bot.minerals = 300
+        await self.bot._perform(1)
+        self.assertEqual(plain.train.call_count + reactor.train.call_count, 1)
+
+    async def test_batch_stops_when_money_runs_out(self):
+        plain, reactor, _ = self.barracks_world()
+        await self.bot._refresh_abilities()
+        self.bot.minerals = 700
+        budget = iter([True, False])
+        self.bot.can_afford = Mock(side_effect=lambda kind: next(budget, False))
+        await self.bot._perform(1)
+        self.assertEqual(plain.train.call_count + reactor.train.call_count, 1)
+
+    async def test_more_barracks_may_be_built_at_once_with_a_bank(self):
+        self.abilities[self.scv.tag] = {TRAIN_INFO[U.SCV][U.BARRACKS]["ability"]}
+        await self.bot._refresh_abilities()
+        self.bot.already_pending = Mock(side_effect=lambda kind: 3 if kind == U.BARRACKS else 0)
+        self.bot.minerals = 300
+        self.assertEqual(self.bot._build_reason(U.BARRACKS, self.scv), "already_pending")
+        self.bot.minerals = 700
+        self.assertIsNone(self.bot._build_reason(U.BARRACKS, self.scv))
+        self.bot.already_pending = Mock(side_effect=lambda kind: 4 if kind == U.BARRACKS else 0)
+        self.assertEqual(self.bot._build_reason(U.BARRACKS, self.scv), "already_pending")
+
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)
         choices, _ = await self.bot.available_actions()
