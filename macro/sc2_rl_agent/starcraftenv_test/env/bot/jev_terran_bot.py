@@ -46,6 +46,10 @@ BANELING_DODGE_STEP = 3
 # send them back once gas falls below the lower mark.
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
+# Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
+LURKERS = {U.LURKERMP, U.LURKERMPBURROWED, U.LURKERMPEGG, U.LURKERDENMP}
+LURKER_MEMORY = 90
+SCAN_INTERVAL = 12
 
 
 class TerranObservation(BotAI):
@@ -87,7 +91,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     stationary_army_types = frozenset({U.SIEGETANKSIEGED, U.WIDOWMINEBURROWED})
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
-                        "baneling_dodge", "gas_balance", "changeling_targeting",
+                        "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -100,6 +104,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._rejected_spots = {}
         self._addon_blocked = {}
         self._gas_throttled = False
+        self._lurker_seen = -1000
+        self._last_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -356,6 +362,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                                    and w.tag not in self.unit_tags_received_action
                                    and not w.is_carrying_vespene and w.order_target not in gas)
 
+    def _expansion_builder(self, position):
+        return self._builder(position)
+
     def _builder(self, position):
         workers = self._free_workers()
         if not workers:
@@ -541,13 +550,40 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             for unit in shooters[:3]:
                 unit.attack(changeling)
 
+    def _lurker_threat(self):
+        if any(e.type_id in LURKERS for e in list(self.enemy_units) + list(self.enemy_structures)):
+            self._lurker_seen = self.time
+        return self.time - self._lurker_seen < LURKER_MEMORY
+
+    def _scan_for_burrowed(self):
+        """Scan ahead of a fighting army when Lurkers are about and no Raven is with it."""
+        if not self._lurker_threat() or self.time - self._last_scan < SCAN_INTERVAL:
+            return
+        army = self._combat_units()
+        if not army or not any(u.weapon_cooldown > 0 for u in army):
+            return
+        centre = army.center
+        if any(r.distance_to(centre) < 10 for r in self.units(U.RAVEN).ready):
+            return
+        orbitals = self.structures(U.ORBITALCOMMAND).ready.filter(
+            lambda o: o.energy >= 50 and o.tag not in self.unit_tags_received_action)
+        if not orbitals:
+            return
+        target = centre.towards(self._army_destination, 6) if self._army_destination else centre
+        orbitals.first(A.SCANNERSWEEP_SCAN, target)
+        self._last_scan = self.time
+        self._action_stats["scans"] += 1
+        self.log("scanner_sweep", game_loop=self.state.game_loop, position=list(target))
+
     def _call_down_mules(self):
+        # Keep 50 energy for a scan while Lurkers may be burrowed nearby.
+        keep = 50 if self._lurker_threat() else 0
         bases = self.townhalls.ready
         fields = self.mineral_field.filter(lambda m: any(m.distance_to(b) < 10 for b in bases))
         if not fields:
             return
         for orbital in self.structures(U.ORBITALCOMMAND).ready:
-            if orbital.energy >= 50 and orbital.tag not in self.unit_tags_received_action:
+            if orbital.energy >= 50 + keep and orbital.tag not in self.unit_tags_received_action:
                 orbital(A.CALLDOWNMULE_CALLDOWNMULE, max(fields, key=lambda m: m.mineral_contents))
 
     def _resume_construction(self):
@@ -566,6 +602,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _fast_micro(self):
         self._dodge_banelings()
+        self._scan_for_burrowed()
 
     def _dodge_banelings(self):
         banelings = [e for e in self.enemy_units if e.type_id == U.BANELING and e.is_visible]

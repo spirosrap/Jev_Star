@@ -161,6 +161,16 @@ class TerranContractTests(unittest.TestCase):
         # Protoss has no bank recommendation.
         self.assertEqual(PROTOSS.bank_spend_actions, ())
 
+    def test_no_retreat_from_an_attacked_base_while_the_army_is_healthy(self):
+        plan = terran_plan(army_posture="defend", retreat_below_army=40, reserve_for_action=None)
+        healthy = (plan, terran_catalog(), resource(ready_army_supply=110), "defend", 0, 100, True)
+        weak = (plan, terran_catalog(), resource(ready_army_supply=30), "defend", 0, 100, True)
+        calm = (plan, terran_catalog(), resource(ready_army_supply=110), "defend", 0, 100, False)
+        self.assertEqual(policy_reason(67, *healthy, contract=TERRAN), "plan_hold_defense")
+        self.assertIsNone(policy_reason(67, *weak, contract=TERRAN))
+        self.assertIsNone(policy_reason(67, *calm, contract=TERRAN))
+        self.assertFalse(PROTOSS.hold_defense)
+
     def test_attack_needs_forty_ready_army_supply(self):
         plan = terran_plan(army_posture="attack", attack_min_army=28, reserve_for_action=None)
         weak = (plan, terran_catalog(), resource(ready_army_supply=30), "defend", 0, 100, False)
@@ -184,6 +194,7 @@ class FakeTerranUnit(support.FakeUnit):
         self.has_add_on = self.has_techlab = self.has_reactor = False
         self.is_carrying_resource = self.is_flying = self.is_carrying_vespene = False
         self.is_constructing_scv = self.is_repairing = False
+        self.weapon_cooldown = 0
         self.order_target = None
         self.is_gathering = kind == U.SCV
         self.can_attack = kind in {U.MARINE, U.SIEGETANK, U.SIEGETANKSIEGED}
@@ -519,6 +530,62 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.bot._build_reason(U.BARRACKS, self.scv))
         self.bot.already_pending = Mock(side_effect=lambda kind: 4 if kind == U.BARRACKS else 0)
         self.assertEqual(self.bot._build_reason(U.BARRACKS, self.scv), "already_pending")
+
+    async def test_expansion_skips_a_rejected_site_and_gas_workers(self):
+        near, far = Point2((30, 30)), Point2((60, 60))
+        self.bot._initialize_navigation()
+        self.bot.expansion_locations_list = [near, far]
+        self.bot.client = SimpleNamespace(query_pathing=AsyncMock(return_value=10))
+        self.bot.build = AsyncMock(return_value=True)
+        self.bot._rejected_spots[(near.x, near.y)] = self.bot.time + 60
+        refinery = FakeTerranUnit(3, U.REFINERY, (58, 58))
+        gas_worker = FakeTerranUnit(4, U.SCV, (59, 59))
+        gas_worker.order_target = refinery.tag
+        self.set_world([self.scv, gas_worker], [self.cc, refinery])
+        await self.bot._build_expansion(18, U.COMMANDCENTER)
+        args, kwargs = self.bot.build.await_args
+        self.assertEqual(args[1], far)
+        self.assertIs(kwargs["build_worker"], self.scv)
+
+    def lurker_world(self, energy=60, raven=False):
+        orbital = FakeTerranUnit(3, U.ORBITALCOMMAND)
+        orbital.energy = energy
+        marines = [FakeTerranUnit(10 + i, U.MARINE, (40, 40)) for i in range(3)]
+        marines[0].weapon_cooldown = 5
+        units = [self.scv, *marines] + ([FakeTerranUnit(20, U.RAVEN, (41, 41))] if raven else [])
+        lurker = FakeTerranUnit(90, U.LURKERMP, (60, 60))
+        self.set_world(units, [orbital], [lurker])
+        self.bot._army_destination = Point2((70, 40))
+        return orbital
+
+    async def test_scan_ahead_of_a_fighting_army_when_lurkers_are_about(self):
+        orbital = self.lurker_world()
+        self.bot._fast_micro()
+        (ability, target), = orbital.commands
+        self.assertEqual(ability, A.SCANNERSWEEP_SCAN)
+        self.assertAlmostEqual(target.distance_to(Point2((40, 40))), 6)
+        orbital.commands.clear()
+        self.bot._fast_micro()
+        self.assertEqual(orbital.commands, [])  # At most one scan every few seconds.
+
+    async def test_no_scan_with_a_raven_or_without_lurkers(self):
+        orbital = self.lurker_world(raven=True)
+        self.bot._fast_micro()
+        self.assertEqual(orbital.commands, [])
+        orbital = self.lurker_world()
+        self.bot.enemy_units = Units([], self.bot)
+        self.bot._lurker_seen = -1000
+        self.bot._fast_micro()
+        self.assertEqual(orbital.commands, [])
+
+    async def test_mules_leave_scan_energy_while_lurkers_are_about(self):
+        orbital = self.lurker_world(energy=60)
+        self.bot.mineral_field = Units([FakeTerranUnit(9, U.MINERALFIELD, (15, 10))], self.bot)
+        self.bot._call_down_mules()
+        self.assertEqual(orbital.commands, [])
+        orbital.energy = 110
+        self.bot._call_down_mules()
+        self.assertEqual(orbital.commands[0][0], A.CALLDOWNMULE_CALLDOWNMULE)
 
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)

@@ -59,6 +59,9 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
         urgent_withdrawal = target == "retreat" and army_intent == "attack" and retreat_needed
         new_defense_order = (target == "defend" and plan["army_posture"] == "defend"
                              and plan.get("accepted_game_seconds", -1) > last_intent_time)
+        if (contract.hold_defense and target == "retreat" and plan["army_posture"] == "defend" and emergency
+                and ready_army >= plan["retreat_below_army"]):
+            return "plan_hold_defense"
         if (target != army_intent and game_time - last_intent_time < plan["min_posture_seconds"]
                 and not urgent_withdrawal and not new_defense_order):
             return "plan_hold_army_intent"

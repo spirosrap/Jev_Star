@@ -41,6 +41,8 @@ class RaceContract:
     supply_reserve: bool = False
     # Ready army supply below which no attack starts, whatever the plan says.
     min_attack_army: int = 0
+    # Under a defend plan, do not retreat from an attacked base while the army is above the plan's retreat threshold.
+    hold_defense: bool = False
 
     @property
     def spending_actions(self):
@@ -136,7 +138,7 @@ def _terran():
         limits=_limits(kinds, actions, unit_limits, building_limits),
         bank_override_actions=frozenset(ids[n] for n in (
             "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")),
-        supply_reserve=True, min_attack_army=40, bank_minerals=600,
+        supply_reserve=True, min_attack_army=40, bank_minerals=600, hold_defense=True,
         bank_spend_actions=(ids["BUILD BARRACKS"],))
 
 

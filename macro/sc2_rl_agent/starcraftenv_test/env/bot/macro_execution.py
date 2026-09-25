@@ -139,16 +139,22 @@ class MacroExecution:
                 return
         self.record_failure(action, "no_ready_producer_with_available_ability")
 
+    def _expansion_builder(self, position):
+        return self.select_build_worker(position)
+
     async def _build_expansion(self, action, kind):
         candidates = sorted(self.expansion_locations_list, key=lambda p: p.distance_to(self.start_location))
+        rejected = getattr(self, "_rejected_spots", {})
         for position in candidates:
             if any(b.distance_to(position) < 8 for b in self.townhalls):
                 continue
+            if rejected.get((position.x, position.y), -1) > self.time:
+                continue  # The engine refused this site recently (e.g. unreachable).
             if any(e.distance_to(position) < 18 for e in self.enemy_units if e.is_visible and e.can_attack):
                 continue
             if any(Point2(e["position"]).distance_to(position) < 10 for e in self._known_enemy_buildings.values()):
                 continue
-            worker = self.select_build_worker(position)
+            worker = self._expansion_builder(position)
             if worker is None or await self.client.query_pathing(worker.position, position) is None:
                 continue
             if await self.build(kind, position, max_distance=2, placement_step=1,

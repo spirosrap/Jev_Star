@@ -181,7 +181,9 @@ calls down MULEs, lowers Supply Depots, resumes unfinished buildings, loads near
 Marines into a Bunker when ground enemies approach and unloads them to attack,
 sends two SCVs to repair a damaged Bunker or Planetary Fortress under fire, moves Marines
 and mining SCVs away from nearby Banelings, moves SCVs from gas to minerals while banked gas
-exceeds 300 and twice the minerals, shoots visible Changelings, carries out army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
+exceeds 300 and twice the minerals, shoots visible Changelings, scans ahead of a fighting army
+with an Orbital Command when Lurkers were seen in the last 90 seconds and no Raven is near
+(MULEs then keep 50 energy back), carries out army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
 uses Stimpack in combat once researched, continues assigned expansion scouting,
 and moves Medivacs and one Raven with the army. Jev chooses all new production,
 construction and research. Enemy knowledge is partial; last-seen observations are
@@ -204,7 +206,7 @@ upgrades or optional static defenses.
 Capabilities: army attack-move to a remembered building, expansion search when cleared,
 base defense/rally, retreat, scouting, Medivac healing by following the army, and
 Missile Turret or Raven detection. Formation control, drops, Viking landing,
-Liberator zones, Banshee cloak use, Yamato, Raven spells, Cyclone lock-on and scans are
+Liberator zones, Banshee cloak use, Yamato, Raven spells and Cyclone lock-on are
 NOT implemented; do not rely on prose to make them happen. Liberators only hit air units
 and Vikings only hit air units. Enemy memory respects fog; unexplored expansion sites are unknown.
 Against Zerg, expect early Zergling and Baneling pressure. Before about 4:00 hold the
@@ -212,7 +214,9 @@ natural with one Bunker (70) placed automatically toward the enemy, Reactor Mari
 one or two Widow Mines, then Combat Shield and Stimpack; Siege Tanks and Medivacs follow.
 Keep SCV production continuous but do not take a third base while pressure continues.
 Prefer MULTI-DEFEND over retreat while a base with a Bunker or Siege Tanks is under attack;
-retreating abandons that base. Attack once Stimpack is done and the army clearly outnumbers
+retreating abandons that base. Under a defend plan, retreat is refused while a base is attacked
+and ready army supply is at least retreat_below_army. Against Lurkers, keep a Raven with the
+army or leave Orbital energy for scans. Attack once Stimpack is done and the army clearly outnumbers
 what has been seen. No attack starts below 40 ready army supply, whatever attack_min_army says;
 a small early attack that dies leaves the bases undefended.
 """
