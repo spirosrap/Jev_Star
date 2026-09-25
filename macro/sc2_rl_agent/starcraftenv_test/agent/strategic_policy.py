@@ -45,6 +45,13 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
             if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < progress["reserved_minerals"])
                     or (cost["gas"] and resource["gas"] - cost["gas"] < progress["reserved_gas"])):
                 return "plan_resource_reservation"
+    if (contract.supply_reserve and action in contract.spending_actions and action != contract.supply_action
+            and resource.get("needs_supply") and resource["supply_left"] <= 4 and resource["supply_cap"] < 200
+            and not catalog[str(contract.supply_action)].get("pending")):
+        cost = catalog[str(action)]["cost"]["minerals"]
+        depot = catalog[str(contract.supply_action)]["cost"]["minerals"]
+        if cost and resource["mineral"] - cost < depot:
+            return "plan_supply_reserve"
     if action in contract.army_actions:
         ready_army = resource.get("ready_army_supply", resource["army_supply"])
         retreat_needed = emergency or ready_army < plan["retreat_below_army"]

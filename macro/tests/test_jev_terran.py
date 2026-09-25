@@ -54,8 +54,10 @@ def resource(**changes):
 
 class TerranContractTests(unittest.TestCase):
     def test_catalog_kinds_and_limits(self):
-        self.assertEqual(len(TERRAN.actions), 70)
-        self.assertEqual(TERRAN.spending_actions, tuple(range(63)))
+        self.assertEqual(len(TERRAN.actions), 71)
+        self.assertEqual(TERRAN.spending_actions, (*range(63), 70))
+        self.assertEqual(TERRAN.kinds[70], "build")
+        self.assertIn(70, TERRAN.urgent_defense_actions)
         self.assertEqual(TERRAN.army_actions, {66: "attack", 67: "retreat", 68: "defend"})
         self.assertEqual((TERRAN.worker_action, TERRAN.base_action, TERRAN.supply_action, TERRAN.empty_action),
                          (0, 18, 16, 69))
@@ -76,7 +78,7 @@ class TerranContractTests(unittest.TestCase):
 
     def test_schema_uses_terran_ids(self):
         schema = plan_schema(TERRAN)
-        self.assertEqual(schema["properties"]["goals"]["items"]["properties"]["action_id"]["enum"], list(range(63)))
+        self.assertEqual(schema["properties"]["goals"]["items"]["properties"]["action_id"]["enum"], [*range(63), 70])
         self.assertIn(68, schema["properties"]["priority_action"]["enum"])
         self.assertNotIn(69, schema["properties"]["priority_action"]["enum"])
 
@@ -120,6 +122,22 @@ class TerranContractTests(unittest.TestCase):
         self.assertEqual(policy_reason(37, *rich, contract=TERRAN), "plan_spending_not_allowed")
         # Protoss keeps following the plan strictly.
         self.assertEqual(PROTOSS.bank_override_actions, frozenset())
+
+    def test_supply_reserve_keeps_money_for_a_needed_depot(self):
+        plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 16, 18, 19, 26, 34])
+        catalog = terran_catalog()
+        catalog["0"]["count_with_pending"] = 10
+        low = (plan, catalog, resource(mineral=120, supply_left=2, needs_supply=True), "defend", 0, 100, False)
+        self.assertEqual(policy_reason(1, *low, contract=TERRAN), "plan_supply_reserve")
+        self.assertIsNone(policy_reason(16, *low, contract=TERRAN))
+        enough = (plan, catalog, resource(mineral=160, supply_left=2, needs_supply=True), "defend", 0, 100, False)
+        self.assertIsNone(policy_reason(1, *enough, contract=TERRAN))
+        catalog["16"]["pending"] = 1  # A depot is already on its way.
+        self.assertIsNone(policy_reason(1, *low, contract=TERRAN))
+        catalog["16"]["pending"] = 0
+        roomy = (plan, catalog, resource(mineral=120, supply_left=8, needs_supply=True), "defend", 0, 100, False)
+        self.assertIsNone(policy_reason(1, *roomy, contract=TERRAN))
+        self.assertFalse(PROTOSS.supply_reserve)
 
     def test_primary_action_applies_terran_posture(self):
         plan = terran_plan(army_posture="attack", attack_min_army=10)
@@ -296,6 +314,52 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot._refresh_abilities()
         self.assertEqual(self.bot._build_reason(U.ENGINEERINGBAY, self.scv), "already_pending")
 
+    async def test_bunker_is_placed_in_front_of_the_base_nearest_the_enemy(self):
+        natural = FakeTerranUnit(3, U.COMMANDCENTER, (40, 40))
+        self.set_world([self.scv], [self.cc, natural])
+        self.bot.game_info.start_locations = [Point2((100, 100))]
+        anchors = self.bot._anchors(U.BUNKER)
+        self.assertLess(natural.distance_to(anchors[0]), 7)
+        self.assertLess(anchors[0].distance_to(Point2((100, 100))), natural.distance_to(Point2((100, 100))))
+
+    def bunker_world(self, enemy_at, cargo_used=0):
+        bunker = FakeTerranUnit(3, U.BUNKER, (20, 20))
+        bunker.cargo_used, bunker.cargo_max = cargo_used, 4
+        marines = [FakeTerranUnit(10 + i, U.MARINE, (22 + i, 20)) for i in range(6)]
+        far = FakeTerranUnit(30, U.MARINE, (60, 60))
+        enemy = FakeTerranUnit(90, U.ZERGLING, enemy_at)
+        enemy.can_attack = True
+        self.set_world([self.scv, *marines, far], [self.cc, bunker], [enemy])
+        return bunker, marines, far
+
+    async def test_marines_enter_bunker_when_enemies_approach(self):
+        bunker, marines, far = self.bunker_world((28, 20), cargo_used=1)
+        self.bot._man_bunkers()
+        loaded = [m for m in marines if m.commands == [(A.SMART, bunker)]]
+        self.assertEqual(len(loaded), 3)  # One slot is already taken.
+        self.assertEqual(far.commands, [])
+
+    async def test_bunker_unloads_to_attack_only_when_quiet(self):
+        bunker, _, _ = self.bunker_world((80, 80), cargo_used=4)
+        self.bot.army_intent = "defend"
+        self.bot._man_bunkers()
+        self.assertEqual(bunker.commands, [])
+        self.bot.army_intent = "attack"
+        self.bot._man_bunkers()
+        self.assertEqual(bunker.commands, [(A.UNLOADALL_BUNKER, None)])
+
+    async def test_scvs_repair_a_bunker_under_fire(self):
+        bunker, _, _ = self.bunker_world((25, 20))
+        bunker.health_percentage = .6
+        self.scv.is_repairing = False
+        helpers = [FakeTerranUnit(40 + i, U.SCV, (18, 18 + i)) for i in range(3)]
+        for w in helpers:
+            w.is_repairing = False
+        self.bot.workers = Units([self.scv, *helpers], self.bot)
+        self.bot.minerals = 100
+        self.bot._repair()
+        self.assertEqual(sum(1 for w in [self.scv, *helpers] if w.commands == [(A.EFFECT_REPAIR_SCV, bunker)]), 2)
+
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)
         choices, _ = await self.bot.available_actions()
@@ -374,6 +438,16 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot.recent_outcomes[-1]["orders_submitted"], 1)
         self.assertEqual(self.bot._production_orders[1]["kind"], "SCV")
 
+    async def test_order_fails_when_its_producer_dies_before_creating_anything(self):
+        order = {"request_id": 5, "action_id": 32, "kind": "ORBITALCOMMAND", "order_type": "production",
+                 "producer_tag": self.cc.tag, "position": None, "submitted_at": 0,
+                 "phase": "accepted", "unit_tag": None}
+        self.bot._production_orders[5] = order
+        await self.bot.on_unit_destroyed(self.cc.tag)
+        self.assertNotIn(5, self.bot._production_orders)
+        self.assertEqual(self.bot.recent_outcomes[-1]["phase"], "failed")
+        self.assertIn("producer_destroyed", self.bot.recent_outcomes[-1]["failures"][0])
+
     async def test_observation_is_json_ready(self):
         import json
         snapshot = self.bot._snapshot()
@@ -391,7 +465,7 @@ class HierarchicalTerranTests(TerranAdapterTests):
         self.bot.calculate_cost = Mock(return_value=SimpleNamespace(minerals=50, vespene=25))
         await self.bot._refresh_abilities()
         catalog = self.bot._catalog()
-        self.assertEqual(len(catalog), 70)
+        self.assertEqual(len(catalog), 71)
         self.assertEqual(catalog["26"]["cost"], {"minerals": 50, "gas": 25})
         self.assertEqual(catalog["26"]["reservation_blocked"], "no_idle_producer_without_addon")
         self.assertIsNone(catalog["0"]["reservation_blocked"])

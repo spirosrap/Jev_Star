@@ -124,9 +124,9 @@ game seconds. This is a REALTIME game: it continues while you think. Be concise.
 Normal refreshes are 60 game seconds apart, with a 30-second execution window
 after acceptance before ordinary events can refresh. Urgent threats bypass it.
 Set production headroom for this horizon: tiny worker/army caps will stall Jev.
-Use only action IDs in action_catalog: 0-15 train, 16-25 build, 26-31 add-ons,
-32-33 Command Center morphs, 34-62 research, 63-65 scouting, 66 MULTI-ATTACK,
-67 MULTI-RETREAT, 68 MULTI-DEFEND, 69 EMPTY ACTION.
+Use only action IDs in action_catalog: 0-15 train, 16-25 and 70 (Bunker) build,
+26-31 add-ons, 32-33 Command Center morphs, 34-62 research, 63-65 scouting,
+66 MULTI-ATTACK, 67 MULTI-RETREAT, 68 MULTI-DEFEND, 69 EMPTY ACTION.
 goals are desired TOTAL ready plus pending unit/building counts, or target=1 for
 starting an upgrade. Command Center goals (18) count every town hall, including
 Orbital Commands and Planetary Fortresses. Add-on goals count add-ons of that type.
@@ -135,7 +135,7 @@ worker_target and base_target are HARD caps including pending production. Accoun
 for actual mineral/gas saturation, remaining minerals and bases under construction.
 Do not keep making SCVs on one saturated or mined-out base. Plan expansions
 before minerals run out. Diversion into many unrelated tech buildings is harmful.
-allowed_spending_actions lists IDs 0-62 Jev MAY buy; include necessary SCVs,
+allowed_spending_actions lists IDs 0-62 and 70 Jev MAY buy; include necessary SCVs,
 Supply Depots, technology prerequisites, add-ons and army production.
 Do NOT put IDs 63-69 in goals or allowed_spending_actions. Scouting, army commands
 and waiting are available separately when legal. A goal may be unaffordable now;
@@ -167,12 +167,16 @@ With 800 or more minerals banked, Jev may also buy Barracks, Marines, Marauders,
 Siege Tanks and Medivacs beyond allowed_spending_actions and goal ceilings (the
 reserve still applies). Up to two Barracks, Factories or Starports and two Supply
 Depots may be under construction at once. Plan enough production for the income.
+When supply is nearly blocked and no Depot is coming, other purchases keep 100
+minerals back for the Depot.
 army_posture guides Jev's attack/retreat/defend decisions. attack_min_army is the minimum
 READY combat supply to allow an attack. retreat_below_army enables emergency retreat.
 min_posture_seconds holds an army intent to avoid changing it every second, with
 emergency retreat allowed. A defend plan permits withdrawal and local defense.
 There is NO automatic production/build order. Local code distributes workers,
-calls down MULEs, lowers Supply Depots, resumes unfinished buildings, carries out
+calls down MULEs, lowers Supply Depots, resumes unfinished buildings, loads nearby
+Marines into a Bunker when ground enemies approach and unloads them to attack,
+sends two SCVs to repair a damaged Bunker or Planetary Fortress under fire, carries out
 army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
 uses Stimpack in combat once researched, continues assigned expansion scouting,
 and moves Medivacs and one Raven with the army. Jev chooses all new production,
@@ -195,10 +199,17 @@ Do not demand all ceilings simultaneously at 200 supply. Do not delay an attack 
 upgrades or optional static defenses.
 Capabilities: army attack-move to a remembered building, expansion search when cleared,
 base defense/rally, retreat, scouting, Medivac healing by following the army, and
-Missile Turret or Raven detection. Formation control, drops, Bunkers, Viking landing,
+Missile Turret or Raven detection. Formation control, drops, Viking landing,
 Liberator zones, Banshee cloak use, Yamato, Raven spells, Cyclone lock-on and scans are
 NOT implemented; do not rely on prose to make them happen. Liberators only hit air units
 and Vikings only hit air units. Enemy memory respects fog; unexplored expansion sites are unknown.
+Against Zerg, expect early Zergling and Baneling pressure. Before about 4:00 hold the
+natural with one Bunker (70) placed automatically toward the enemy, Reactor Marines and
+one or two Widow Mines, then Combat Shield and Stimpack; Siege Tanks and Medivacs follow.
+Keep SCV production continuous but do not take a third base while pressure continues.
+Prefer MULTI-DEFEND over retreat while a base with a Bunker or Siege Tanks is under attack;
+retreating abandons that base. Attack once Stimpack is done and the army clearly outnumbers
+what has been seen.
 """
 
 

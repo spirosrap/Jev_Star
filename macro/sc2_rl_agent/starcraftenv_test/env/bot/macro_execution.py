@@ -270,6 +270,11 @@ class MacroExecution:
                 self._production_event(order, "failed", reason="destroyed_during_construction")
             elif order.get("order_type") == "research" and order["producer_tag"] == unit_tag:
                 self._production_event(order, "failed", reason="researcher_destroyed")
+            elif (order.get("order_type", "production") == "production" and order["unit_tag"] is None
+                  and order["kind"] != "ARCHON"  # Merging templars leave by design.
+                  and order["producer_tag"] == unit_tag and order["phase"] in {"submitted", "accepted"}):
+                # Nothing was created yet (a morph, add-on, training or unplaced building).
+                self._production_event(order, "failed", reason="producer_destroyed")
 
     def _consume_engine_feedback(self):
         for error in getattr(self.state, "action_errors", []):

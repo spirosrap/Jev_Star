@@ -61,7 +61,7 @@ class HierarchicalMixin:
         catalog = {}
         contract = self.contract
         for action, description in self.action_dict.items():
-            minerals = gas = count = 0
+            minerals = gas = count = pending = 0
             requirements = []
             action_kind = contract.kinds[action]
             data = None
@@ -78,6 +78,7 @@ class HierarchicalMixin:
                         requirements.append({"producer": source.name, **{
                             k: getattr(v, "name", v) for k, v in info.items() if k != "ability"}})
                 count = self._count_with_pending(kind)
+                pending = self.already_pending(kind)
             elif action_kind == "research":
                 upgrade = UpgradeId[contract.kind_name(action)]
                 data = self.game_data.upgrades.get(upgrade.value)
@@ -91,7 +92,7 @@ class HierarchicalMixin:
                     requirements = [{"producer": source.name, **{
                         k: getattr(v, "name", v) for k, v in info.items() if k != "ability"}}]
             catalog[str(action)] = {"description": description, "cost": {"minerals": minerals, "gas": gas},
-                                    "count_with_pending": count,
+                                    "count_with_pending": count, "pending": pending,
                                     "target_limit": contract.limits.get(action),
                                     "production_alternatives": requirements,
                                     "last_legality_rejection": self._last_legal_blocked.get(str(action))}

@@ -35,6 +35,8 @@ class RaceContract:
     # With this many minerals banked, these purchases may exceed the plan's lists and ceilings.
     bank_minerals: int = 800
     bank_override_actions: frozenset = frozenset()
+    # Keep enough for the supply building when supply is about to block production.
+    supply_reserve: bool = False
 
     @property
     def spending_actions(self):
@@ -110,7 +112,7 @@ def _terran():
         "COMMANDCENTER": 8, "BARRACKS": 12, "FACTORY": 4, "STARPORT": 4,
         "ENGINEERINGBAY": 2, "ARMORY": 2, "FUSIONCORE": 1, "MISSILETURRET": 16,
         "SUPPLYDEPOT": 30, "REFINERY": 16, "ORBITALCOMMAND": 8, "PLANETARYFORTRESS": 4,
-        "BARRACKSTECHLAB": 12, "BARRACKSREACTOR": 12, "FACTORYTECHLAB": 4,
+        "BUNKER": 4, "BARRACKSTECHLAB": 12, "BARRACKSREACTOR": 12, "FACTORYTECHLAB": 4,
         "FACTORYREACTOR": 4, "STARPORTTECHLAB": 4, "STARPORTREACTOR": 4,
     }
     trains = {a for a, k in kinds.items() if k == "train"}
@@ -122,14 +124,15 @@ def _terran():
         supply_action=ids["BUILD SUPPLYDEPOT"], empty_action=ids["EMPTY ACTION"],
         unit_limits=unit_limits, building_limits=building_limits, max_workers=76, max_bases=8,
         urgent_defense_actions=frozenset({ids["TRAIN MARINE"], ids["TRAIN SIEGETANK"],
-                                          ids["BUILD MISSILETURRET"]}),
+                                          ids["BUILD MISSILETURRET"], ids["BUILD BUNKER"]}),
         army_production_actions=frozenset(trains - {ids["TRAIN SCV"], ids["TRAIN MEDIVAC"], ids["TRAIN RAVEN"]}),
         milestone_actions=frozenset(ids[f"BUILD {n}"] for n in (
             "COMMANDCENTER", "ENGINEERINGBAY", "FACTORY", "STARPORT", "ARMORY", "FUSIONCORE"))
         | frozenset(a for a, k in kinds.items() if k in {"research", "addon", "morph"}),
         limits=_limits(kinds, actions, unit_limits, building_limits),
         bank_override_actions=frozenset(ids[n] for n in (
-            "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")))
+            "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")),
+        supply_reserve=True)
 
 
 PROTOSS = _protoss()

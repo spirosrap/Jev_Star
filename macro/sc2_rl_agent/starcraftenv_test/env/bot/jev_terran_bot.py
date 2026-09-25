@@ -79,7 +79,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     contract = TERRAN
     stationary_army_types = frozenset({U.SIEGETANKSIEGED, U.WIDOWMINEBURROWED})
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
-                        "resume_unfinished_construction", "army_intent_execution", "tank_siege",
+                        "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
+                        "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
 
@@ -335,10 +336,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _blocks_resources(self, position, kind):
         resources = self.mineral_field | self.vespene_geyser
-        clearance = 3 if kind == U.MISSILETURRET else 6
+        clearance = 3 if kind == U.MISSILETURRET else 4 if kind == U.BUNKER else 6
         if any(r.distance_to(position) < clearance for r in resources.closer_than(12, position)):
             return True
-        return kind != U.MISSILETURRET and any(t.distance_to(position) < 7 for t in self.townhalls)
+        return (kind not in {U.MISSILETURRET, U.BUNKER}
+                and any(t.distance_to(position) < 7 for t in self.townhalls))
 
     def _anchors(self, kind):
         bases = list(self.townhalls.ready) or list(self.townhalls)
@@ -346,6 +348,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             return [self.start_location]
         anchors = []
         center = self.game_info.map_center
+        if kind == U.BUNKER:
+            # In front of the base closest to the enemy, on the side they arrive from.
+            enemy = self.enemy_start_locations[0]
+            return [b.position.towards(enemy, d) for b in sorted(bases, key=lambda b: b.distance_to(enemy))
+                    for d in (6, 8)]
         for base in sorted(bases, key=lambda b: b.distance_to(self.start_location)):
             minerals = self.mineral_field.closer_than(12, base)
             mineral_center = minerals.center if minerals else base.position.towards(center, -5)
@@ -439,6 +446,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._resume_construction()
         self._deploy_units()
         self._stim()
+        # Before army orders, so units sent into a Bunker are not ordered elsewhere this frame.
+        self._man_bunkers()
+        self._repair()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
 
@@ -464,6 +474,42 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self._resume_orders[structure.tag] = self.time
                 self.log("construction_resumed", game_loop=self.state.game_loop, structure=structure.type_id.name,
                          structure_tag=structure.tag, worker_tag=worker.tag)
+
+    def _ground_threats(self):
+        return [e for e in self.enemy_units if e.is_visible and e.can_attack and not e.is_flying
+                and not e.type_id.name.startswith("CHANGELING")]
+
+    def _man_bunkers(self):
+        threats = self._ground_threats()
+        for bunker in self.structures(U.BUNKER).ready:
+            near = any(e.distance_to(bunker) < 12 for e in threats)
+            if not near:
+                if self.army_intent == "attack" and bunker.cargo_used:
+                    bunker(A.UNLOADALL_BUNKER)
+                continue
+            room = bunker.cargo_max - bunker.cargo_used
+            marines = sorted((m for m in self.units(U.MARINE).ready
+                              if m.distance_to(bunker) < 15 and m.tag not in self._scouts
+                              and m.tag not in self.unit_tags_received_action),
+                             key=lambda m: m.distance_to(bunker))
+            for marine in marines[:max(0, room)]:
+                marine(A.SMART, bunker)
+
+    def _repair(self):
+        """Up to two SCVs repair a damaged Bunker or Planetary Fortress while it is under fire."""
+        if self.minerals < 25:
+            return
+        threats = self._ground_threats()
+        for target in self.structures.of_type({U.BUNKER, U.PLANETARYFORTRESS}).ready:
+            if target.health_percentage >= 1 or not any(e.distance_to(target) < 12 for e in threats):
+                continue
+            busy = sum(1 for w in self.workers if w.is_repairing and w.distance_to(target) < 4)
+            helpers = sorted((w for w in self.workers
+                              if (w.is_gathering or w.is_idle) and w.tag not in self._scouts
+                              and w.tag not in self.unit_tags_received_action and w.distance_to(target) < 25),
+                             key=lambda w: w.distance_to(target))
+            for worker in helpers[:max(0, 2 - busy)]:
+                worker(A.EFFECT_REPAIR_SCV, target)
 
     def _may_switch(self, unit):
         return (self.time - self._mode_changed.get(unit.tag, -100) >= MODE_HOLD
