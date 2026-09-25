@@ -116,9 +116,40 @@ Use `py -3.10 jev_star.py macro --help` or `micro --help` for all options. Relat
 
 Each micro version was evaluated on 35 maps with three episodes per map. JEV alone achieved **3 wins, 2 draws, and 100 losses**; the earlier Astra + JEV version achieved **6 wins, 1 draw, and 98 losses**; P0 Astra + JEV achieved **7 wins and 98 losses**. Excluding the two development maps, the three versions achieved **3/99, 3/99, and 7/99 wins**, respectively.
 
-Earlier macro versions won two games against the non-cheating VeryHard/Elite AI. The subsequent version with expanded action coverage lost one game each against CheatVision and CheatMoney. `macro-v2.2.1` added termination on permanent billing errors. The current `macro-v2.3.0` adds Terran; its first test games won against Easy Zerg in 9:36 and three times against the non-cheating VeryHard Zerg (13:58, 13:25, and 10:18 after adding the Bunker and Zerg guidance). Macro has passed **163 offline regression tests** (Protoss behavior is unchanged) and micro **37**. These are small samples, not estimates of a stable win rate.
+Earlier macro versions won two games against the non-cheating VeryHard/Elite AI. The subsequent version with expanded action coverage lost one game each against CheatVision and CheatMoney. `macro-v2.2.1` added termination on permanent billing errors. The current `macro-v2.3.0` adds Terran; its results are below. Macro has passed **163 offline regression tests** (Protoss behavior is unchanged) and micro **37**. These are small samples, not estimates of a stable win rate.
 
 Jev calls cost about **$0.04 per million tokens** through OpenRouter (blended rate); a 10-minute macro game uses roughly 1.6M tokens, about $0.06. Astra planning runs on the Codex CLI subscription and is not included.
+
+#### Terran results (`macro-v2.3.0`)
+
+All games: Terran against the built-in Zerg AI on Altitude LE, Astra planning at `medium` effort, 20-minute limit, Linux with the SC2 client under Proton. Each game ran with the fixes made after the one before it.
+
+| Game | Opponent | Result | Game time | Jev input tokens | Changes in effect |
+| --- | --- | --- | --- | --- | --- |
+| T1 | Easy | Victory | 9:36 | 1.57M | First Terran executor |
+| T2 | VeryHard | Victory | 13:58 | 2.33M | Batched building placement |
+| T3 | VeryHard | Victory | 13:25 | 2.36M | Rejected spots and add-on slots kept free; spending a large bank |
+| T4 | VeryHard | Victory | 10:17 | 1.79M | Bunker, SCV repair, supply reserve, Zerg guidance for Astra |
+| T5 | **CheatVision** | **Victory** | 10:21 | 1.76M | Baneling dodging for Marines and SCVs; no gas workers as builders |
+
+One further VeryHard game was stopped by hand after the SC2 window stalled and is not counted. For comparison, the Protoss runs on the same machine the day before won three games against MediumHard and lost one against VeryHard.
+
+T5 is the first win above VeryHard recorded in this repository; the earlier Protoss version lost its CheatVision and CheatMoney games. It is still a single game on one map against one race, so it is evidence, not a win rate.
+
+What changed the outcome: T2–T3 won despite losing bases to Zergling–Baneling pressure and banking minerals. After the Bunker, supply reserve, and Zerg guidance (T4), the bot kept both bases, never retreated, and grew to 48 SCVs by 10:00. With Baneling dodging (T5, 403 dodges) it lost no base against CheatVision and reached 60 SCVs and 161 supply by 10:00, with no failed orders.
+
+#### Test plan for the cheating AIs
+
+Before testing other opponent races, confirm the Zerg results. Keep settings and code fixed within a phase (record the commit of each game), play fullscreen on an otherwise idle machine, and do not count games stopped by hand or by a stall. If a bug forces a code change, fix it and restart that phase's count.
+
+| Phase | Games | Goal |
+| --- | --- | --- |
+| 1. Repeat CheatVision | 4 more against CheatVision Zerg on Altitude LE (5 in total) | At least 3 of 5 wins shows T5 was not luck |
+| 2. Other maps | 2 each on Ancient Cistern LE and Babylon LE against CheatVision Zerg | Placement and Bunker position work beyond one map |
+| 3. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
+| 4. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
+
+For each game, record the result, game time, Jev tokens, the review items (failed orders, supply blocks, banked minerals, base losses, Baneling dodges), and any code change. After these phases, repeat phases 1–2 against Terran and Protoss opponents at VeryHard and then CheatVision.
 
 [Experiments and version boundaries](docs/experiments.md) · [Architecture and data flow](docs/architecture.md) · [Logs and replays](docs/logs-and-replays.md) · [Paper PDF](paper/JEV-Star.pdf) · [Paper source and data](paper/README.md#english)
 
@@ -235,9 +266,40 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 
 微观每版 35 图 × 3 局：纯 JEV 为 **3 胜、2 平、100 负**，旧 Astra＋JEV 为 **6 胜、1 平、98 负**，P0 Astra＋JEV 为 **7 胜、98 负**。排除两张开发地图后，三版分别为 **3/99、3/99、7/99 胜**。
 
-宏观历史版本已在非作弊的 VeryHard/Elite 难度取得两局胜利；随后动作补全版本在 CheatVision、CheatMoney 各一局失利。`macro-v2.2.1` 增加永久计费错误的停止机制。当前 `macro-v2.3.0` 新增 Terran，首批测试以 9:36 战胜 Easy Zerg，并三次战胜非作弊 VeryHard Zerg（13:58、13:25，加入 Bunker 与对 Zerg 策略后为 10:18）。宏观已有 **163 项离线回归通过**（Protoss 行为不变），微观 **37 项**。这些是有限样本，不是稳定胜率估计。
+宏观历史版本已在非作弊的 VeryHard/Elite 难度取得两局胜利；随后动作补全版本在 CheatVision、CheatMoney 各一局失利。`macro-v2.2.1` 增加永久计费错误的停止机制。当前 `macro-v2.3.0` 新增 Terran，成绩见下文。宏观已有 **163 项离线回归通过**（Protoss 行为不变），微观 **37 项**。这些是有限样本，不是稳定胜率估计。
 
 经 OpenRouter 调用 Jev 约 **每百万 token 0.04 美元**（综合费率）；10 分钟的宏观对局约 160 万 token，约 0.06 美元。Astra 规划使用 Codex CLI 订阅，不计入其中。
+
+#### Terran 成绩（`macro-v2.3.0`）
+
+全部对局：Terran 对内置 Zerg AI，地图 Altitude LE，Astra 规划强度 `medium`，时限 20 分钟，Linux 上通过 Proton 运行 SC2 客户端。每局都包含上一局之后的修复。
+
+| 对局 | 对手 | 结果 | 游戏时间 | Jev 输入 token | 生效的改动 |
+| --- | --- | --- | --- | --- | --- |
+| T1 | Easy | 胜 | 9:36 | 157 万 | 首个 Terran 执行器 |
+| T2 | VeryHard | 胜 | 13:58 | 233 万 | 批量建筑选址 |
+| T3 | VeryHard | 胜 | 13:25 | 236 万 | 避开被拒位置、保留附属建筑位置；积存矿物时继续花费 |
+| T4 | VeryHard | 胜 | 10:17 | 179 万 | Bunker、SCV 修理、补给预留、Astra 对 Zerg 策略 |
+| T5 | **CheatVision** | **胜** | 10:21 | 176 万 | Marine 与 SCV 躲避 Baneling；不再派采气 SCV 建造 |
+
+另有一局 VeryHard 因 SC2 窗口卡顿被手动停止，不计入。作为对照，前一天同一台机器上的 Protoss 对局三胜 MediumHard、一负 VeryHard。
+
+T5 是本仓库记录中首次在 VeryHard 以上难度获胜；早先的 Protoss 版本在 CheatVision 和 CheatMoney 各负一局。但这只是一张地图、一个种族的一局，属于证据，不是胜率。
+
+改变结果的因素：T2–T3 虽然获胜，但被 Zergling–Baneling 压制拆掉基地，并积存矿物。加入 Bunker、补给预留和对 Zerg 策略后（T4），Bot 保住两个基地、没有撤退，10:00 时达到 48 个 SCV。加入躲避 Baneling 后（T5，躲避 403 次），面对 CheatVision 没有损失基地，10:00 时达到 60 个 SCV 和 161 人口，且没有失败的指令。
+
+#### 作弊难度测试计划
+
+在测试其他对手种族之前，先确认对 Zerg 的成绩。同一阶段内保持设置和代码不变（记录每局的提交），全屏运行且机器保持空闲；手动停止或因卡顿中断的对局不计入。如果必须修改代码修复问题，修复后重新开始该阶段的计数。
+
+| 阶段 | 对局 | 目标 |
+| --- | --- | --- |
+| 1. 重复 CheatVision | 在 Altitude LE 再打 4 局 CheatVision Zerg（共 5 局） | 5 局至少 3 胜，说明 T5 不是偶然 |
+| 2. 其他地图 | Ancient Cistern LE 和 Babylon LE 各 2 局 CheatVision Zerg | 选址和 Bunker 位置在其他地图同样有效 |
+| 3. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
+| 4. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
+
+每局记录结果、游戏时间、Jev token、复查项（失败指令、补给卡住、矿物积存、基地损失、躲避 Baneling 次数）以及任何代码改动。完成这些阶段后，对 Terran 和 Protoss 对手先在 VeryHard、再在 CheatVision 重复第 1–2 阶段。
 
 [实验与版本边界](docs/experiments.md) · [架构与数据流](docs/architecture.md) · [日志和回放](docs/logs-and-replays.md) · [论文 PDF](paper/JEV-Star.pdf) · [论文源码及统计表](paper/README.md#简体中文)
 
