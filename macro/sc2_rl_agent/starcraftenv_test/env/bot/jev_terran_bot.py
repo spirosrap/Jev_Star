@@ -42,6 +42,10 @@ REJECTED_SPOT_SECONDS = 120
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
+# Pull SCVs off gas while this much gas is banked and it is more than twice the minerals;
+# send them back once gas falls below the lower mark.
+GAS_THROTTLE_ON = 300
+GAS_THROTTLE_OFF = 150
 
 
 class TerranObservation(BotAI):
@@ -83,7 +87,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     stationary_army_types = frozenset({U.SIEGETANKSIEGED, U.WIDOWMINEBURROWED})
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
-                        "baneling_dodge",
+                        "baneling_dodge", "gas_balance", "changeling_targeting",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -95,6 +99,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._resume_orders = {}
         self._rejected_spots = {}
         self._addon_blocked = {}
+        self._gas_throttled = False
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -261,7 +266,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         army = self._combat_units()
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
-            if not army or self._ready_army_supply() < 10 or (self.army_intent == "attack" and not retarget):
+            floor = max(10, self.contract.min_attack_army)
+            if not army or self._ready_army_supply() < floor or (self.army_intent == "attack" and not retarget):
                 return "need_army_or_already_attacking"
         elif not army or self.army_intent == posture:
             return f"no_army_or_already_{'retreating' if posture == 'retreat' else 'defending'}"
@@ -447,12 +453,16 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     async def _maintain_local_behaviors(self):
         if not any(command.unit.type_id == U.SCV for command in self.actions):
-            workers = self.workers
+            self._balance_gas()
+            workers, gas_buildings = self.workers, self.gas_buildings
             self.workers = workers.filter(lambda u: u.tag not in self._scouts)
+            if self._gas_throttled:
+                # Otherwise worker distribution refills the Refineries every second.
+                self.gas_buildings = gas_buildings.filter(lambda g: False)
             try:
                 await self.distribute_workers(resource_ratio=4 if self.minerals < 150 and self.vespene > 250 else 2)
             finally:
-                self.workers = workers
+                self.workers, self.gas_buildings = workers, gas_buildings
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         self._call_down_mules()
@@ -462,8 +472,43 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         # Before army orders, so units sent into a Bunker are not ordered elsewhere this frame.
         self._man_bunkers()
         self._repair()
+        self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    def _balance_gas(self):
+        """Move SCVs from gas to minerals while unspent gas piles up far beyond minerals."""
+        if self._gas_throttled and self.vespene < GAS_THROTTLE_OFF:
+            self._gas_throttled = False
+            self.log("gas_throttle", game_loop=self.state.game_loop, active=False,
+                     gas=self.vespene, minerals=self.minerals)
+        elif not self._gas_throttled and self.vespene >= GAS_THROTTLE_ON and self.vespene > 2 * self.minerals:
+            self._gas_throttled = True
+            self.log("gas_throttle", game_loop=self.state.game_loop, active=True,
+                     gas=self.vespene, minerals=self.minerals)
+        if not self._gas_throttled:
+            return
+        bases = self.townhalls.ready
+        fields = self.mineral_field.filter(lambda m: any(m.distance_to(b) < 10 for b in bases))
+        if not fields:
+            return
+        gas = {g.tag for g in self.gas_buildings}
+        for worker in self.workers:
+            # A worker carrying gas returns it first; it is moved on the next pass.
+            if (worker.order_target in gas and not worker.is_carrying_vespene
+                    and worker.tag not in self.unit_tags_received_action):
+                worker.gather(fields.closest_to(worker))
+                self._action_stats["gas_to_minerals"] += 1
+
+    def _clear_changelings(self):
+        """Changelings are not attacked automatically; the nearest soldiers shoot visible ones."""
+        army = self._combat_units().filter(lambda u: u.can_attack and u.type_id not in self.stationary_army_types)
+        for changeling in (e for e in self.enemy_units if e.is_visible and e.type_id.name.startswith("CHANGELING")):
+            shooters = sorted((u for u in army if u.distance_to(changeling) < 12
+                               and u.tag not in self.unit_tags_received_action),
+                              key=lambda u: u.distance_to(changeling))
+            for unit in shooters[:3]:
+                unit.attack(changeling)
 
     def _call_down_mules(self):
         bases = self.townhalls.ready

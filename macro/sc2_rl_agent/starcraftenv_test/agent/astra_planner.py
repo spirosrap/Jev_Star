@@ -177,7 +177,8 @@ There is NO automatic production/build order. Local code distributes workers,
 calls down MULEs, lowers Supply Depots, resumes unfinished buildings, loads nearby
 Marines into a Bunker when ground enemies approach and unloads them to attack,
 sends two SCVs to repair a damaged Bunker or Planetary Fortress under fire, moves Marines
-and mining SCVs away from nearby Banelings, carries out army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
+and mining SCVs away from nearby Banelings, moves SCVs from gas to minerals while banked gas
+exceeds 300 and twice the minerals, shoots visible Changelings, carries out army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
 uses Stimpack in combat once researched, continues assigned expansion scouting,
 and moves Medivacs and one Raven with the army. Jev chooses all new production,
 construction and research. Enemy knowledge is partial; last-seen observations are
@@ -209,7 +210,8 @@ one or two Widow Mines, then Combat Shield and Stimpack; Siege Tanks and Medivac
 Keep SCV production continuous but do not take a third base while pressure continues.
 Prefer MULTI-DEFEND over retreat while a base with a Bunker or Siege Tanks is under attack;
 retreating abandons that base. Attack once Stimpack is done and the army clearly outnumbers
-what has been seen.
+what has been seen. No attack starts below 40 ready army supply, whatever attack_min_army says;
+a small early attack that dies leaves the bases undefended.
 """
 
 

@@ -141,8 +141,18 @@ class TerranContractTests(unittest.TestCase):
 
     def test_primary_action_applies_terran_posture(self):
         plan = terran_plan(army_posture="attack", attack_min_army=10)
-        self.assertEqual(primary_action(plan, {66: "MULTI-ATTACK"}, "defend", 20, contract=TERRAN),
+        self.assertEqual(primary_action(plan, {66: "MULTI-ATTACK"}, "defend", 45, contract=TERRAN),
                          (66, "apply_army_order_before_optional_production"))
+        # Below the Terran attack floor the plan's lower threshold does not start an attack.
+        self.assertEqual(primary_action(plan, {66: "MULTI-ATTACK"}, "defend", 30, contract=TERRAN)[0], None)
+
+    def test_attack_needs_forty_ready_army_supply(self):
+        plan = terran_plan(army_posture="attack", attack_min_army=28, reserve_for_action=None)
+        weak = (plan, terran_catalog(), resource(ready_army_supply=30), "defend", 0, 100, False)
+        strong = (plan, terran_catalog(), resource(ready_army_supply=42), "defend", 0, 100, False)
+        self.assertEqual(policy_reason(66, *weak, contract=TERRAN), "plan_attack_not_ready")
+        self.assertIsNone(policy_reason(66, *strong, contract=TERRAN))
+        self.assertEqual(PROTOSS.min_attack_army, 0)
 
     def test_terran_jev_prompt(self):
         client = JevClient("test-only", instructions=TERRAN_INSTRUCTIONS)
@@ -164,6 +174,7 @@ class FakeTerranUnit(support.FakeUnit):
         self.can_attack = kind in {U.MARINE, U.SIEGETANK, U.SIEGETANKSIEGED}
         self.build = Mock()
         self.build_gas = Mock()
+        self.gather = Mock()
         self.mineral_contents = 1800
 
     def __call__(self, ability, target=None, queue=False):
@@ -394,6 +405,57 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.set_world([a, b], [self.cc], [baneling])
         self.bot._fast_micro()
         self.assertNotEqual(a.commands[0][1].y, b.commands[0][1].y)
+
+    def gas_world(self, gas, minerals):
+        refinery = FakeTerranUnit(3, U.REFINERY, (14, 10))
+        field = FakeTerranUnit(9, U.MINERALFIELD, (5, 10))
+        going = FakeTerranUnit(4, U.SCV, (13, 10))
+        going.order_target = refinery.tag
+        carrying = FakeTerranUnit(5, U.SCV, (13, 11))
+        carrying.order_target, carrying.is_carrying_vespene = refinery.tag, True
+        self.bot.mineral_field = Units([field], self.bot)
+        self.set_world([self.scv, going, carrying], [self.cc, refinery])
+        self.bot.vespene, self.bot.minerals = gas, minerals
+        return field, going, carrying
+
+    async def test_gas_workers_move_to_minerals_while_gas_piles_up(self):
+        field, going, carrying = self.gas_world(gas=400, minerals=100)
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)
+        going.gather.assert_called_once_with(field)
+        carrying.gather.assert_not_called()  # It returns its gas first.
+        self.bot.vespene = 200
+        going.gather.reset_mock()
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)  # Still above the lower mark.
+        self.bot.vespene = 100
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)
+        going.gather.assert_called_once()  # Only while throttled.
+
+    async def test_gas_is_not_throttled_when_minerals_keep_up(self):
+        _, going, _ = self.gas_world(gas=400, minerals=300)
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)
+        going.gather.assert_not_called()
+
+    async def test_attack_not_offered_below_the_floor(self):
+        marines = [FakeTerranUnit(10 + i, U.MARINE, (30, 30)) for i in range(35)]
+        self.set_world([self.scv, *marines], [self.cc])
+        self.bot.calculate_supply_cost = Mock(return_value=1)
+        self.assertEqual(self.bot._posture_reason("attack"), "need_army_or_already_attacking")
+        more = marines + [FakeTerranUnit(60 + i, U.MARINE, (30, 30)) for i in range(6)]
+        self.set_world([self.scv, *more], [self.cc])
+        self.assertIsNone(self.bot._posture_reason("attack"))
+
+    async def test_soldiers_shoot_a_visible_changeling(self):
+        changeling = FakeTerranUnit(90, U.CHANGELINGMARINESHIELD, (30, 30))
+        marines = [FakeTerranUnit(10 + i, U.MARINE, (32 + i, 30)) for i in range(5)]
+        self.set_world([self.scv, *marines], [self.cc], [changeling])
+        self.bot._clear_changelings()
+        shooters = [m for m in marines if m.commands == [("attack", changeling)]]
+        self.assertEqual(len(shooters), 3)
+        self.assertEqual(shooters, marines[:3])
 
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)
