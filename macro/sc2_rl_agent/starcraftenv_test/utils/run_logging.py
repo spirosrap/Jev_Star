@@ -18,6 +18,9 @@ SCHEMA_VERSION = 2
 PRICING = {
     "jev-1.13.0": {"input_usd_per_million": 0.042, "output_usd_per_million": 0.0,
                    "checked_on": "2026-09-21", "source": "https://docs.typesafe.ai/models"},
+    # Name OpenRouter reports; its listed price is one blended rate for all tokens.
+    "typesafe/jev-1.13-20260917": {"input_usd_per_million": 0.04, "output_usd_per_million": 0.04,
+                                   "checked_on": "2026-09-25", "source": "https://openrouter.ai (blended)"},
 }
 SECRET_FIELDS = {"authorization", "api_key", "apikey", "access_token", "refresh_token", "password", "secret"}
 

@@ -56,11 +56,11 @@ class MacroExecution:
         self.worker_supply = int(self.supply_workers)
         information["resource"]["worker_supply"] = self.worker_supply
         information["resource"]["visible_workers"] = self.workers.amount
-        information["resource"]["pending_workers"] = self.already_pending(U.PROBE)
+        information["resource"]["pending_workers"] = self.already_pending(U[self.contract.worker_type])
         information["resource"]["ready_army_supply"] = self._ready_army_supply()
         forecast = self._supply_forecast()
         information["resource"].update(needs_supply=forecast["needs_supply"], needs_power=forecast["needs_power"])
-        information["unit"]["probe_count"] = self.worker_supply
+        information["unit"][self.contract.worker_type.lower() + "_count"] = self.worker_supply
         return information
 
     def _ready_army_supply(self):
@@ -139,23 +139,26 @@ class MacroExecution:
                 return
         self.record_failure(action, "no_ready_producer_with_available_ability")
 
+    async def _build_expansion(self, action, kind):
+        candidates = sorted(self.expansion_locations_list, key=lambda p: p.distance_to(self.start_location))
+        for position in candidates:
+            if any(b.distance_to(position) < 8 for b in self.townhalls):
+                continue
+            if any(e.distance_to(position) < 18 for e in self.enemy_units if e.is_visible and e.can_attack):
+                continue
+            if any(Point2(e["position"]).distance_to(position) < 10 for e in self._known_enemy_buildings.values()):
+                continue
+            worker = self.select_build_worker(position)
+            if worker is None or await self.client.query_pathing(worker.position, position) is None:
+                continue
+            if await self.build(kind, position, max_distance=2, placement_step=1,
+                                random_alternative=False, build_worker=worker):
+                return
+        self.record_failure(action, "no_safe_reachable_expansion_placement")
+
     async def _build_one(self, action, kind):
         if kind == U.NEXUS:
-            candidates = sorted(self.expansion_locations_list, key=lambda p: p.distance_to(self.start_location))
-            for position in candidates:
-                if any(b.distance_to(position) < 8 for b in self.townhalls):
-                    continue
-                if any(e.distance_to(position) < 18 for e in self.enemy_units if e.is_visible and e.can_attack):
-                    continue
-                if any(Point2(e["position"]).distance_to(position) < 10 for e in self._known_enemy_buildings.values()):
-                    continue
-                worker = self.select_build_worker(position)
-                if worker is None or await self.client.query_pathing(worker.position, position) is None:
-                    continue
-                if await self.build(kind, position, max_distance=2, placement_step=1,
-                                    random_alternative=False, build_worker=worker):
-                    return
-            self.record_failure(action, "no_safe_reachable_expansion_placement")
+            await self._build_expansion(action, kind)
             return
         if kind == U.ASSIMILATOR:
             geysers = self._assimilator_candidates()
@@ -191,10 +194,11 @@ class MacroExecution:
         self.record_failure(action, "no_valid_powered_placement_or_available_builder")
 
     def _track_production_order(self, decision, commands):
-        if not (0 <= decision.action_id <= 59 or 66 <= decision.action_id <= 70) or not commands:
+        action_kind = self.contract.kinds.get(decision.action_id)
+        if action_kind not in {"train", "merge", "build", "addon", "morph", "research", "chrono"} or not commands:
             return
         action = decision.action_id
-        order_type = "research" if 34 <= action <= 59 else "chronoboost" if 66 <= action <= 70 else "production"
+        order_type = {"research": "research", "chrono": "chronoboost"}.get(action_kind, "production")
         kind = self.action_dict[action].split()[1]
         command = commands[0]
         target = getattr(command, "target", None)

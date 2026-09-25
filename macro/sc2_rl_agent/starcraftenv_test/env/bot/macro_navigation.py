@@ -7,6 +7,9 @@ WORKERS = {U.PROBE, U.SCV, U.DRONE}
 
 
 class MacroNavigation:
+    # Deployed units (sieged tanks, burrowed mines) that local code moves, not army orders.
+    stationary_army_types = frozenset()
+
     def _initialize_navigation(self):
         self._known_enemy_buildings = {}
         self._search_sites = []
@@ -128,7 +131,8 @@ class MacroNavigation:
         self._issue_army_intent(include_busy=True)
 
     def _issue_army_intent(self, include_busy=False):
-        army = self._combat_units().filter(lambda u: u.tag not in self.unit_tags_received_action and u.tag not in self._scouts)
+        army = self._combat_units().filter(lambda u: u.tag not in self.unit_tags_received_action and u.tag not in self._scouts
+                                           and u.type_id not in self.stationary_army_types)
         if not army:
             return
         focus = None
@@ -197,6 +201,10 @@ class MacroNavigation:
                  target_id=target_id, position=list(target))
 
     def _maintain_scouts_and_detection(self):
+        self._maintain_scouts()
+        self._maintain_escorts()
+
+    def _maintain_scouts(self):
         for tag, mission in list(self._scouts.items()):
             unit = self.units.find_by_tag(tag)
             if unit is None or tag in self.unit_tags_received_action:
@@ -210,6 +218,8 @@ class MacroNavigation:
                          target_id=target_id, position=list(target))
             elif unit.is_idle:
                 unit.move(target)
+
+    def _maintain_escorts(self):
         army = self._combat_units()
         observers = self.units(U.OBSERVER).ready.filter(lambda u: u.tag not in self._scouts)
         if army and observers:

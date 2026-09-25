@@ -1,4 +1,4 @@
-"""Run the Jev Protoss macro agent against the built-in SC2 AI in realtime."""
+"""Run the Jev macro agent (Protoss or Terran) against the built-in SC2 AI in realtime."""
 
 import argparse
 import asyncio
@@ -8,8 +8,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from .agent.jev_agent import JevClient, load_api_key
-from .agent.macro_contract import VERSION
+from .agent.jev_agent import (INSTRUCTIONS, PLAN_INSTRUCTIONS, TERRAN_INSTRUCTIONS, TERRAN_PLAN_INSTRUCTIONS,
+                              JevClient, load_api_key)
+from .agent.macro_contract import CONTRACTS, VERSION
 from .utils.run_logging import RunLog, atomic_json
 
 
@@ -23,6 +24,7 @@ def positive_float(value):
 def main():
     repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--race", choices=sorted(CONTRACTS), default="Protoss", help="Race the agent plays")
     parser.add_argument("--map", default="Altitude LE")
     parser.add_argument("--opponent-race", choices=["Zerg", "Terran", "Protoss", "Random"], default="Zerg")
     parser.add_argument("--difficulty", choices=["VeryEasy", "Easy", "Medium", "MediumHard", "Hard", "Harder", "VeryHard", "CheatVision", "CheatMoney", "CheatInsane"], default="Easy")
@@ -67,11 +69,13 @@ def main():
     output.mkdir(parents=True, exist_ok=False)  # Never silently overwrite another run.
     settings = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
                 if k != "config_file"}
-    settings.update(realtime=True, player_race="Protoss", output_dir=str(output), macro_contract=VERSION)
+    settings.update(realtime=True, player_race=args.race, output_dir=str(output), macro_contract=VERSION)
     source_dir = Path(__file__).resolve().parent
     sources = [source_dir / name for name in (
         "agent/astra_planner.py", "agent/jev_agent.py", "agent/strategic_policy.py", "agent/macro_contract.py",
         "env/bot/Protoss_bot.py", "env/bot/jev_protoss_bot.py", "env/bot/hierarchical_protoss_bot.py",
+        "env/bot/jev_macro_bot.py", "env/bot/hierarchical_bot.py", "env/bot/jev_terran_bot.py",
+        "env/bot/hierarchical_terran_bot.py",
         "env/bot/macro_execution.py", "env/bot/macro_navigation.py", "run_jev.py", "utils/run_logging.py",
         "utils/sc2_runtime.py", "utils/action_info.py")]
     atomic_json(output / "source-fingerprints.json", {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
@@ -87,18 +91,26 @@ def main():
                 from sc2.data import Difficulty, Race
                 from .utils.sc2_runtime import run_windowed_game
                 from sc2.player import Bot, Computer
-                from .env.bot.jev_protoss_bot import JevProtossBot
+                if args.race == "Terran":
+                    from .env.bot.jev_terran_bot import JevTerranBot as FlatBot
+                    from .env.bot.hierarchical_terran_bot import HierarchicalTerranBot as PlannedBot
+                    instructions = (TERRAN_INSTRUCTIONS, TERRAN_PLAN_INSTRUCTIONS)
+                else:
+                    from .env.bot.jev_protoss_bot import JevProtossBot as FlatBot
+                    from .env.bot.hierarchical_protoss_bot import HierarchicalProtossBot as PlannedBot
+                    instructions = (INSTRUCTIONS, PLAN_INSTRUCTIONS)
 
                 game_map = maps.get(args.map)
                 log("environment", map_path=str(game_map.path), map_sha256=hashlib.sha256(game_map.data).hexdigest(),
                     macro_contract=VERSION)
-                client = JevClient(key, args.model, args.request_timeout)
+                client = JevClient(key, args.model, args.request_timeout, instructions=instructions[0],
+                                   plan_instructions=instructions[1])
                 if args.planner == "codex":
                     from .agent.astra_planner import CodexPlannerClient
-                    from .env.bot.hierarchical_protoss_bot import HierarchicalProtossBot
                     planner_client = CodexPlannerClient(output, args.codex_path, args.planner_model,
-                                                       args.planner_timeout, args.planner_effort)
-                    bot = HierarchicalProtossBot(client, output, args.decision_interval, args.max_decision_age,
+                                                       args.planner_timeout, args.planner_effort,
+                                                       contract=CONTRACTS[args.race])
+                    bot = PlannedBot(client, output, args.decision_interval, args.max_decision_age,
                                                  args.max_requests, planner_client=planner_client, run_log=log,
                                                  planner_interval=args.planner_interval, plan_ttl=args.plan_ttl,
                                                  planner_min_interval=args.planner_min_interval,
@@ -106,10 +118,10 @@ def main():
                                                  planner_execution_window=args.planner_execution_window,
                                                  max_plan_age=args.max_plan_age, max_planner_requests=args.max_planner_requests)
                 else:
-                    bot = JevProtossBot(client, output, args.decision_interval, args.max_decision_age,
+                    bot = FlatBot(client, output, args.decision_interval, args.max_decision_age,
                                        args.max_requests, run_log=log)
                 log.phase = "launching"
-                result = run_windowed_game(game_map, [Bot(Race.Protoss, bot),
+                result = run_windowed_game(game_map, [Bot(Race[args.race], bot),
                                            Computer(Race[args.opponent_race], Difficulty[args.difficulty])],
                                            realtime=True, game_time_limit=args.game_time_limit,
                                            random_seed=args.seed, save_replay_as=str(output / "game.SC2Replay"),

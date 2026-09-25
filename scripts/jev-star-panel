@@ -1,0 +1,12 @@
+#!/bin/sh
+# Start the JEV-Star control panel if it is not running, then open it in the browser.
+root=$(cd "$(dirname "$0")/.." && pwd)
+url=http://127.0.0.1:${JEV_PANEL_PORT:-8765}/
+if ! curl -fs -o /dev/null "${url}options"; then
+    setsid -f python3 "$root/scripts/live_view.py" >"$root/macro/jev_runs/panel.log" 2>&1 </dev/null
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        curl -fs -o /dev/null "${url}options" && break
+        sleep 0.3
+    done
+fi
+[ "$1" = "--no-open" ] || xdg-open "$url" >/dev/null 2>&1 &

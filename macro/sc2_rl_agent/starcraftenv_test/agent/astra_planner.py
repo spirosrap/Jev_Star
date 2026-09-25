@@ -12,34 +12,40 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from .macro_contract import ACTION_LIMITS, ARMY_ACTIONS
+from .macro_contract import PROTOSS, TERRAN
 
 
-PLAN_SCHEMA = {
-    "type": "object", "additionalProperties": False,
-    "properties": {
-        "objective": {"type": "string"},
-        "goals": {"type": "array", "items": {
-            "type": "object", "additionalProperties": False,
-            "properties": {"action_id": {"type": "integer", "enum": list(range(60))},
-                           "target": {"type": "integer"}},
-            "required": ["action_id", "target"]}},
-        "worker_target": {"type": "integer"},
-        "base_target": {"type": "integer"},
-        "allowed_spending_actions": {"type": "array", "items": {"type": "integer", "enum": list(range(60))}},
-        "reserve_for_action": {"type": ["integer", "null"], "enum": [None, *range(60)]},
-        "reserve_after_workers": {"type": "integer"},
-        "army_posture": {"type": "string", "enum": ["defend", "attack", "retreat"]},
-        "attack_min_army": {"type": "integer"},
-        "retreat_below_army": {"type": "integer"},
-        "min_posture_seconds": {"type": "integer"},
-        "guidance": {"type": "string"},
-        "priority_action": {"type": ["integer", "null"], "enum": [None, *range(71), 72]},
-        "production_priority": {"type": "array", "items": {"type": "integer", "enum": list(range(60))}},
-        "army_target_id": {"type": ["string", "null"]},
-    },
-}
-PLAN_SCHEMA["required"] = list(PLAN_SCHEMA["properties"])
+def plan_schema(contract=PROTOSS):
+    spending = list(contract.spending_actions)
+    schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "objective": {"type": "string"},
+            "goals": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {"action_id": {"type": "integer", "enum": spending},
+                               "target": {"type": "integer"}},
+                "required": ["action_id", "target"]}},
+            "worker_target": {"type": "integer"},
+            "base_target": {"type": "integer"},
+            "allowed_spending_actions": {"type": "array", "items": {"type": "integer", "enum": spending}},
+            "reserve_for_action": {"type": ["integer", "null"], "enum": [None, *spending]},
+            "reserve_after_workers": {"type": "integer"},
+            "army_posture": {"type": "string", "enum": ["defend", "attack", "retreat"]},
+            "attack_min_army": {"type": "integer"},
+            "retreat_below_army": {"type": "integer"},
+            "min_posture_seconds": {"type": "integer"},
+            "guidance": {"type": "string"},
+            "priority_action": {"type": ["integer", "null"], "enum": [None, *contract.priority_actions]},
+            "production_priority": {"type": "array", "items": {"type": "integer", "enum": spending}},
+            "army_target_id": {"type": ["string", "null"]},
+        },
+    }
+    schema["required"] = list(schema["properties"])
+    return schema
+
+
+PLAN_SCHEMA = plan_schema(PROTOSS)
 
 PLANNER_INSTRUCTIONS = """You are the strategic brain for a live StarCraft II Protoss bot.
 Return only the requested JSON plan. All relevant facts are in the supplied JSON.
@@ -110,19 +116,104 @@ Carriers, Sentries and Motherships can follow ordinary army attack orders.
 Enemy memory respects fog; unexplored expansion sites are unknown.
 """
 
+TERRAN_PLANNER_INSTRUCTIONS = """You are the strategic brain for a live StarCraft II Terran bot.
+Return only the requested JSON plan. All relevant facts are in the supplied JSON.
+Do not use tools, inspect files, browse, write code, or ask questions.
+Jev makes individual macro choices about once per second; you plan the next 120-180
+game seconds. This is a REALTIME game: it continues while you think. Be concise.
+Normal refreshes are 60 game seconds apart, with a 30-second execution window
+after acceptance before ordinary events can refresh. Urgent threats bypass it.
+Set production headroom for this horizon: tiny worker/army caps will stall Jev.
+Use only action IDs in action_catalog: 0-15 train, 16-25 build, 26-31 add-ons,
+32-33 Command Center morphs, 34-62 research, 63-65 scouting, 66 MULTI-ATTACK,
+67 MULTI-RETREAT, 68 MULTI-DEFEND, 69 EMPTY ACTION.
+goals are desired TOTAL ready plus pending unit/building counts, or target=1 for
+starting an upgrade. Command Center goals (18) count every town hall, including
+Orbital Commands and Planetary Fortresses. Add-on goals count add-ons of that type.
+Choose attainable goals with prerequisites, rather than an entire late-game build.
+worker_target and base_target are HARD caps including pending production. Account
+for actual mineral/gas saturation, remaining minerals and bases under construction.
+Do not keep making SCVs on one saturated or mined-out base. Plan expansions
+before minerals run out. Diversion into many unrelated tech buildings is harmful.
+allowed_spending_actions lists IDs 0-62 Jev MAY buy; include necessary SCVs,
+Supply Depots, technology prerequisites, add-ons and army production.
+Do NOT put IDs 63-69 in goals or allowed_spending_actions. Scouting, army commands
+and waiting are available separately when legal. A goal may be unaffordable now;
+Jev checks actual affordability. Each goal action MUST also be in
+allowed_spending_actions, even if already completed. No duplicate action IDs.
+Use 1-12 goals to cap counts. Research IDs 34-62 must have target=1.
+Research with nonzero progress is started. worker_target is 0-76, base_target 1-8;
+worker/base goals cannot exceed those caps. attack_min_army is 10-200,
+retreat_below_army is 0-199 and strictly less than attack_min_army;
+min_posture_seconds is 5-60. If last_plan_rejection is present, correct that error.
+Terran production rules: Marauder, Siege Tank, Cyclone, Thor, Raven, Banshee and
+Battlecruiser need a Tech Lab on their producer; a Reactor lets one Barracks,
+Factory or Starport train two units at once. Each add-on takes over an idle
+producer while it builds. Barracks research (Stimpack, Combat Shield, Concussive
+Shells) comes from a Barracks Tech Lab. Infantry upgrades come from the Engineering
+Bay and need an Armory for levels 2-3. Vehicle and ship upgrades come from the Armory.
+An SCV is busy for the whole construction; losing it pauses the building until another
+SCV resumes it (done automatically). Orbital Command (32) needs a Barracks and gives
+MULEs, which are called down automatically. Planetary Fortress (33) needs an
+Engineering Bay and cannot become an Orbital Command.
+reserve_for_action is null or ONE spending goal whose actual cost must be saved.
+It activates when worker count reaches reserve_after_workers and the goal
+is unmet. Other purchases cannot spend this reserve. It does NOT execute the goal
+automatically. Include the reserved action in goals and allowed_spending_actions;
+reserve only when its prerequisites are ready, so saving does not deadlock tech.
+Urgent Supply Depots and combat production for an attacked base may override the
+spending budget; everything must still be legal and affordable in the game.
+With 800 or more minerals banked, Jev may also buy Barracks, Marines, Marauders,
+Siege Tanks and Medivacs beyond allowed_spending_actions and goal ceilings (the
+reserve still applies). Up to two Barracks, Factories or Starports and two Supply
+Depots may be under construction at once. Plan enough production for the income.
+army_posture guides Jev's attack/retreat/defend decisions. attack_min_army is the minimum
+READY combat supply to allow an attack. retreat_below_army enables emergency retreat.
+min_posture_seconds holds an army intent to avoid changing it every second, with
+emergency retreat allowed. A defend plan permits withdrawal and local defense.
+There is NO automatic production/build order. Local code distributes workers,
+calls down MULEs, lowers Supply Depots, resumes unfinished buildings, carries out
+army intent, sieges and unsieges Siege Tanks, burrows Widow Mines near enemies,
+uses Stimpack in combat once researched, continues assigned expansion scouting,
+and moves Medivacs and one Raven with the army. Jev chooses all new production,
+construction and research. Enemy knowledge is partial; last-seen observations are
+historical and missing enemies are unknown. Supply army may include pending units;
+resource.ready_army_supply excludes them and noncombat units.
+Use outcomes/failures and your previous plan to adapt.
+Every catalog item declares target_limit and reservation_blocked. Never exceed
+target_limit. Temporary lack of money is not a technology failure. Impossible
+reservations are suspended, and no build action requires an existing Command Center to rebuild one.
+priority_action is one immediate next action or null. production_priority is an
+ordered subset of goal action IDs, with the most urgent attainable goal first.
+Use reserves when a crucial unit must precede optional purchases, e.g. the first
+Factory before extra Marines. Maintain mineral income; avoid excess early gas.
+army_target_id is null (automatic target selection) or an ID from navigation.targets.
+Use 68 to restore defense after retreat. An executable change of army posture takes
+priority over unfinished production goals: attack now once ready, then replace losses.
+Production totals are replenishment ceilings, not a requirement to finish before attacking.
+Do not demand all ceilings simultaneously at 200 supply. Do not delay an attack for
+upgrades or optional static defenses.
+Capabilities: army attack-move to a remembered building, expansion search when cleared,
+base defense/rally, retreat, scouting, Medivac healing by following the army, and
+Missile Turret or Raven detection. Formation control, drops, Bunkers, Viking landing,
+Liberator zones, Banshee cloak use, Yamato, Raven spells, Cyclone lock-on and scans are
+NOT implemented; do not rely on prose to make them happen. Liberators only hit air units
+and Vikings only hit air units. Enemy memory respects fog; unexplored expansion sites are unknown.
+"""
+
 
 class PlannerError(Exception):
     """A bounded, credential-free planner failure."""
 
 
-def validate_plan(value, catalog=None, target_ids=None):
+def validate_plan(value, catalog=None, target_ids=None, contract=PROTOSS):
     if not isinstance(value, dict) or set(value) != set(PLAN_SCHEMA["required"]):
         raise PlannerError("invalid_plan_fields")
     for key in ("objective", "guidance"):
         if not isinstance(value[key], str) or not 1 <= len(value[key]) <= 1200:
             raise PlannerError("invalid_plan_text")
-    ranges = {"worker_target": (0, 76), "base_target": (1, 8),
-              "reserve_after_workers": (0, 76), "attack_min_army": (10, 200),
+    ranges = {"worker_target": (0, contract.max_workers), "base_target": (1, contract.max_bases),
+              "reserve_after_workers": (0, contract.max_workers), "attack_min_army": (10, 200),
               "retreat_below_army": (0, 200), "min_posture_seconds": (5, 60)}
     for key, (low, high) in ranges.items():
         if type(value[key]) is not int or not low <= value[key] <= high:
@@ -131,10 +222,11 @@ def validate_plan(value, catalog=None, target_ids=None):
         raise PlannerError("retreat_threshold_must_be_below_attack_threshold")
     if value["army_posture"] not in ("defend", "attack", "retreat"):
         raise PlannerError("invalid_army_posture")
+    spending = set(contract.spending_actions)
     allowed = value["allowed_spending_actions"]
-    if not isinstance(allowed, list) or not allowed or len(allowed) > 60:
+    if not isinstance(allowed, list) or not allowed or len(allowed) > len(spending):
         raise PlannerError("invalid_spending_actions")
-    if any(type(a) is not int or not 0 <= a <= 59 for a in allowed) or len(set(allowed)) != len(allowed):
+    if any(type(a) is not int or a not in spending for a in allowed) or len(set(allowed)) != len(allowed):
         raise PlannerError("invalid_spending_action_id")
     goals = value["goals"]
     if not isinstance(goals, list) or not 1 <= len(goals) <= 12:
@@ -146,29 +238,29 @@ def validate_plan(value, catalog=None, target_ids=None):
         action, target = goal["action_id"], goal["target"]
         if type(action) is not int or action not in allowed or action in seen:
             raise PlannerError("invalid_goal_action")
-        if type(target) is not int or not 1 <= target <= (1 if action >= 34 else 200):
+        if type(target) is not int or not 1 <= target <= (1 if action in contract.single_target_actions else 200):
             raise PlannerError("invalid_goal_target")
-        if target > ACTION_LIMITS[action]:
-            raise PlannerError(f"goal_exceeds_executor_limit_action_{action}_max_{ACTION_LIMITS[action]}")
+        if target > contract.limits[action]:
+            raise PlannerError(f"goal_exceeds_executor_limit_action_{action}_max_{contract.limits[action]}")
         if catalog and catalog.get(str(action), {}).get("exists_in_game_version") is False:
             raise PlannerError(f"goal_unavailable_in_game_version_action_{action}")
-        if action == 0 and target > value["worker_target"]:
+        if action == contract.worker_action and target > value["worker_target"]:
             raise PlannerError("worker_goal_exceeds_cap")
-        if action == 21 and target > value["base_target"]:
+        if action == contract.base_action and target > value["base_target"]:
             raise PlannerError("base_goal_exceeds_cap")
         seen.add(action)
     reserve = value["reserve_for_action"]
-    if reserve is not None and (type(reserve) is not int or not 0 <= reserve <= 59 or reserve not in seen):
+    if reserve is not None and (type(reserve) is not int or reserve not in spending or reserve not in seen):
         raise PlannerError("invalid_reservation")
     if reserve is not None and value["reserve_after_workers"] > value["worker_target"]:
         raise PlannerError("reservation_cannot_activate")
     priority = value["priority_action"]
     if priority is not None:
-        if type(priority) is not int or priority not in {*range(71), 72}:
+        if type(priority) is not int or priority not in contract.priority_actions:
             raise PlannerError("invalid_priority_action")
-        if priority < 60 and priority not in allowed:
+        if priority in spending and priority not in allowed:
             raise PlannerError("priority_action_not_allowed")
-        if priority in ARMY_ACTIONS and ARMY_ACTIONS[priority] != value["army_posture"]:
+        if priority in contract.army_actions and contract.army_actions[priority] != value["army_posture"]:
             raise PlannerError("priority_action_conflicts_with_posture")
     production = value["production_priority"]
     if (not isinstance(production, list) or any(type(a) is not int or a not in seen for a in production)
@@ -215,13 +307,16 @@ def find_codex(path=None):
 class CodexPlannerClient:
     """Use saved Codex login; never read/copy auth.json or pass credentials to SC2."""
 
-    def __init__(self, output_dir, executable=None, model="gpt-6-astra", timeout=60, effort="low"):
+    def __init__(self, output_dir, executable=None, model="gpt-6-astra", timeout=60, effort="low",
+                 contract=PROTOSS):
         self.executable = find_codex(executable)
         self.model, self.timeout, self.effort = model, timeout, effort
+        self.contract = contract
+        self.instructions = TERRAN_PLANNER_INSTRUCTIONS if contract is TERRAN else PLANNER_INSTRUCTIONS
         self.directory = Path(output_dir) / "planner"
         self.directory.mkdir(parents=True, exist_ok=True)
         self.schema_path = self.directory / "plan.schema.json"
-        self.schema_path.write_text(json.dumps(PLAN_SCHEMA), encoding="utf-8")
+        self.schema_path.write_text(json.dumps(plan_schema(contract)), encoding="utf-8")
         self.workdir = self.directory / "workspace"
         self.workdir.mkdir(exist_ok=True)
         self._process = None
@@ -243,7 +338,7 @@ class CodexPlannerClient:
         result_path = self.directory / f"plan-{request_id:04d}.json"
         if result_path.exists():
             raise PlannerError("planner_output_already_exists")
-        prompt = PLANNER_INSTRUCTIONS + "\nINPUT JSON:\n" + json.dumps(payload, ensure_ascii=False)
+        prompt = self.instructions + "\nINPUT JSON:\n" + json.dumps(payload, ensure_ascii=False)
         try:
             with self._lock:
                 if self._closed:
@@ -288,7 +383,8 @@ class CodexPlannerClient:
             try:
                 targets = payload.get("state", {}).get("navigation", {}).get("targets")
                 plan = validate_plan(raw_plan, payload.get("action_catalog"),
-                                     {t["id"] for t in targets} if targets is not None else None)
+                                     {t["id"] for t in targets} if targets is not None else None,
+                                     contract=self.contract)
             except PlannerError as exc:
                 return {"plan": raw_plan if isinstance(raw_plan, dict) else {},
                         "usage": usage, "model": self.model, "validation_error": str(exc)}

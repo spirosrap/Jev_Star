@@ -24,6 +24,7 @@ import test_jev_protoss as support
 from sc2_rl_agent.starcraftenv_test.agent.astra_planner import (
     CodexPlannerClient, PlannerError, StrategicPlanner, validate_plan)
 from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, QUESTION
+from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import plan_progress, policy_reason
 from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_protoss_bot import HierarchicalProtossBot
 
@@ -266,7 +267,7 @@ class CadenceProgressTests(unittest.TestCase):
     def bot(self, p):
         return SimpleNamespace(planner=SimpleNamespace(active=p, trigger=Mock(), stats={}),
                                _last_plan_id=None, _completed_goals=set(), log=Mock(),
-                               state=SimpleNamespace(game_loop=2240))
+                               state=SimpleNamespace(game_loop=2240), contract=PROTOSS)
 
     def test_goals_already_satisfied_in_request_do_not_notify_on_acceptance(self):
         p = {"plan_id": 2, **plan(), "goal_counts_at_observation": {"21": 2}}

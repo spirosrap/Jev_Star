@@ -2,9 +2,9 @@
 
 [English](#english) | [简体中文](#简体中文)
 
-**StarCraft II macro and micromanagement with JEV action selection and optional GPT-6 Astra planning.**
+**StarCraft II macro (Protoss or Terran) and micromanagement with JEV action selection and optional GPT-6 Astra planning.**
 
-**由 JEV 选择动作、可选 GPT-6 Astra 规划的星际争霸 II 宏观控制与微操。**
+**由 JEV 选择动作、可选 GPT-6 Astra 规划的星际争霸 II 宏观控制（Protoss 或 Terran）与微操。**
 
 [Read the paper / 在线阅读论文](paper/PAPER.md) · [PDF](paper/JEV-Star.pdf) · [Video gallery / 视频展示](media/README.md) · [Citation / 引用](#citation)
 
@@ -38,7 +38,7 @@ JEV-Star brings full-game macro control and SMAC-Hard micromanagement into one r
 
 | Module | Game interface | Model responsibilities | Current implementation |
 | --- | --- | --- | --- |
-| [Macro](macro/README.md#english) | LLM Play SC2 / BurnySC2 | Astra plans strategic phases; JEV selects economy, technology, production, and army actions | `macro-v2.2.1`; Protoss; 73 actions; real-time games |
+| [Macro](macro/README.md#english) | LLM Play SC2 / BurnySC2 | Astra plans strategic phases; JEV selects economy, technology, production, and army actions | `macro-v2.3.0`; Protoss (73 actions) or Terran (70 actions) against the built-in AI of any race; real-time games |
 | [Micro](micro/README.md#english) | PySC2 bundled with SMAC-Hard | Astra creates one plan per map; JEV selects actions for living units | `p0-v1`; 35 maps; fixed stepping with `realtime=False` |
 
 ```mermaid
@@ -80,11 +80,29 @@ Before running macro games, launch the installed SC2 client once to generate `st
 & .\.venvs\macro\Scripts\python.exe -B scripts/sync_sc2_ids.py --game-version 5.0.16.97563
 ```
 
-Run one macro game:
+Run one macro game (Protoss by default; add `--race Terran` to play Terran):
 
 ```powershell
 py -3.10 jev_star.py macro --planner codex --planner-effort medium --map 'Altitude LE' --opponent-race Zerg --difficulty Easy --game-time-limit 1200
+py -3.10 jev_star.py macro --race Terran --planner codex --planner-effort medium --map 'Altitude LE' --opponent-race Zerg --difficulty Easy --game-time-limit 1200
 ```
+
+#### Control panel
+
+`scripts/live_view.py` serves a local page at <http://127.0.0.1:8765/> for starting and watching macro games without the command line. Choose race, opponent, difficulty, map, Astra effort, and time limit, then press **Start game**; **Stop game** interrupts the match and still writes its logs. The page shows Astra's current plan, Jev's recent choices, economy, the match result, and a notice when StarCraft II stops updating. On Linux, `scripts/jev-star-panel` starts the panel in the background (if needed) and opens it in the browser. The panel only accepts start/stop requests from its own page.
+
+#### Linux (Wine/Proton)
+
+Macro games also run on Linux with the Windows SC2 client under Wine or Proton. Point BurnySC2 at the Wine prefix and a launcher that runs `SC2_x64.exe` directly (BurnySC2's default `wine start` returns immediately, so the bot loses the process):
+
+```bash
+export SC2PF=WineLinux
+export WINE=/path/to/wine-sc2   # script that execs Proton/Wine's wine binary on SC2_x64.exe
+export SC2PATH="$HOME/Games/battlenet/drive_c/Program Files (x86)/StarCraft II"
+python3 jev_star.py macro --race Terran --planner codex --planner-effort medium --map 'Altitude LE' --opponent-race Zerg --difficulty Easy
+```
+
+The control panel fills in these variables when it finds `.tools/wine-sc2` and the Battle.net prefix above. Run StarCraft II fullscreen: a large tiled window under Xwayland can flicker and stall the game on integrated graphics.
 
 Run three micro episodes on `3m`:
 
@@ -98,7 +116,9 @@ Use `py -3.10 jev_star.py macro --help` or `micro --help` for all options. Relat
 
 Each micro version was evaluated on 35 maps with three episodes per map. JEV alone achieved **3 wins, 2 draws, and 100 losses**; the earlier Astra + JEV version achieved **6 wins, 1 draw, and 98 losses**; P0 Astra + JEV achieved **7 wins and 98 losses**. Excluding the two development maps, the three versions achieved **3/99, 3/99, and 7/99 wins**, respectively.
 
-Earlier macro versions won two games against the non-cheating VeryHard/Elite AI. The subsequent version with expanded action coverage lost one game each against CheatVision and CheatMoney. The current `macro-v2.2.1` adds termination on permanent billing errors and has passed **102 offline regression tests**; no additional game results have been recorded since that change while awaiting restored API credit. Micro has passed **37 offline regression tests**. These are small samples, not estimates of a stable win rate.
+Earlier macro versions won two games against the non-cheating VeryHard/Elite AI. The subsequent version with expanded action coverage lost one game each against CheatVision and CheatMoney. `macro-v2.2.1` added termination on permanent billing errors. The current `macro-v2.3.0` adds Terran; its first test games won against Easy Zerg in 9:36 and against the non-cheating VeryHard Zerg in 13:58. Macro has passed **143 offline regression tests** (Protoss behavior is unchanged) and micro **37**. These are small samples, not estimates of a stable win rate.
+
+Jev calls cost about **$0.04 per million tokens** through OpenRouter (blended rate); a 10-minute macro game uses roughly 1.6M tokens, about $0.06. Astra planning runs on the Codex CLI subscription and is not included.
 
 [Experiments and version boundaries](docs/experiments.md) · [Architecture and data flow](docs/architecture.md) · [Logs and replays](docs/logs-and-replays.md) · [Paper PDF](paper/JEV-Star.pdf) · [Paper source and data](paper/README.md#english)
 
@@ -107,7 +127,7 @@ Earlier macro versions won two games against the non-cheating VeryHard/Elite AI.
 ```text
 macro/       Macro controller, tests, and six ladder maps
 micro/       Micro controller, PySC2/SMAC-Hard runtime, tests, and 35 maps
-scripts/     Environment setup, map installation, and SC2 enum synchronization
+scripts/     Environment setup, map installation, SC2 enum synchronization, and the control panel
 docs/        Architecture, experiments, cleanup notes, and source manifest
 paper/       Current paper, LaTeX source, figures, and fixed analysis data
 licenses/    Upstream licenses
@@ -139,7 +159,7 @@ JEV-Star 将完整对局的宏观控制与 SMAC-Hard 微操放在同一个仓库
 
 | 模块 | 游戏接口 | 模型职责 | 当前实现 |
 | --- | --- | --- | --- |
-| [宏观 macro](macro/README.md#简体中文) | LLM Play SC2 / BurnySC2 | Astra 阶段规划，JEV 选择经济、科技、生产和军队动作 | `macro-v2.2.1`；Protoss；73 个动作；实时对局 |
+| [宏观 macro](macro/README.md#简体中文) | LLM Play SC2 / BurnySC2 | Astra 阶段规划，JEV 选择经济、科技、生产和军队动作 | `macro-v2.3.0`；Protoss（73 个动作）或 Terran（70 个动作），对手为任意种族内置 AI；实时对局 |
 | [微观 micro](micro/README.md#简体中文) | SMAC-Hard 自带的 PySC2 | Astra 每图一份计划，JEV 为存活单位选择动作 | `p0-v1`；35 张图；固定步进 `realtime=False` |
 
 ```mermaid
@@ -179,11 +199,29 @@ py -3.10 scripts/install_maps.py all
 & .\.venvs\macro\Scripts\python.exe -B scripts/sync_sc2_ids.py --game-version 5.0.16.97563
 ```
 
-宏观一局：
+宏观一局（默认 Protoss；加 `--race Terran` 使用 Terran）：
 
 ```powershell
 py -3.10 jev_star.py macro --planner codex --planner-effort medium --map 'Altitude LE' --opponent-race Zerg --difficulty Easy --game-time-limit 1200
+py -3.10 jev_star.py macro --race Terran --planner codex --planner-effort medium --map 'Altitude LE' --opponent-race Zerg --difficulty Easy --game-time-limit 1200
 ```
+
+#### 控制面板
+
+`scripts/live_view.py` 在 <http://127.0.0.1:8765/> 提供本地页面，无需命令行即可开始和观看宏观对局。选择种族、对手、难度、地图、Astra 推理强度和时限后点击 **Start game**；**Stop game** 中断对局并照常写出日志。页面显示 Astra 当前计划、Jev 最近的选择、经济数据、比赛结果，以及 StarCraft II 停止更新时的提示。Linux 上可用 `scripts/jev-star-panel` 在后台启动面板（如尚未运行）并在浏览器中打开。面板只接受来自自身页面的开始/停止请求。
+
+#### Linux（Wine/Proton）
+
+宏观对局也可在 Linux 上通过 Wine 或 Proton 运行 Windows 版 SC2 客户端。需让 BurnySC2 使用 Wine 前缀，并提供直接运行 `SC2_x64.exe` 的启动脚本（BurnySC2 默认的 `wine start` 会立即返回，Bot 将失去进程）：
+
+```bash
+export SC2PF=WineLinux
+export WINE=/path/to/wine-sc2   # 用 Proton/Wine 的 wine 直接执行 SC2_x64.exe 的脚本
+export SC2PATH="$HOME/Games/battlenet/drive_c/Program Files (x86)/StarCraft II"
+python3 jev_star.py macro --race Terran --planner codex --planner-effort medium --map 'Altitude LE' --opponent-race Zerg --difficulty Easy
+```
+
+控制面板在找到 `.tools/wine-sc2` 和上述 Battle.net 前缀时会自动设置这些变量。请全屏运行 StarCraft II：在集成显卡上，Xwayland 下的大尺寸平铺窗口可能闪烁并使游戏卡顿。
 
 微观 `3m` 三局：
 
@@ -197,7 +235,9 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 
 微观每版 35 图 × 3 局：纯 JEV 为 **3 胜、2 平、100 负**，旧 Astra＋JEV 为 **6 胜、1 平、98 负**，P0 Astra＋JEV 为 **7 胜、98 负**。排除两张开发地图后，三版分别为 **3/99、3/99、7/99 胜**。
 
-宏观历史版本已在非作弊的 VeryHard/Elite 难度取得两局胜利；随后动作补全版本在 CheatVision、CheatMoney 各一局失利。当前 `macro-v2.2.1` 增加永久计费错误的停止机制，已有 **102 项离线回归通过**，尚未有额度恢复后的新增实战成绩。微观已有 **37 项离线回归通过**。这些是有限样本，不是稳定胜率估计。
+宏观历史版本已在非作弊的 VeryHard/Elite 难度取得两局胜利；随后动作补全版本在 CheatVision、CheatMoney 各一局失利。`macro-v2.2.1` 增加永久计费错误的停止机制。当前 `macro-v2.3.0` 新增 Terran，首批测试分别以 9:36 战胜 Easy Zerg、以 13:58 战胜非作弊 VeryHard Zerg。宏观已有 **143 项离线回归通过**（Protoss 行为不变），微观 **37 项**。这些是有限样本，不是稳定胜率估计。
+
+经 OpenRouter 调用 Jev 约 **每百万 token 0.04 美元**（综合费率）；10 分钟的宏观对局约 160 万 token，约 0.06 美元。Astra 规划使用 Codex CLI 订阅，不计入其中。
 
 [实验与版本边界](docs/experiments.md) · [架构与数据流](docs/architecture.md) · [日志和回放](docs/logs-and-replays.md) · [论文 PDF](paper/JEV-Star.pdf) · [论文源码及统计表](paper/README.md#简体中文)
 
@@ -206,7 +246,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 ```text
 macro/       宏观控制代码、测试和六张梯图
 micro/       微操代码、PySC2/SMAC-Hard 运行底层、测试和 35 张地图
-scripts/     环境安装、地图安装和 SC2 枚举同步
+scripts/     环境安装、地图安装、SC2 枚举同步和控制面板
 docs/        架构、实验、整理说明和源文件清单
 paper/       当前论文、LaTeX 源码、图表和固定统计数据
 licenses/    上游许可证

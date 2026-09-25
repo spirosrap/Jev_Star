@@ -1,6 +1,6 @@
 """Pure, testable constraints for an Astra plan over the existing macro actions."""
 
-from .macro_contract import ARMY_ACTIONS, DEFEND_ACTION
+from .macro_contract import PROTOSS
 
 
 def plan_progress(plan, catalog, resource):
@@ -16,43 +16,49 @@ def plan_progress(plan, catalog, resource):
             "reservation_suspended_reason": catalog[str(reserve)].get("reservation_blocked") if reserve is not None else None}
 
 
-def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time, game_time, emergency):
+def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time, game_time, emergency,
+                  contract=PROTOSS):
     """Called only after the action passes actual SC2 legality/affordability checks."""
     progress = plan_progress(plan, catalog, resource)
-    if action == 0 and catalog["0"]["count_with_pending"] >= plan["worker_target"]:
+    worker, base = contract.worker_action, contract.base_action
+    if action == worker and catalog[str(worker)]["count_with_pending"] >= plan["worker_target"]:
         return "plan_worker_target_reached"
-    if action == 21 and catalog["21"]["count_with_pending"] >= plan["base_target"]:
+    if action == base and catalog[str(base)]["count_with_pending"] >= plan["base_target"]:
         return "plan_base_target_reached"
-    urgent_supply = action == 19 and (resource.get("needs_power") or resource.get("needs_supply") or
-                                      resource["supply_left"] <= 2 and resource["supply_cap"] < 200)
-    urgent_defense = emergency and (action in {1, 3, 14, 32, 33} or
-                                    action in plan["allowed_spending_actions"] and 1 <= action <= 18 and action not in {13, 15})
+    urgent_supply = action == contract.supply_action and (
+        resource.get("needs_power") or resource.get("needs_supply") or
+        resource["supply_left"] <= 2 and resource["supply_cap"] < 200)
+    urgent_defense = emergency and (action in contract.urgent_defense_actions or
+                                    action in plan["allowed_spending_actions"]
+                                    and action in contract.army_production_actions)
     override = urgent_supply or urgent_defense
-    if action <= 59 and not override:
-        if action not in plan["allowed_spending_actions"]:
+    # Minerals piling up means the plan is too narrow for the income; keep spending on the army.
+    banked = action in contract.bank_override_actions and resource["mineral"] >= contract.bank_minerals
+    if action in contract.spending_actions and not override:
+        if action not in plan["allowed_spending_actions"] and not banked:
             return "plan_spending_not_allowed"
         goal = next((g for g in plan["goals"] if g["action_id"] == action), None)
-        if goal and catalog[str(action)]["count_with_pending"] >= goal["target"]:
+        if goal and catalog[str(action)]["count_with_pending"] >= goal["target"] and not banked:
             return "plan_goal_target_reached"
         if action != progress["reserve_for_action"]:
             cost = catalog[str(action)]["cost"]
             if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < progress["reserved_minerals"])
                     or (cost["gas"] and resource["gas"] - cost["gas"] < progress["reserved_gas"])):
                 return "plan_resource_reservation"
-    if action in ARMY_ACTIONS:
+    if action in contract.army_actions:
         ready_army = resource.get("ready_army_supply", resource["army_supply"])
         retreat_needed = emergency or ready_army < plan["retreat_below_army"]
-        target = ARMY_ACTIONS[action]
-        urgent_withdrawal = action == 65 and army_intent == "attack" and retreat_needed
-        new_defense_order = (action == DEFEND_ACTION and plan["army_posture"] == "defend"
+        target = contract.army_actions[action]
+        urgent_withdrawal = target == "retreat" and army_intent == "attack" and retreat_needed
+        new_defense_order = (target == "defend" and plan["army_posture"] == "defend"
                              and plan.get("accepted_game_seconds", -1) > last_intent_time)
         if (target != army_intent and game_time - last_intent_time < plan["min_posture_seconds"]
                 and not urgent_withdrawal and not new_defense_order):
             return "plan_hold_army_intent"
-        if action == 64 and (plan["army_posture"] != "attack" or ready_army < plan["attack_min_army"]):
+        if target == "attack" and (plan["army_posture"] != "attack" or ready_army < plan["attack_min_army"]):
             return "plan_attack_not_ready"
-        if action == 65 and plan["army_posture"] == "attack" and not retreat_needed:
+        if target == "retreat" and plan["army_posture"] == "attack" and not retreat_needed:
             return "plan_continue_attack"
-        if action == DEFEND_ACTION and plan["army_posture"] != "defend" and not emergency:
+        if target == "defend" and plan["army_posture"] != "defend" and not emergency:
             return "plan_posture_not_defend"
     return None

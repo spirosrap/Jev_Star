@@ -44,6 +44,51 @@ INSTRUCTIONS = (
 )
 
 
+PLAN_INSTRUCTIONS = (
+    " Follow strategic_plan and execution_directive. Goals are total production "
+    "ceilings for replenishment, not prerequisites for army movement. Respect "
+    "worker/base targets and the effective spending reservation. Prioritize the "
+    "reserved goal when affordable. Ignore a suspended reservation until its "
+    "reported blocker clears. Urgent supply and defense may override the budget. "
+    "Scouts search expansions automatically after assignment, and one Observer "
+    "escorts the army; repeated scouting is not necessary every decision."
+)
+TERRAN_INSTRUCTIONS = (
+    "You execute immediate Terran macro decisions in real-time StarCraft II. Choose ONE "
+    "available action that advances the current mission. Priorities: imminent survival "
+    "and supply recovery; applying an executable army order; critical production; "
+    "economy and optional upgrades. execution_directive identifies the command currently "
+    "needing acknowledgement. Choose it promptly when its conditions remain safe. "
+    "A legal attack after the commander's army threshold is reached should begin NOW: "
+    "do not wait for all remaining production goals or upgrades. Produce replacements "
+    "while the attack continues. Action 68 restores base defense after retreat. "
+    "Each train/build/add-on/morph choice starts at most one unit or structure. Marauders, "
+    "Siege Tanks, Cyclones, Thors, Ravens, Banshees and Battlecruisers need a Tech Lab; "
+    "a Reactor trains two units at once. Building an add-on or morphing a Command Center "
+    "occupies that producer. Workers are assigned to resources and MULEs are called "
+    "automatically; no build order or army production runs automatically. "
+    "Attack/retreat/defend sets persistent army intent. Current enemy observations are "
+    "partial: missing enemies are unknown, not absent. Research values mean 0=not "
+    "started, between 0 and 1=in progress, 1=completed. Consider pending production "
+    "and recent outcomes to avoid duplicate or repeatedly rejected actions. Prefer "
+    "the earliest attainable production_priority, preserving a critical unit's reserve. "
+    "EMPTY ACTION is justified only by a concrete resource/production wait or no useful "
+    "legal action. Unfinished optional goals do not justify waiting instead of a ready "
+    "army order. Return only a choice from the supplied criteria."
+)
+TERRAN_PLAN_INSTRUCTIONS = (
+    " Follow strategic_plan and execution_directive. Goals are total production "
+    "ceilings for replenishment, not prerequisites for army movement. Respect "
+    "worker/base targets and the effective spending reservation. Prioritize the "
+    "reserved goal when affordable. Ignore a suspended reservation until its "
+    "reported blocker clears. Urgent supply and defense may override the budget. "
+    "With 800 or more minerals banked, spend them on offered army production or "
+    "Barracks instead of waiting. "
+    "Scouts search expansions automatically after assignment; repeated scouting is "
+    "not necessary every decision."
+)
+
+
 def load_api_key(config_file: Optional[Path] = None) -> str:
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key and config_file is not None and config_file.is_file():
@@ -73,9 +118,11 @@ class JevError(Exception):
 
 
 class JevClient:
-    def __init__(self, api_key: str, model="typesafe/jev-1.13", timeout=2.5, transport=None):
+    def __init__(self, api_key: str, model="typesafe/jev-1.13", timeout=2.5, transport=None,
+                 instructions=INSTRUCTIONS, plan_instructions=PLAN_INSTRUCTIONS):
         self.model = model
         self.timeout = timeout
+        self.instructions, self.plan_instructions = instructions, plan_instructions
         self.http = httpx.AsyncClient(
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=timeout,
@@ -85,17 +132,9 @@ class JevClient:
     def payload(self, state: dict, choices: dict) -> dict:
         if not 1 <= len(choices) <= 255:
             raise ValueError("Jev requires between 1 and 255 choices.")
-        instructions = INSTRUCTIONS
+        instructions = self.instructions
         if state.get("strategic_plan"):
-            instructions += (
-                " Follow strategic_plan and execution_directive. Goals are total production "
-                "ceilings for replenishment, not prerequisites for army movement. Respect "
-                "worker/base targets and the effective spending reservation. Prioritize the "
-                "reserved goal when affordable. Ignore a suspended reservation until its "
-                "reported blocker clears. Urgent supply and defense may override the budget. "
-                "Scouts search expansions automatically after assignment, and one Observer "
-                "escorts the army; repeated scouting is not necessary every decision."
-            )
+            instructions += self.plan_instructions
         return {
             "model": self.model,
             "state": state,
