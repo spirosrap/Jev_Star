@@ -104,7 +104,12 @@ class MacroExecution:
         info = RESEARCH_INFO.get(source, {}).get(upgrade)
         for producer in self._producers:
             if info and producer.type_id == source and producer.is_idle and self._has_ability(producer, info["ability"]):
-                producer.research(upgrade)
+                data = self.game_data.abilities.get(info["ability"].value)
+                if info["ability"] not in self._abilities.get(producer.tag, set()) and data is not None:
+                    # Offered only under its generic id (e.g. Vehicle and Ship Plating); the specific id is NotSupported.
+                    producer(data.id, subtract_cost=True)
+                else:
+                    producer.research(upgrade)
                 return
         self.record_failure(action, "no_ready_researcher_with_available_ability")
 

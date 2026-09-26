@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 from sc2.data import Race
+from sc2.dicts.unit_research_abilities import RESEARCH_INFO
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
 from sc2.ids.ability_id import AbilityId as A
 from sc2.ids.unit_typeid import UnitTypeId as U
@@ -279,7 +280,7 @@ class FakeTerranUnit(support.FakeUnit):
         self.gather = Mock()
         self.mineral_contents = 1800
 
-    def __call__(self, ability, target=None, queue=False):
+    def __call__(self, ability, target=None, queue=False, **_):
         self.commands.append((ability, target))
 
 
@@ -874,6 +875,19 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.set_world([self.scv], [orbital])
         self.bot._call_down_mules()
         self.assertEqual(orbital.commands, [(A.CALLDOWNMULE_CALLDOWNMULE, rich)])
+
+    async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
+        armory = FakeTerranUnit(5, U.ARMORY)
+        armory.is_idle = True
+        self.set_world([self.scv], [self.cc, armory])
+        self.bot._producers = [armory]
+        upgrade = UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1
+        specific = RESEARCH_INFO[U.ARMORY][upgrade]["ability"]
+        self.bot.game_data = SimpleNamespace(abilities={specific.value: SimpleNamespace(id=A.RESEARCH_TERRANVEHICLEANDSHIPPLATING)},
+                                             upgrades={})
+        self.bot._abilities = {armory.tag: {A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
+        self.bot._research_one(40, upgrade)
+        self.assertEqual(armory.commands, [(A.RESEARCH_TERRANVEHICLEANDSHIPPLATING, None)])
 
     async def test_stim_only_when_researched_and_in_combat(self):
         marine = FakeTerranUnit(3, U.MARINE, (20, 20))
