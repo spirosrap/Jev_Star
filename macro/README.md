@@ -30,7 +30,7 @@ The planner does not directly emit per-unit commands. Micro skills are limited t
 
 Use `--planner none` to run without planning. With planning enabled, the default Astra model is `gpt-6-astra`; you can explicitly set `--planner-effort medium`. The default planning interval is 60 game seconds, with earlier triggers for urgent events. Use `--help` to inspect model timeouts, minimum intervals, plan lifetimes, and request limits.
 
-Logs default to `macro/jev_runs/<timestamp>/`, with an automatically generated offline `report.html`. Permanent configuration or billing errors, such as HTTP 402, stop the run. Original records retain the failure classification instead of reporting an ordinary game result. See [experiments](../docs/experiments.md) and [logging](../docs/logs-and-replays.md).
+Logs default to `macro/jev_runs/<timestamp>/`, with an automatically generated offline `report.html`. Billing and malformed-request errors (HTTP 402, 400, 422) stop the run; access errors (401, 403, 404) are retried with backoff and stop the run only if they last more than 60 seconds. Original records retain the failure classification instead of reporting an ordinary game result. See [experiments](../docs/experiments.md) and [logging](../docs/logs-and-replays.md).
 
 This directory excludes legacy Gym registration, chat models, retrieval memory, and script bots unrelated to JEV. The retained `Protoss_Bot` base class and JEV behavior implementations pass the existing regression tests, alongside the Terran tests in [test_jev_terran.py](tests/test_jev_terran.py).
 
@@ -62,6 +62,6 @@ Terran 动作 ID：0–15 单位生产，16–25 及 70（Bunker）建筑，26�
 
 不带规划时使用 `--planner none`。带规划时默认 Astra 为 `gpt-6-astra`，命令中可显式使用 `--planner-effort medium`。默认周期 60 游戏秒，紧急事件可提前触发；模型时限、最小间隔、计划寿命和请求上限均可通过 `--help` 查看。
 
-日志默认写入 `macro/jev_runs/<timestamp>/`，并自动生成离线 `report.html`。HTTP 402 等永久配置/计费错误停止该运行；原始记录保留失败分类，不伪装成正常对局结果。详见 [实验记录](../docs/experiments.md) 和 [日志说明](../docs/logs-and-replays.md)。
+日志默认写入 `macro/jev_runs/<timestamp>/`，并自动生成离线 `report.html`。计费和请求格式错误（HTTP 402、400、422）会停止该运行；访问错误（401、403、404）会退避重试，只有持续超过 60 秒才停止；原始记录保留失败分类，不伪装成正常对局结果。详见 [实验记录](../docs/experiments.md) 和 [日志说明](../docs/logs-and-replays.md)。
 
 本目录移除了旧 Gym 注册、聊天模型、检索记忆及与 JEV 无关的脚本 Bot；保留的基础 `Protoss_Bot` 类及 JEV 行为实现通过原有回归测试，Terran 另有 [test_jev_terran.py](tests/test_jev_terran.py) 测试。

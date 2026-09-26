@@ -204,6 +204,14 @@ class Decision:
     plan_id: Optional[int] = None
 
 
+# Billing and malformed requests cannot recover within a game.
+FATAL_STATUSES = {400, 402, 422}
+# Access errors the provider has returned for a minute or two while changing its routing;
+# retried with backoff, and fatal only if they persist for ACCESS_GRACE_SECONDS.
+ACCESS_STATUSES = {401, 403, 404}
+ACCESS_GRACE_SECONDS = 60
+
+
 class DecisionScheduler:
     """Game callbacks poll finished work; they never await an in-flight model call."""
 
@@ -222,6 +230,7 @@ class DecisionScheduler:
         self.stats = Counter()
         self.latencies = []
         self.consecutive_errors = 0
+        self.access_error_since = None
         self.last_game_loop = 0
         self.pending_plan_id = None
 
@@ -264,18 +273,26 @@ class DecisionScheduler:
             self.stats["api_errors"] += 1
             self.consecutive_errors += 1
             # Never retry an old state. Back off and later submit a fresh observation.
-            self.disabled = exc.status in (400, 401, 402, 403, 404, 422)
+            access = exc.status in ACCESS_STATUSES
+            if access:
+                if self.access_error_since is None:
+                    self.access_error_since = self.clock()
+                self.disabled = self.clock() - self.access_error_since >= ACCESS_GRACE_SECONDS
+            else:
+                self.disabled = exc.status in FATAL_STATUSES
             self.disabled_status = exc.status if self.disabled else None
             delay = 0 if self.disabled else max(
                 exc.retry_after, min(30.0, 2 ** min(self.consecutive_errors, 5)))
             self.next_request_at = self.clock() + delay
+            category = ("billing" if exc.status == 402 else "configuration" if self.disabled
+                        else "access_retry" if access else "transient")
             self.emit("api_error", request_id=self.request_id, error=str(exc),
                       game_loop=game_loop, plan_id=self.pending_plan_id,
-                      status=exc.status, disabled=self.disabled,
-                      error_category="billing" if exc.status == 402 else "configuration" if self.disabled else "transient",
+                      status=exc.status, disabled=self.disabled, error_category=category,
                       retry_in_seconds=0 if self.disabled else max(0, self.next_request_at - self.clock()))
             return None
         self.consecutive_errors = 0
+        self.access_error_since = None
         self.stats["responses"] += 1
         self.stats["input_tokens"] += decision.response["usage"].get("input_tokens", 0)
         self.stats["output_tokens"] += decision.response["usage"].get("output_tokens", 0)

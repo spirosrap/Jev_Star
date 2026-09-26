@@ -126,17 +126,45 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.scheduler.ready)
         self.assertNotIn("secret", json.dumps(self.events))
 
-    async def test_unauthorized_disables_further_calls(self):
-        await self.client.close()
-        self.client = JevClient("test-only", transport=httpx.MockTransport(
-            lambda request: httpx.Response(401)))
-        self.scheduler.client = self.client
+    async def fail_once(self, status):
         self.scheduler.submit(10, {}, self.choices)
         with self.assertRaises(JevError):
             await self.scheduler.task
         self.scheduler.poll(20)
-        self.now += 100
+
+    async def use_status(self, status):
+        await self.client.close()
+        self.client = JevClient("test-only", transport=httpx.MockTransport(
+            lambda request: httpx.Response(status)))
+        self.scheduler.client = self.client
+        self.scheduler.max_requests = 10
+
+    async def test_access_errors_are_retried_then_disable_when_they_persist(self):
+        await self.use_status(403)
+        await self.fail_once(403)
+        self.assertFalse(self.scheduler.disabled)  # A provider access hiccup is retried.
+        self.now += 30
+        self.assertTrue(self.scheduler.ready)
+        await self.fail_once(403)
+        self.assertFalse(self.scheduler.disabled)
+        self.now += 31  # Still refused after more than a minute: give up.
+        await self.fail_once(403)
         self.assertTrue(self.scheduler.disabled)
+        self.assertFalse(self.scheduler.ready)
+
+    async def test_access_error_window_resets_after_a_success(self):
+        await self.use_status(404)
+        await self.fail_once(404)
+        self.scheduler.access_error_since = None  # What a successful response does.
+        self.now += 90
+        await self.fail_once(404)
+        self.assertFalse(self.scheduler.disabled)
+
+    async def test_billing_error_disables_at_once(self):
+        await self.use_status(402)
+        await self.fail_once(402)
+        self.assertTrue(self.scheduler.disabled)
+        self.now += 100
         self.assertFalse(self.scheduler.ready)
 
     async def test_shutdown_cancels_pending_request(self):
