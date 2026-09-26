@@ -391,6 +391,32 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         for point in self.bot._placement_candidates(U.SUPPLYDEPOT):
             self.assertFalse(abs(point.x - slot.x) < 2 and abs(point.y - slot.y) < 2, point)
 
+    def raid_world(self, raiders, army_at=(80, 80)):
+        self.bot._initialize_navigation()
+        army = [FakeTerranUnit(100 + i, U.MARINE, army_at) for i in range(20)]
+        zerg = [FakeTerranUnit(300 + i, U.ZERGLING, (14, 12)) for i in range(raiders)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *army], [self.cc], zerg)
+        self.bot.army_intent = "attack"
+        return army
+
+    async def test_raid_behind_a_far_army_recalls_it(self):
+        army = self.raid_world(raiders=10)
+        self.bot._recall_to_defend()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertGreater(self.bot.cooldowns[66], self.bot.time)  # No immediate re-attack.
+        self.assertEqual(self.bot._action_stats["army_recalls"], 1)
+
+    async def test_small_raid_or_nearby_army_does_not_recall(self):
+        self.raid_world(raiders=3)
+        self.bot._recall_to_defend()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.raid_world(raiders=10, army_at=(20, 20))
+        self.bot._recall_to_defend()
+        self.assertEqual(self.bot.army_intent, "attack")
+
+
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)
         armory.is_idle = True
