@@ -130,9 +130,14 @@ class MacroNavigation:
         self._army_target_id = self._planned_target() if intent == "attack" else "home"
         self._issue_army_intent(include_busy=True)
 
+    def _held_army_tags(self):
+        """Units a race keeps out of army orders for now (e.g. a home guard)."""
+        return set()
+
     def _issue_army_intent(self, include_busy=False):
+        held = self._held_army_tags()
         army = self._combat_units().filter(lambda u: u.tag not in self.unit_tags_received_action and u.tag not in self._scouts
-                                           and u.type_id not in self.stationary_army_types)
+                                           and u.type_id not in self.stationary_army_types and u.tag not in held)
         if not army:
             return
         focus = None

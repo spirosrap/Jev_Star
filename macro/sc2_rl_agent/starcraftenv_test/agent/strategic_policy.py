@@ -1,6 +1,6 @@
 """Pure, testable constraints for an Astra plan over the existing macro actions."""
 
-from .macro_contract import PROTOSS, attack_floor
+from .macro_contract import PROTOSS, attack_floor, tech_due
 
 
 def plan_progress(plan, catalog, resource):
@@ -33,7 +33,8 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
                                     and action in contract.army_production_actions)
     override = urgent_supply or urgent_defense
     # Minerals piling up means the plan is too narrow for the income; keep spending on the army.
-    banked = action in contract.bank_override_actions and resource["mineral"] >= contract.bank_minerals
+    banked = ((action in contract.bank_override_actions and resource["mineral"] >= contract.bank_minerals)
+              or action in tech_due(contract, game_time, catalog))
     if action in contract.spending_actions and not override:
         if action not in plan["allowed_spending_actions"] and not banked:
             return "plan_spending_not_allowed"

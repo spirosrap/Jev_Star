@@ -18,7 +18,7 @@ from sc2.units import Units
 import test_jev_protoss as support
 from sc2_rl_agent.starcraftenv_test.agent.astra_planner import PlannerError, plan_schema, validate_plan
 from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, TERRAN_INSTRUCTIONS
-from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action
+from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action, tech_due
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import policy_reason
 from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_terran_bot import HierarchicalTerranBot
 from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import JevTerranBot
@@ -197,6 +197,32 @@ class TerranContractTests(unittest.TestCase):
                 "sc2_rl_agent.starcraftenv_test.agent.astra_planner.find_codex", return_value=Path("codex")):
             client = CodexPlannerClient(tmp, contract=cheat)
         self.assertIs(client.instructions, TERRAN_PLANNER_INSTRUCTIONS)
+
+    def test_tech_schedule_recommends_upgrades_on_time(self):
+        catalog = terran_catalog()
+        self.assertEqual(tech_due(TERRAN, 300, catalog), ())
+        due = tech_due(TERRAN, 500, catalog)
+        self.assertEqual(due[:4], (20, 37, 40, 23))  # Engineering Bay, weapons 1, armor 1, Armory.
+        catalog["20"]["count_with_pending"] = 1  # Engineering Bay started: no longer due.
+        self.assertNotIn(20, tech_due(TERRAN, 500, catalog))
+        plan = terran_plan(reserve_for_action=None)
+        choices = {1: "TRAIN MARINE", 20: "BUILD ENGINEERINGBAY", 23: "BUILD ARMORY"}
+        self.assertEqual(primary_action(plan, choices, "defend", 5, contract=TERRAN, tech_due=(20, 23)),
+                         (20, "tech_schedule"))
+        # The commander's own priority still comes first.
+        self.assertEqual(primary_action(terran_plan(priority_action=1, reserve_for_action=None), choices,
+                                        "defend", 5, contract=TERRAN, tech_due=(20,))[0], 1)
+        self.assertEqual(PROTOSS.tech_schedule, ())
+
+    def test_scheduled_tech_is_allowed_beyond_the_plan(self):
+        plan = terran_plan(reserve_for_action=None)  # Engineering Bay (20) is not in the plan.
+        catalog = terran_catalog()
+        early = (plan, catalog, resource(mineral=200), "defend", 0, 300, False)
+        late = (plan, catalog, resource(mineral=200), "defend", 0, 400, False)
+        self.assertEqual(policy_reason(20, *early, contract=TERRAN), "plan_spending_not_allowed")
+        self.assertIsNone(policy_reason(20, *late, contract=TERRAN))
+        catalog["20"]["count_with_pending"] = 1
+        self.assertEqual(policy_reason(20, *late, contract=TERRAN), "plan_spending_not_allowed")
 
     def test_attack_needs_forty_ready_army_supply(self):
         plan = terran_plan(army_posture="attack", attack_min_army=28, reserve_for_action=None)
@@ -644,6 +670,47 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot._posture_reason("attack"), "need_army_or_already_attacking")
         self.bot.supply_used = 195
         self.assertIsNone(self.bot._posture_reason("attack"))
+
+    def raid_world(self, raiders, army_at=(80, 80)):
+        self.bot._initialize_navigation()
+        army = [FakeTerranUnit(100 + i, U.MARINE, army_at) for i in range(20)]
+        zerg = [FakeTerranUnit(300 + i, U.ZERGLING, (14, 12)) for i in range(raiders)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *army], [self.cc], zerg)
+        self.bot.army_intent = "attack"
+        return army
+
+    async def test_raid_behind_a_far_army_recalls_it(self):
+        army = self.raid_world(raiders=10)
+        self.bot._recall_to_defend()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertGreater(self.bot.cooldowns[66], self.bot.time)  # No immediate re-attack.
+        self.assertEqual(self.bot._action_stats["army_recalls"], 1)
+
+    async def test_small_raid_or_nearby_army_does_not_recall(self):
+        self.raid_world(raiders=3)
+        self.bot._recall_to_defend()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.raid_world(raiders=10, army_at=(20, 20))
+        self.bot._recall_to_defend()
+        self.assertEqual(self.bot.army_intent, "attack")
+
+    async def test_two_tanks_stay_home_during_an_attack(self):
+        self.bot._initialize_navigation()
+        near = [FakeTerranUnit(400 + i, U.SIEGETANK, (30 + i, 30)) for i in range(2)]
+        far = FakeTerranUnit(410, U.SIEGETANK, (60, 60))
+        marine = FakeTerranUnit(420, U.MARINE, (30, 30))
+        self.set_world([self.scv, *near, far, marine], [self.cc])
+        self.bot._known_enemy_buildings = {1: {"id": "enemy_1", "type": "HATCHERY", "position": [90, 90], "last_seen": 0}}
+        self.bot.army_intent = "attack"
+        self.bot._issue_army_intent()
+        for tank in near:
+            self.assertEqual(tank.commands[-1][0], "move")  # Back to the base, not to the enemy.
+        self.assertEqual(far.commands[-1][0], "attack")
+        self.assertEqual(marine.commands[-1][0], "attack")
+        self.bot.army_intent = "defend"
+        self.assertEqual(self.bot._held_army_tags(), set())
 
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)

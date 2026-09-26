@@ -43,6 +43,8 @@ class RaceContract:
     min_attack_army: int = 0
     # A lower floor that applies once total supply reaches 190 (a maxed army); 0 keeps min_attack_army.
     maxed_attack_army: int = 0
+    # (game seconds, action): buildings and upgrades recommended from that time until started once.
+    tech_schedule: tuple = ()
     # Under a defend plan, do not retreat from an attacked base while the army is above the plan's retreat threshold.
     hold_defense: bool = False
 
@@ -141,6 +143,12 @@ def _terran():
         bank_override_actions=frozenset(ids[n] for n in (
             "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")),
         supply_reserve=True, min_attack_army=40, bank_minerals=600, hold_defense=True,
+        tech_schedule=tuple((t, ids[n]) for t, n in (
+            (390, "BUILD ENGINEERINGBAY"),
+            (420, "RESEARCH TERRANINFANTRYWEAPONSLEVEL1"), (420, "RESEARCH TERRANINFANTRYARMORSLEVEL1"),
+            (480, "BUILD ARMORY"),
+            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL2"), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL2"),
+            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL3"), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL3"))),
         bank_spend_actions=(ids["BUILD BARRACKS"],))
 
 
@@ -159,6 +167,12 @@ ACTION_LIMITS = PROTOSS.limits
 MAXED_SUPPLY = 190
 
 
+def tech_due(contract, game_time, catalog):
+    """Scheduled buildings and upgrades whose time has come and that were never started."""
+    return tuple(action for t, action in contract.tech_schedule
+                 if game_time >= t and catalog.get(str(action), {}).get("count_with_pending", 0) == 0)
+
+
 def attack_floor(contract, plan_threshold, supply_used=0):
     """Ready army supply an attack needs: the plan's threshold, raised to the race's floor."""
     floor = contract.min_attack_army
@@ -168,7 +182,7 @@ def attack_floor(contract, plan_threshold, supply_used=0):
 
 
 def primary_action(plan, choices, army_intent, ready_army_supply, target_changed=False, acknowledged_actions=(),
-                   contract=PROTOSS, minerals=0, supply_used=0):
+                   contract=PROTOSS, minerals=0, supply_used=0, tech_due=()):
     """Recommend a legal next action; Jev still selects the actual command."""
     desired = contract.action_for(plan["army_posture"])
     ready = (plan["army_posture"] != "attack"
@@ -178,6 +192,9 @@ def primary_action(plan, choices, army_intent, ready_army_supply, target_changed
     preferred = plan.get("priority_action")
     if preferred in choices and preferred != contract.empty_action and preferred not in acknowledged_actions:
         return preferred, "commander_priority"
+    for action in tech_due:
+        if action in choices:
+            return action, "tech_schedule"
     if minerals >= contract.bank_minerals:
         for action in contract.bank_spend_actions:
             if action in choices:

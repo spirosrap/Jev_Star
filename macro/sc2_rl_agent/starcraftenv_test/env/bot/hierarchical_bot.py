@@ -12,7 +12,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 
 from ...agent.astra_planner import StrategicPlanner
-from ...agent.macro_contract import SPENDING_KINDS, primary_action
+from ...agent.macro_contract import SPENDING_KINDS, primary_action, tech_due
 from ...agent.strategic_policy import plan_progress, policy_reason
 
 
@@ -184,7 +184,8 @@ class HierarchicalMixin:
                                          target_changed=self._planned_target() != self._army_target_id,
                                          acknowledged_actions={key[1] for key in self._acknowledged_priorities},
                                          contract=self.contract, minerals=resource["mineral"],
-                                         supply_used=resource["supply_used"])
+                                         supply_used=resource["supply_used"],
+                                         tech_due=tech_due(self.contract, self.time, catalog))
         if action is not None:
             key = (plan["plan_id"], action)
             previous = self._execution_directive

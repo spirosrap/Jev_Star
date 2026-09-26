@@ -221,6 +221,11 @@ what has been seen. No attack starts below state.attack_rule (40 ready army supp
 90 against the cheating AIs until 190 supply); a small early attack that dies leaves the bases
 undefended. Against the cheating AIs, defend behind the Bunker and sieged Tanks and keep
 expanding until that size is reached, then attack with Tanks, Medivacs and bio together.
+During an attack the two Siege Tanks nearest the exposed base stay home, and if 8 or more
+enemy supply raids a base while the army is far away, local code brings the army home and
+blocks attacking for 30 seconds. An Engineering Bay (from 6:30), Infantry Weapons and Armor
+(from 7:00) and an Armory with level 2-3 upgrades (from 8:00) are recommended to Jev on that
+schedule even if the plan omits them; include them in the plan and keep gas for them.
 """
 
 

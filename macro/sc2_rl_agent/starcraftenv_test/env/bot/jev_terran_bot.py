@@ -41,6 +41,12 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
+# During an attack: enemy supply at a base that recalls a far-away army, how far "far" is,
+# how long attacking stays blocked afterwards, and how many Siege Tanks stay home.
+RECALL_THREAT_SUPPLY = 8
+RECALL_DISTANCE = 35
+RECALL_ATTACK_BLOCK = 30
+HOME_GUARD_TANKS = 2
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
@@ -94,6 +100,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
+                        "recall_on_raid", "home_guard_tanks",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -522,6 +529,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         self._call_down_mules()
         self._resume_construction()
+        self._recall_to_defend()
         self._deploy_units()
         self._stim()
         # Before army orders, so units sent into a Bunker are not ordered elsewhere this frame.
@@ -638,6 +646,42 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             side = 1 if unit.tag % 2 else -1
             unit.move(Point2((away.x - dy * side * .5, away.y + dx * side * .5)))
             self._action_stats["baneling_dodges"] += 1
+
+    def _recall_to_defend(self):
+        """Bring an attacking army home when a base is raided behind it."""
+        if self.army_intent != "attack":
+            return
+        army = self._combat_units()
+        threats = self._threat_units()
+        if not army or not threats or not self.townhalls:
+            return
+        base = min(self.townhalls, key=lambda b: threats.closest_distance_to(b))
+        raid = threats.closer_than(20, base)
+        supply = sum(self.calculate_supply_cost(e.type_id) for e in raid)
+        if supply < RECALL_THREAT_SUPPLY or army.center.distance_to(base) < RECALL_DISTANCE:
+            return
+        self._set_army_intent("defend")
+        attack = self.contract.action_for("attack")
+        self.cooldowns[attack] = self.time + RECALL_ATTACK_BLOCK
+        self._action_stats["army_recalls"] += 1
+        self.log("army_recalled", game_loop=self.state.game_loop, base_tag=base.tag,
+                 enemy_supply=supply, army_distance=round(army.center.distance_to(base), 1))
+
+    def _home_guard(self):
+        if self.army_intent != "attack" or not self.townhalls:
+            return set()
+        home = self._defense_position()
+        tanks = sorted(self.units.of_type({U.SIEGETANK, U.SIEGETANKSIEGED}).ready, key=lambda t: t.distance_to(home))
+        return {t.tag for t in tanks[:HOME_GUARD_TANKS]}
+
+    def _held_army_tags(self):
+        guard = self._home_guard()
+        home = self._defense_position()
+        for tank in self.units.of_type({U.SIEGETANK}).ready:
+            if (tank.tag in guard and tank.distance_to(home) > 6
+                    and tank.tag not in self.unit_tags_received_action):
+                tank.move(home)
+        return guard
 
     def _ground_threats(self):
         return [e for e in self.enemy_units if e.is_visible and e.can_attack and not e.is_flying
