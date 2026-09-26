@@ -75,11 +75,21 @@ ENEMY_CASTERS = {U.INFESTOR, U.INFESTORBURROWED, U.VIPER, U.SWARMHOSTMP}
 # Tanks siege when ground enemies come this close (siege range is 13) and unsiege past the second distance.
 SIEGE_DISTANCE = 15
 UNSIEGE_DISTANCE = 17
-# Brood Lords and Corruptors call for Vikings: two per Brood Lord (or cocoon), one per Corruptor,
-# up to the cap, while one was seen in the last AIR_MEMORY seconds.
+# Late-game Zerg units call for counters while one was seen in the last ENEMY_TECH_MEMORY seconds
+# (the most seen at once counts): Vikings for Brood Lords (two each, cocoons too) and Corruptors (one
+# each), with a second Starport for six or more; Thors for Mutalisks (one per four, with a Factory
+# Tech Lab); Marauders for Ultralisks (three each, with a Barracks Tech Lab per six Marauders).
 VIKINGS_PER_BROODLORD = 2
 VIKING_CAP = 12
-AIR_MEMORY = 180
+MUTALISKS_PER_THOR = 4
+THOR_CAP = 4
+MARAUDERS_PER_ULTRALISK = 3
+MARAUDER_CAP = 18
+MARAUDERS_PER_TECHLAB = 6
+BARRACKS_TECHLAB_CAP = 4
+ENEMY_TECH_MEMORY = 180
+ENEMY_TECH = {U.BROODLORD: "BROODLORD", U.BROODLORDCOCOON: "BROODLORD", U.CORRUPTOR: "CORRUPTOR",
+              U.MUTALISK: "MUTALISK", U.ULTRALISK: "ULTRALISK", U.ULTRALISKBURROWED: "ULTRALISK"}
 # Mining SCVs this close to a Baneling step away from it. Marines and Marauders this close shoot the
 # nearest Baneling when their weapon is ready and step away while it reloads (or when one is on top of them).
 BANELING_DODGE_RANGE = 5
@@ -140,7 +150,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
-                        "recall_on_raid", "disengage_losing_fights", "bio_waits_for_tanks", "baneling_target_fire", "home_guard_tanks", "anti_air_response",
+                        "recall_on_raid", "disengage_losing_fights", "bio_waits_for_tanks", "baneling_target_fire", "home_guard_tanks", "late_game_counters",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -155,8 +165,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._gas_throttled = False
         self._lurker_seen = -1000
         self._banelings_seen = False
-        self._air_threat = 0
-        self._air_seen = -1000
+        self._enemy_tech = {}
         self._attack_peak = 0
         self._disengage_until = -1000
         self._disengaging = False
@@ -190,13 +199,30 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         due = []
         if self._banelings_seen and self.townhalls.amount >= 3 and count("MORPH PLANETARYFORTRESS") == 0:
             due.append(ids["MORPH PLANETARYFORTRESS"])
-        if self._air_threat and self.time - self._air_seen <= AIR_MEMORY:
-            vikings = min(VIKING_CAP, self._air_threat)
+        seen = self._recent_enemy_tech()
+        vikings = min(VIKING_CAP, VIKINGS_PER_BROODLORD * seen.get("BROODLORD", 0) + seen.get("CORRUPTOR", 0))
+        if vikings:
             if count("TRAIN VIKINGFIGHTER") < vikings:
                 due.append(ids["TRAIN VIKINGFIGHTER"])
             if count("BUILD STARPORT") < (2 if vikings >= 6 else 1):
                 due.append(ids["BUILD STARPORT"])
+        thors = min(THOR_CAP, math.ceil(seen.get("MUTALISK", 0) / MUTALISKS_PER_THOR))
+        if thors:
+            if count("TRAIN THOR") < thors:
+                due.append(ids["TRAIN THOR"])
+            if count("ADDON FACTORYTECHLAB") < 1:
+                due.append(ids["ADDON FACTORYTECHLAB"])
+        marauders = min(MARAUDER_CAP, MARAUDERS_PER_ULTRALISK * seen.get("ULTRALISK", 0))
+        if marauders:
+            if count("TRAIN MARAUDER") < marauders:
+                due.append(ids["TRAIN MARAUDER"])
+            if count("ADDON BARRACKSTECHLAB") < min(BARRACKS_TECHLAB_CAP, math.ceil(marauders / MARAUDERS_PER_TECHLAB)):
+                due.append(ids["ADDON BARRACKSTECHLAB"])
         return tuple(due)
+
+    def _recent_enemy_tech(self):
+        return {name: most for name, (most, last) in self._enemy_tech.items()
+                if self.time - last <= ENEMY_TECH_MEMORY}
 
     def _ready_base_count(self):
         # A finished Orbital/Planetary morph reports build progress below 1 for a frame.
@@ -714,17 +740,16 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     def _fast_micro(self):
         self._dodge_banelings()
         self._scan_for_burrowed()
-        self._track_air_threat()
+        self._track_enemy_tech()
 
-    def _track_air_threat(self):
-        visible = [e for e in self.enemy_units if e.is_visible]
-        threat = sum(VIKINGS_PER_BROODLORD for e in visible if e.type_id in {U.BROODLORD, U.BROODLORDCOCOON})
-        threat += sum(1 for e in visible if e.type_id == U.CORRUPTOR)
-        if threat:
-            if self.time - self._air_seen > AIR_MEMORY:
-                self._air_threat = 0
-            self._air_threat = max(self._air_threat, threat)
-            self._air_seen = self.time
+    def _track_enemy_tech(self):
+        """The most late-game units of each kind seen at once, and when one was last seen."""
+        counts = Counter(ENEMY_TECH[e.type_id] for e in self.enemy_units if e.is_visible and e.type_id in ENEMY_TECH)
+        for name, amount in counts.items():
+            most, last = self._enemy_tech.get(name, (0, -1000))
+            if self.time - last > ENEMY_TECH_MEMORY:
+                most = 0
+            self._enemy_tech[name] = (max(most, amount), self.time)
 
     def _dodge_banelings(self):
         banelings = [e for e in self.enemy_units if e.type_id == U.BANELING and e.is_visible]

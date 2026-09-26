@@ -97,6 +97,9 @@ class HierarchicalMixin:
                                     "production_alternatives": requirements,
                                     "last_legality_rejection": self._last_legal_blocked.get(str(action))}
             catalog[str(action)]["reservation_blocked"] = self._reservation_reason(action)
+            if action_kind == "train" and contract.supply_reserve:
+                # Races that reserve supply (Terran) also keep it free for due counter units.
+                catalog[str(action)]["supply"] = self.calculate_supply_cost(U[contract.kind_name(action)])
             if action_kind == "research":
                 catalog[str(action)]["exists_in_game_version"] = data is not None and data.research_ability is not None
         for action in self._conditional_tech(catalog):

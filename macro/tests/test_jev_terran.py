@@ -141,6 +141,18 @@ class TerranContractTests(unittest.TestCase):
         catalog["10"]["reservation_blocked"] = "no_ready_producer_with_available_ability"
         self.assertIsNone(policy_reason(1, *args(180, 100), contract=TERRAN))
 
+    def test_due_counter_unit_keeps_supply_free(self):
+        plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 2, 10, 16, 18, 19, 26, 34])
+        catalog = terran_catalog()
+        catalog["0"]["count_with_pending"] = 10
+        catalog["10"].update(cost={"minerals": 150, "gas": 75}, recommended=True, supply=2)
+        catalog["1"].update(cost={"minerals": 50, "gas": 0}, supply=1)
+        args = lambda left: (plan, catalog, resource(mineral=2000, gas=1000, supply_left=left, supply_cap=200,
+                                                     needs_supply=False), "defend", 0, 100, False)
+        self.assertEqual(policy_reason(1, *args(2), contract=TERRAN), "scheduled_supply_reservation")
+        self.assertIsNone(policy_reason(1, *args(3), contract=TERRAN))
+        self.assertIsNone(policy_reason(10, *args(2), contract=TERRAN))
+
     def test_supply_reserve_keeps_money_for_a_needed_depot(self):
         plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 16, 18, 19, 26, 34])
         catalog = terran_catalog()
@@ -796,6 +808,24 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._disengage()
         self.assertEqual(self.bot.army_intent, "attack")
 
+    async def test_mutalisks_and_ultralisks_call_for_thors_and_marauders(self):
+        catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
+        zerg = [FakeTerranUnit(300 + i, U.MUTALISK, (60, 60)) for i in range(9)]
+        zerg += [FakeTerranUnit(320 + i, U.ULTRALISK, (60, 60)) for i in range(4)]
+        self.set_world([self.scv], [self.cc], zerg)
+        self.bot._track_enemy_tech()
+        # Thors (3 for 9 Mutalisks) with a Factory Tech Lab; 12 Marauders with two Barracks Tech Labs.
+        self.assertEqual(set(self.bot._conditional_tech(catalog)), {9, 28, 2, 26})
+        catalog["9"]["count_with_pending"] = 3
+        catalog["28"]["count_with_pending"] = 1
+        catalog["2"]["count_with_pending"] = 12
+        catalog["26"]["count_with_pending"] = 2
+        self.assertEqual(self.bot._conditional_tech(catalog), ())
+        # Fewer seen later does not lower the target while they are remembered.
+        self.set_world([self.scv], [self.cc], zerg[:2])
+        self.bot._track_enemy_tech()
+        self.assertEqual(self.bot._recent_enemy_tech(), {"MUTALISK": 9, "ULTRALISK": 4})
+
     async def test_fight_is_measured_where_the_army_meets_the_enemy(self):
         # Half the army fights evenly far from the other half: the army's center is empty ground.
         self.bot._initialize_navigation()
@@ -870,8 +900,8 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot._conditional_tech(catalog), ())
         lords = [FakeTerranUnit(300 + i, U.BROODLORD, (60, 60)) for i in range(3)]
         self.set_world([self.scv], [self.cc], lords)
-        self.bot._track_air_threat()
-        self.assertEqual(self.bot._air_threat, 6)
+        self.bot._track_enemy_tech()
+        self.assertEqual(self.bot._recent_enemy_tech(), {"BROODLORD": 3})
         self.assertEqual(set(self.bot._conditional_tech(catalog)), {10, 22})  # Vikings, Starport.
         catalog["22"]["count_with_pending"] = 1
         self.assertEqual(self.bot._conditional_tech(catalog), (10, 22))  # Six Vikings want a second Starport.

@@ -229,6 +229,12 @@ schedule even if the plan omits them; include them in the plan and keep gas for 
 Against Zerg the schedule also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by
 6:30 and four Widow Mines by 7:00 (sieged Tanks and Mines kill Banelings before they reach the
 Marines), and, once Banelings are seen and a third base exists, a Planetary Fortress there.
+Games against the cheating AIs are lost after about 20 minutes to Brood Lords, Ultralisks,
+Mutalisks, Infestors and Vipers, not to the early army. Seen late-game units make counters
+recommended automatically: Vikings (two per Brood Lord, one per Corruptor) with a second
+Starport, Thors (one per four Mutalisks) with a Factory Tech Lab, and Marauders (three per
+Ultralisk) with Barracks Tech Labs; while one is due, other army production keeps its money and
+supply free. Plan for these counters (and vehicle/ship upgrades) instead of more Marines late.
 """
 
 

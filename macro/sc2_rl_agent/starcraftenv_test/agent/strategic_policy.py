@@ -62,6 +62,10 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
             if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < reserved["minerals"])
                     or (cost["gas"] and resource["gas"] - cost["gas"] < reserved["gas"])):
                 return "scheduled_tech_reservation"
+            # A due counter unit also keeps supply free, so a maxed army refills with it first.
+            supply, needed = catalog[str(action)].get("supply", 0), catalog[str(held)].get("supply", 0)
+            if supply and needed and resource["supply_left"] - supply < needed:
+                return "scheduled_supply_reservation"
     if (contract.supply_reserve and action in contract.spending_actions and action != contract.supply_action
             and resource.get("needs_supply") and resource["supply_left"] <= 4 and resource["supply_cap"] < 200
             and not catalog[str(contract.supply_action)].get("pending")):
