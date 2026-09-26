@@ -42,6 +42,13 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
+# Cells kept clear between a new building (other than a Supply Depot) and existing ones, so that
+# Siege Tanks and other large units can leave the production area. Lowered depots are walkable.
+BUILDING_GAP = 2
+SMALL_FOOTPRINTS = {U.MISSILETURRET: 1, U.BARRACKSTECHLAB: 1, U.BARRACKSREACTOR: 1, U.FACTORYTECHLAB: 1,
+                    U.FACTORYREACTOR: 1, U.STARPORTTECHLAB: 1, U.STARPORTREACTOR: 1,
+                    U.TECHLAB: 1, U.REACTOR: 1}
+TOWNHALL_TYPES = {U.COMMANDCENTER, U.ORBITALCOMMAND, U.PLANETARYFORTRESS}
 # During an attack: enemy supply at a base that recalls a far-away army, how far "far" is,
 # how long attacking stays blocked afterwards, and how many Siege Tanks stay home.
 RECALL_THREAT_SUPPLY = 8
@@ -460,6 +467,18 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         areas += [(Point2(p), 1.5) for p in self._rejected_spots]
         return areas
 
+    def _occupied_areas(self):
+        """(centre, half-size) of standing buildings and free add-on slots that need a lane around them."""
+        areas = []
+        for b in self.structures:
+            if b.type_id in DEPOTS or b.is_flying:
+                continue
+            half = 2.5 if b.type_id in TOWNHALL_TYPES else SMALL_FOOTPRINTS.get(b.type_id, 1.5)
+            areas.append((b.position, half))
+            if b.type_id in PRODUCTION and not b.has_add_on:
+                areas.append((b.position.offset((2.5, -0.5)), 1))
+        return areas
+
     @staticmethod
     def _overlaps(point, half, areas):
         return any(abs(point.x - c.x) < half + h and abs(point.y - c.y) < half + h for c, h in areas)
@@ -526,6 +545,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         odd = kind not in {U.SUPPLYDEPOT, U.MISSILETURRET}  # 3x3 footprints centre on half cells.
         half = 1.5 if odd else 1
         reserved = self._reserved_areas()
+        # Depots are lowered and walkable; everything else keeps a lane free around it.
+        spaced = [] if kind == U.SUPPLYDEPOT else [(c, h + BUILDING_GAP) for c, h in self._occupied_areas()]
         candidates, seen = [], set()
         for anchor in self._anchors(kind):
             for dx, dy in sorted(((x, y) for x in range(-4, 5, 2) for y in range(-4, 5, 2)),
@@ -540,7 +561,10 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         continue
                 except (AssertionError, IndexError):  # Outside the map.
                     continue
-                if self._blocks_resources(point, kind) or self._overlaps(point, half, reserved):
+                if (self._blocks_resources(point, kind) or self._overlaps(point, half, reserved)
+                        or self._overlaps(point, half, spaced)):
+                    continue
+                if kind in PRODUCTION and self._overlaps(point.offset((2.5, -0.5)), 1, spaced):
                     continue
                 if kind in PRODUCTION and self._overlaps(point.offset((2.5, -0.5)), 1, reserved):
                     continue
