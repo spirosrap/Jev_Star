@@ -16,6 +16,14 @@ def plan_progress(plan, catalog, resource):
             "reservation_suspended_reason": catalog[str(reserve)].get("reservation_blocked") if reserve is not None else None}
 
 
+def scheduled_reserve(contract, game_time, catalog):
+    """Scheduled or recommended purchases, and the first of them that only lacks resources."""
+    due = [int(a) for a, entry in catalog.items() if entry.get("recommended")]
+    due += [a for a in tech_due(contract, game_time, catalog) if a not in due]
+    held = next((a for a in due if not catalog[str(a)].get("reservation_blocked")), None)
+    return due, held
+
+
 def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time, game_time, emergency,
                   contract=PROTOSS):
     """Called only after the action passes actual SC2 legality/affordability checks."""
@@ -47,6 +55,13 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
             if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < progress["reserved_minerals"])
                     or (cost["gas"] and resource["gas"] - cost["gas"] < progress["reserved_gas"])):
                 return "plan_resource_reservation"
+        # Keep the money for due tech (e.g. Tanks, Vikings) instead of spending it on something else first.
+        due, held = scheduled_reserve(contract, game_time, catalog)
+        if held is not None and action not in due and action not in (worker, contract.supply_action):
+            cost, reserved = catalog[str(action)]["cost"], catalog[str(held)]["cost"]
+            if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < reserved["minerals"])
+                    or (cost["gas"] and resource["gas"] - cost["gas"] < reserved["gas"])):
+                return "scheduled_tech_reservation"
     if (contract.supply_reserve and action in contract.spending_actions and action != contract.supply_action
             and resource.get("needs_supply") and resource["supply_left"] <= 4 and resource["supply_cap"] < 200
             and not catalog[str(contract.supply_action)].get("pending")):

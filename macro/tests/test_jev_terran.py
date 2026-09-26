@@ -123,6 +123,23 @@ class TerranContractTests(unittest.TestCase):
         # Protoss keeps following the plan strictly.
         self.assertEqual(PROTOSS.bank_override_actions, frozenset())
 
+    def test_due_tech_keeps_its_money(self):
+        plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 16, 18, 19, 26, 34])
+        catalog = terran_catalog()
+        catalog["0"]["count_with_pending"] = 10
+        catalog["10"].update(cost={"minerals": 150, "gas": 75}, recommended=True)  # Vikings.
+        catalog["1"]["cost"] = {"minerals": 50, "gas": 0}
+        catalog["26"]["cost"] = {"minerals": 50, "gas": 50}
+        args = lambda m, g: (plan, catalog, resource(mineral=m, gas=g, supply_left=20, needs_supply=False),
+                             "defend", 0, 100, False)
+        self.assertEqual(policy_reason(1, *args(180, 100), contract=TERRAN), "scheduled_tech_reservation")
+        self.assertEqual(policy_reason(26, *args(400, 100), contract=TERRAN), "scheduled_tech_reservation")
+        self.assertIsNone(policy_reason(1, *args(250, 100), contract=TERRAN))
+        self.assertIsNone(policy_reason(10, *args(180, 100), contract=TERRAN))
+        self.assertIsNone(policy_reason(0, *args(100, 0), contract=TERRAN))  # Workers and depots go on.
+        catalog["10"]["reservation_blocked"] = "no_ready_producer_with_available_ability"
+        self.assertIsNone(policy_reason(1, *args(180, 100), contract=TERRAN))
+
     def test_supply_reserve_keeps_money_for_a_needed_depot(self):
         plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 16, 18, 19, 26, 34])
         catalog = terran_catalog()
@@ -701,6 +718,64 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.raid_world(raiders=10, army_at=(20, 20))
         self.bot._recall_to_defend()
         self.assertEqual(self.bot.army_intent, "attack")
+
+    def battle_world(self, ours, theirs, lost_from=None):
+        self.bot._initialize_navigation()
+        army = [FakeTerranUnit(100 + i, U.MARINE, (60, 60)) for i in range(ours)]
+        zerg = [FakeTerranUnit(300 + i, U.ROACH, (66, 60)) for i in range(theirs)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *army], [self.cc], zerg)
+        self.bot.army_intent = "attack"
+        if lost_from is not None:
+            self.bot._attack_peak = lost_from
+        return army
+
+    async def test_attack_into_a_much_bigger_army_pulls_back_then_defends(self):
+        army = self.battle_world(ours=20, theirs=30)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "retreat")
+        self.assertEqual(army[0].commands[-1][0], "move")
+        self.assertGreater(self.bot.cooldowns[66], self.bot.time + 30)
+        self.assertEqual(self.bot._action_stats["army_disengages"], 1)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "retreat")  # Still moving away.
+        self.bot.state.game_loop += 9 * 22.4
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "defend")
+
+    async def test_even_fight_continues_unless_it_already_cost_much_of_the_army(self):
+        self.battle_world(ours=20, theirs=22)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.battle_world(ours=20, theirs=22, lost_from=40)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "retreat")
+        # A small enemy group never triggers it, and a winning fight goes on.
+        self.battle_world(ours=5, theirs=8, lost_from=40)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.battle_world(ours=30, theirs=15, lost_from=40)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "attack")
+
+    async def test_brood_lords_call_for_vikings_and_a_starport(self):
+        catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
+        self.assertEqual(self.bot._conditional_tech(catalog), ())
+        lords = [FakeTerranUnit(300 + i, U.BROODLORD, (60, 60)) for i in range(3)]
+        self.set_world([self.scv], [self.cc], lords)
+        self.bot._track_air_threat()
+        self.assertEqual(self.bot._air_threat, 6)
+        self.assertEqual(set(self.bot._conditional_tech(catalog)), {10, 22})  # Vikings, Starport.
+        catalog["22"]["count_with_pending"] = 1
+        self.assertEqual(self.bot._conditional_tech(catalog), (10, 22))  # Six Vikings want a second Starport.
+        catalog["22"]["count_with_pending"] = 2
+        self.assertEqual(self.bot._conditional_tech(catalog), (10,))
+        catalog["10"]["count_with_pending"] = 6
+        self.assertEqual(self.bot._conditional_tech(catalog), ())
+        catalog["10"]["count_with_pending"] = 2
+        self.bot.state.game_loop += 200 * 22.4  # Not seen for a long time.
+        self.assertEqual(self.bot._conditional_tech(catalog), ())
 
     async def test_two_tanks_stay_home_during_an_attack(self):
         self.bot._initialize_navigation()
