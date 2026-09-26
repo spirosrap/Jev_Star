@@ -11,6 +11,7 @@ from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
+from sc2.units import Units
 
 from ...agent.macro_contract import TERRAN, SPENDING_KINDS, attack_floor
 from .jev_macro_bot import JevMacroBot
@@ -47,11 +48,13 @@ RECALL_THREAT_SUPPLY = 8
 RECALL_DISTANCE = 35
 RECALL_ATTACK_BLOCK = 30
 HOME_GUARD_TANKS = 2
-# During an attack, compare supply within this radius of the army's center. Pull back when the enemy
-# there is this many times stronger, or when the attack has cost this share of the army and the enemy
-# there is at least as strong. The army moves away for a few seconds, then defends, and attacking
-# stays blocked for a while.
-DISENGAGE_RADIUS = 15
+# During an attack, compare the enemy units within FIGHT_RANGE of our army (away from our bases, where
+# the recall handles raids) with our units near them. Pull back when that enemy is this many times
+# stronger, or when the attack has cost this share of the army and that enemy is at least as strong.
+# The army moves away for a few seconds, then defends, and attacking stays blocked for a while.
+FIGHT_RANGE = 12
+FIGHT_ARRIVING = 5
+BASE_AREA = 15
 DISENGAGE_RATIO = 1.4
 DISENGAGE_LOSS = 0.35
 DISENGAGE_MIN_ENEMY = 10
@@ -67,9 +70,16 @@ UNSIEGE_DISTANCE = 17
 VIKINGS_PER_BROODLORD = 2
 VIKING_CAP = 12
 AIR_MEMORY = 180
-# Marines and SCVs this close to a Baneling step away from it.
+# Mining SCVs this close to a Baneling step away from it. Marines and Marauders this close shoot the
+# nearest Baneling when their weapon is ready and step away while it reloads (or when one is on top of them).
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
+BANELING_FIRE_RANGE = 7
+BANELING_TOO_CLOSE = 1.5
+# During an attack, Marines and Marauders not in a fight wait for the Siege Tanks: those more than this
+# much closer to the target than the leading tank walk back to it.
+TANK_LEASH = 6
+BIO = {U.MARINE, U.MARAUDER}
 # Pull SCVs off gas while this much gas is banked and it is more than twice the minerals;
 # send them back once gas falls below the lower mark.
 GAS_THROTTLE_ON = 300
@@ -120,7 +130,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
-                        "recall_on_raid", "disengage_losing_fights", "home_guard_tanks", "anti_air_response",
+                        "recall_on_raid", "disengage_losing_fights", "bio_waits_for_tanks", "baneling_target_fire", "home_guard_tanks", "anti_air_response",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -586,6 +596,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._man_bunkers()
         self._repair()
         self._clear_changelings()
+        self._wait_for_tanks()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
 
@@ -694,20 +705,35 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             return
         self._banelings_seen = True
         builders = {w.tag for w in self.workers if w.is_constructing_scv or w.is_repairing}
-        dodgers = list(self.units(U.MARINE).ready) + [w for w in self.workers
-                                                        if w.tag not in builders and w.tag not in self._scouts]
-        for unit in dodgers:
+        for unit in self.units.of_type(BIO).ready:
+            if unit.tag in self.unit_tags_received_action or unit.tag in self._scouts:
+                continue
+            baneling = min(banelings, key=lambda b: unit.distance_to(b))
+            distance = unit.distance_to(baneling)
+            if distance >= BANELING_FIRE_RANGE:
+                continue
+            if unit.weapon_cooldown == 0 and distance >= BANELING_TOO_CLOSE:
+                if unit.order_target != baneling.tag:
+                    unit.attack(baneling)
+                    self._action_stats["baneling_shots"] += 1
+                continue
+            self._step_away(unit, baneling)
+        miners = [w for w in self.workers if w.tag not in builders and w.tag not in self._scouts]
+        for unit in miners:
             if unit.tag in self.unit_tags_received_action:
                 continue
             baneling = min(banelings, key=lambda b: unit.distance_to(b))
             if unit.distance_to(baneling) >= BANELING_DODGE_RANGE:
                 continue
-            away = unit.position.towards(baneling.position, -BANELING_DODGE_STEP)
-            # Alternate sides so neighbours spread out instead of running in a clump.
-            dx, dy = away.x - unit.position.x, away.y - unit.position.y
-            side = 1 if unit.tag % 2 else -1
-            unit.move(Point2((away.x - dy * side * .5, away.y + dx * side * .5)))
-            self._action_stats["baneling_dodges"] += 1
+            self._step_away(unit, baneling)
+
+    def _step_away(self, unit, baneling):
+        away = unit.position.towards(baneling.position, -BANELING_DODGE_STEP)
+        # Alternate sides so neighbours spread out instead of running in a clump.
+        dx, dy = away.x - unit.position.x, away.y - unit.position.y
+        side = 1 if unit.tag % 2 else -1
+        unit.move(Point2((away.x - dy * side * .5, away.y + dx * side * .5)))
+        self._action_stats["baneling_dodges"] += 1
 
     def _recall_to_defend(self):
         """Bring an attacking army home when a base is raided behind it."""
@@ -740,21 +766,27 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if self.army_intent != "attack":
             self._attack_peak = 0
             return
-        army = self._combat_units()
+        guard = self._home_guard()
+        army = self._combat_units().filter(lambda u: u.tag not in guard)
         ready = self._ready_army_supply()
         self._attack_peak = max(self._attack_peak, ready)
         if not army:
             return
-        center = army.center
+        # The fight is where our army meets the enemy, not the army's center: a marching or split
+        # army has few units there. Raids on our bases are left to the recall.
         enemies = [e for e in self.enemy_units
                    if e.is_visible and (e.can_attack or e.type_id in ENEMY_CASTERS)
                    and e.type_id.name not in ("DRONE", "SCV", "PROBE")
-                   and not e.type_id.name.startswith("CHANGELING") and e.distance_to(center) < DISENGAGE_RADIUS]
+                   and not e.type_id.name.startswith("CHANGELING")
+                   and not any(e.distance_to(b) < BASE_AREA for b in self.townhalls)
+                   and army.closest_distance_to(e) < FIGHT_RANGE]
         enemy = sum(self.calculate_supply_cost(e.type_id) for e in enemies)
         if enemy < DISENGAGE_MIN_ENEMY:
             return
-        # Units a little outside the radius are still arriving at the fight.
-        ours = sum(self.calculate_supply_cost(u.type_id) for u in army if u.distance_to(center) < DISENGAGE_RADIUS + 5)
+        # Units a little farther away are still arriving at the fight.
+        fighting = Units(enemies, self)
+        ours = sum(self.calculate_supply_cost(u.type_id) for u in army
+                   if fighting.closest_distance_to(u) < FIGHT_RANGE + FIGHT_ARRIVING)
         lost = 1 - ready / self._attack_peak if self._attack_peak else 0
         if enemy < DISENGAGE_RATIO * ours and not (lost >= DISENGAGE_LOSS and enemy >= ours):
             return
@@ -766,6 +798,26 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self.log("army_disengaged", game_loop=self.state.game_loop, enemy_supply=enemy, army_supply=ours,
                  lost_share=round(lost, 2))
         self._attack_peak = 0
+
+    def _wait_for_tanks(self):
+        """Keep Marines and Marauders with the Siege Tanks on the way to a fight, so the tanks are there when it starts."""
+        if self.army_intent != "attack" or self._army_destination is None:
+            return
+        guard = self._home_guard()
+        tanks = self.units.of_type({U.SIEGETANK, U.SIEGETANKSIEGED}).ready.filter(lambda t: t.tag not in guard)
+        if not tanks:
+            return
+        target = self._army_destination
+        lead = min(tanks, key=lambda t: t.distance_to(target))
+        front = lead.distance_to(target)
+        enemies = self._ground_threats()
+        for unit in self.units.of_type(BIO).ready:
+            if (unit.tag in self.unit_tags_received_action or unit.tag in self._scouts
+                    or unit.distance_to(target) >= front - TANK_LEASH
+                    or any(unit.distance_to(e) < 10 for e in enemies)):
+                continue
+            unit.move(lead.position.towards(target, 2))
+            self._action_stats["waits_for_tanks"] += 1
 
     def _home_guard(self):
         if self.army_intent != "attack" or not self.townhalls:

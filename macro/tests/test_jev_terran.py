@@ -507,18 +507,33 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.set_world([self.scv, to_gas, carrying], [self.cc, refinery])
         self.assertIs(self.bot._builder(Point2((40, 38))), self.scv)
 
-    async def test_marines_and_miners_step_away_from_banelings(self):
+    async def test_marines_shoot_banelings_and_step_away_while_reloading(self):
         baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
-        near, far = FakeTerranUnit(3, U.MARINE, (22, 20)), FakeTerranUnit(4, U.MARINE, (40, 20))
+        ready, reloading = FakeTerranUnit(3, U.MARINE, (24, 20)), FakeTerranUnit(7, U.MARINE, (22, 20))
+        on_top, far = FakeTerranUnit(8, U.MARINE, (21, 20)), FakeTerranUnit(4, U.MARINE, (40, 20))
+        reloading.weapon_cooldown = 5
+        self.set_world([ready, reloading, on_top, far], [self.cc], [baneling])
+        self.bot._fast_micro()
+        self.assertEqual(ready.commands, [("attack", baneling)])
+        for unit in (reloading, on_top):
+            (kind, target), = unit.commands
+            self.assertEqual(kind, "move")
+            self.assertGreater(target.distance_to(baneling.position), unit.distance_to(baneling))
+        self.assertEqual(far.commands, [])
+        # No repeated order while already shooting at that Baneling.
+        ready.order_target = baneling.tag
+        ready.commands.clear()
+        self.bot.unit_tags_received_action = set()
+        self.bot._dodge_banelings()
+        self.assertEqual(ready.commands, [])
+
+    async def test_miners_step_away_from_banelings(self):
+        baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
         miner = FakeTerranUnit(5, U.SCV, (20, 23))
         builder = FakeTerranUnit(6, U.SCV, (19, 20))
         builder.is_constructing_scv = True
-        self.set_world([near, far, miner, builder], [self.cc], [baneling])
+        self.set_world([miner, builder], [self.cc], [baneling])
         self.bot._fast_micro()
-        (kind, target), = near.commands
-        self.assertEqual(kind, "move")
-        self.assertGreater(target.distance_to(baneling.position), near.distance_to(baneling))
-        self.assertEqual(far.commands, [])
         self.assertEqual(miner.commands[0][0], "move")
         self.assertGreater(miner.commands[0][1].distance_to(baneling.position), miner.distance_to(baneling))
         self.assertEqual(builder.commands, [])
@@ -526,6 +541,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_neighbouring_marines_spread_to_different_sides(self):
         baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
         a, b = FakeTerranUnit(3, U.MARINE, (23, 20)), FakeTerranUnit(4, U.MARINE, (23, 20))
+        a.weapon_cooldown = b.weapon_cooldown = 5
         self.set_world([a, b], [self.cc], [baneling])
         self.bot._fast_micro()
         self.assertNotEqual(a.commands[0][1].y, b.commands[0][1].y)
@@ -759,6 +775,59 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.battle_world(ours=30, theirs=15, lost_from=40)
         self.bot._disengage()
         self.assertEqual(self.bot.army_intent, "attack")
+
+    async def test_fight_is_measured_where_the_army_meets_the_enemy(self):
+        # Half the army fights evenly far from the other half: the army's center is empty ground.
+        self.bot._initialize_navigation()
+        front = [FakeTerranUnit(100 + i, U.MARINE, (80, 60)) for i in range(20)]
+        rear = [FakeTerranUnit(200 + i, U.MARINE, (40, 60)) for i in range(20)]
+        zerg = [FakeTerranUnit(300 + i, U.ROACH, (86, 60)) for i in range(22)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *front, *rear], [self.cc], zerg)
+        self.bot.army_intent = "attack"
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "attack")
+        # Only the front half meets 35 Roaches: pull back.
+        zerg += [FakeTerranUnit(400 + i, U.ROACH, (86, 62)) for i in range(13)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *front, *rear], [self.cc], zerg)
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "retreat")
+
+    async def test_enemies_at_our_bases_are_left_to_the_recall(self):
+        self.bot._initialize_navigation()
+        army = [FakeTerranUnit(100 + i, U.MARINE, (16, 10)) for i in range(5)]
+        zerg = [FakeTerranUnit(300 + i, U.ROACH, (12, 12)) for i in range(20)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *army], [self.cc], zerg)
+        self.bot.army_intent = "attack"
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "attack")
+
+    async def test_bio_waits_for_the_tanks_unless_fighting(self):
+        self.bot._initialize_navigation()
+        guard = [FakeTerranUnit(400 + i, U.SIEGETANK, (12 + i, 12)) for i in range(2)]
+        tank = FakeTerranUnit(410, U.SIEGETANK, (50, 50))
+        ahead, beside = FakeTerranUnit(420, U.MARINE, (68, 68)), FakeTerranUnit(421, U.MARINE, (52, 52))
+        fighting = FakeTerranUnit(422, U.MARINE, (78, 78))
+        ling = FakeTerranUnit(300, U.ZERGLING, (82, 80))
+        ling.can_attack = True
+        self.set_world([self.scv, *guard, tank, ahead, beside, fighting], [self.cc], [ling])
+        self.bot.army_intent = "attack"
+        self.bot._army_destination = Point2((90, 90))
+        self.bot._wait_for_tanks()
+        (kind, target), = ahead.commands
+        self.assertEqual(kind, "move")
+        self.assertLess(target.distance_to(tank.position), 3)
+        self.assertEqual(beside.commands, [])
+        self.assertEqual(fighting.commands, [])
+        self.bot.army_intent = "defend"
+        ahead.commands.clear()
+        self.bot._wait_for_tanks()
+        self.assertEqual(ahead.commands, [])
 
     async def test_brood_lords_call_for_vikings_and_a_starport(self):
         catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
