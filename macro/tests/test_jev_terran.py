@@ -391,63 +391,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         for point in self.bot._placement_candidates(U.SUPPLYDEPOT):
             self.assertFalse(abs(point.x - slot.x) < 2 and abs(point.y - slot.y) < 2, point)
 
-    def raid_on_natural(self, raiders, defenders=0):
-        self.bot._initialize_navigation()
-        natural = FakeTerranUnit(3, U.COMMANDCENTER, (40, 40))
-        miners = [FakeTerranUnit(10 + i, U.SCV, (42, 40)) for i in range(4)]
-        builder = FakeTerranUnit(20, U.SCV, (41, 41))
-        builder.is_constructing_scv = True
-        home = FakeTerranUnit(21, U.SCV, (12, 10))
-        army = [FakeTerranUnit(30 + i, U.MARINE, (41, 40)) for i in range(defenders)]
-        zerg = [FakeTerranUnit(50 + i, U.ZERGLING, (44, 40)) for i in range(raiders)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([*miners, builder, home, *army], [self.cc, natural], zerg)
-        self.bot.mineral_field = Units([FakeTerranUnit(90, U.MINERALFIELD, (5, 10))], self.bot)
-        return miners, builder, home
-
-    async def test_scvs_leave_a_raided_undefended_base(self):
-        miners, builder, home = self.raid_on_natural(raiders=10)
-        self.bot._evacuate_raided_bases()
-        for worker in miners:
-            self.assertEqual(worker.gather.call_args.args[0].tag, 90)  # The main's minerals.
-            self.assertIn(worker.tag, self.bot._evacuated)
-        builder.gather.assert_not_called()
-        home.gather.assert_not_called()
-        self.assertEqual(self.bot._action_stats["scvs_evacuated"], 4)
-
-    async def test_scvs_stay_when_the_raid_is_small_or_defended(self):
-        miners, _, _ = self.raid_on_natural(raiders=3)  # Below 4 supply (the fake world counts 1 per unit).
-        self.bot._evacuate_raided_bases()
-        miners[0].gather.assert_not_called()
-        miners, _, _ = self.raid_on_natural(raiders=10, defenders=10)
-        self.bot._evacuate_raided_bases()
-        miners[0].gather.assert_not_called()
-
-    async def test_factories_get_a_lane_for_tanks_and_other_buildings_stay_packed(self):
-        self.use_open_grid()
-        rax = FakeTerranUnit(3, U.BARRACKS, (20.5, 20.5))
-        rax.has_add_on = True
-        lab = FakeTerranUnit(4, U.BARRACKSTECHLAB, (23, 20))
-        factory = FakeTerranUnit(5, U.FACTORY, (20.5, 30.5))
-        factory.has_add_on = True
-        flab = FakeTerranUnit(6, U.FACTORYTECHLAB, (23, 30))
-        self.set_world([self.scv], [self.cc, rax, lab, factory, flab])
-
-        def gap(point, building, half, own=1.5):
-            return max(abs(point.x - building.position.x), abs(point.y - building.position.y)) - own - half
-
-        # A new Factory keeps a lane from every building, and so does its add-on slot.
-        for point in self.bot._placement_candidates(U.FACTORY):
-            for building, half in ((rax, 1.5), (lab, 1), (factory, 1.5), (flab, 1)):
-                self.assertGreaterEqual(gap(point, building, half), 2, (point, building.type_id))
-            self.assertGreaterEqual(gap(point.offset((2.5, -0.5)), rax, 1.5, own=1), 2, point)
-        # Other buildings keep a lane only from the Factory; next to the Barracks is allowed.
-        bays = self.bot._placement_candidates(U.ENGINEERINGBAY)
-        for point in bays:
-            for building, half in ((factory, 1.5), (flab, 1)):
-                self.assertGreaterEqual(gap(point, building, half), 2, (point, building.type_id))
-        self.assertTrue(any(0 <= gap(p, rax, 1.5) < 2 for p in bays))
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)
         armory.is_idle = True

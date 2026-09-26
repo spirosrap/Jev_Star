@@ -41,20 +41,6 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
-# Cells kept clear around Factories so the Siege Tanks they build can leave: a new Factory keeps this
-# lane from every building, and other new buildings (except Supply Depots, which are lowered and
-# walkable) keep it from Factories and their add-ons. Everything else is packed as before.
-BUILDING_GAP = 2
-FACTORY_TYPES = {U.FACTORY, U.FACTORYFLYING, U.FACTORYTECHLAB, U.FACTORYREACTOR}
-SMALL_FOOTPRINTS = {U.MISSILETURRET: 1, U.BARRACKSTECHLAB: 1, U.BARRACKSREACTOR: 1, U.FACTORYTECHLAB: 1,
-                    U.FACTORYREACTOR: 1, U.STARPORTTECHLAB: 1, U.STARPORTREACTOR: 1,
-                    U.TECHLAB: 1, U.REACTOR: 1}
-TOWNHALL_TYPES = {U.COMMANDCENTER, U.ORBITALCOMMAND, U.PLANETARYFORTRESS}
-# When at least this much enemy supply attacks a base that our units there cannot match, its SCVs
-# go and mine at the safest base, and worker distribution leaves them alone for a while.
-EVACUATE_THREAT_SUPPLY = 4
-EVACUATE_RANGE = 12
-EVACUATE_SECONDS = 20
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
@@ -106,7 +92,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     contract = TERRAN
     stationary_army_types = frozenset({U.SIEGETANKSIEGED, U.WIDOWMINEBURROWED})
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
-                        "resume_unfinished_construction", "scv_evacuation_from_raids", "bunker_load_unload", "scv_repair_under_fire",
+                        "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
@@ -120,7 +106,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._rejected_spots = {}
         self._addon_blocked = {}
         self._gas_throttled = False
-        self._evacuated = {}
         self._lurker_seen = -1000
         self._last_scan = -1000
 
@@ -406,18 +391,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         areas += [(Point2(p), 1.5) for p in self._rejected_spots]
         return areas
 
-    def _occupied_areas(self, factories_only=False):
-        """(centre, half-size) of standing buildings and free add-on slots that need a lane around them."""
-        areas = []
-        for b in self.structures:
-            if b.type_id in DEPOTS or b.is_flying or (factories_only and b.type_id not in FACTORY_TYPES):
-                continue
-            half = 2.5 if b.type_id in TOWNHALL_TYPES else SMALL_FOOTPRINTS.get(b.type_id, 1.5)
-            areas.append((b.position, half))
-            if b.type_id in PRODUCTION and not b.has_add_on:
-                areas.append((b.position.offset((2.5, -0.5)), 1))
-        return areas
-
     @staticmethod
     def _overlaps(point, half, areas):
         return any(abs(point.x - c.x) < half + h and abs(point.y - c.y) < half + h for c, h in areas)
@@ -484,9 +457,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         odd = kind not in {U.SUPPLYDEPOT, U.MISSILETURRET}  # 3x3 footprints centre on half cells.
         half = 1.5 if odd else 1
         reserved = self._reserved_areas()
-        # A Factory keeps a lane from everything; other buildings only from Factories. Depots are walkable.
-        spaced = ([] if kind == U.SUPPLYDEPOT else
-                  [(c, h + BUILDING_GAP) for c, h in self._occupied_areas(factories_only=kind != U.FACTORY)])
         candidates, seen = [], set()
         for anchor in self._anchors(kind):
             for dx, dy in sorted(((x, y) for x in range(-4, 5, 2) for y in range(-4, 5, 2)),
@@ -501,10 +471,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         continue
                 except (AssertionError, IndexError):  # Outside the map.
                     continue
-                if (self._blocks_resources(point, kind) or self._overlaps(point, half, reserved)
-                        or self._overlaps(point, half, spaced)):
-                    continue
-                if kind in PRODUCTION and self._overlaps(point.offset((2.5, -0.5)), 1, spaced):
+                if self._blocks_resources(point, kind) or self._overlaps(point, half, reserved):
                     continue
                 if kind in PRODUCTION and self._overlaps(point.offset((2.5, -0.5)), 1, reserved):
                     continue
@@ -543,8 +510,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if not any(command.unit.type_id == U.SCV for command in self.actions):
             self._balance_gas()
             workers, gas_buildings = self.workers, self.gas_buildings
-            self._evacuated = {tag: until for tag, until in self._evacuated.items() if until > self.time}
-            self.workers = workers.filter(lambda u: u.tag not in self._scouts and u.tag not in self._evacuated)
+            self.workers = workers.filter(lambda u: u.tag not in self._scouts)
             if self._gas_throttled:
                 # Otherwise worker distribution refills the Refineries every second.
                 self.gas_buildings = gas_buildings.filter(lambda g: False)
@@ -556,7 +522,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         self._call_down_mules()
         self._resume_construction()
-        self._evacuate_raided_bases()
         self._deploy_units()
         self._stim()
         # Before army orders, so units sent into a Bunker are not ordered elsewhere this frame.
@@ -565,36 +530,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
-
-    def _evacuate_raided_bases(self):
-        """Move SCVs away from a base that is being raided and not defended, so the economy survives."""
-        threats = self._threat_units()
-        bases = self.townhalls.ready
-        if not threats or bases.amount < 2:
-            return
-        army = self._combat_units()
-        for base in bases:
-            raid = threats.closer_than(EVACUATE_RANGE, base)
-            supply = sum(self.calculate_supply_cost(e.type_id) for e in raid)
-            defense = sum(self.calculate_supply_cost(u.type_id) for u in army.closer_than(EVACUATE_RANGE + 3, base))
-            if supply < EVACUATE_THREAT_SUPPLY or defense >= supply:
-                continue
-            safe = max(bases, key=lambda b: threats.closest_distance_to(b))
-            fields = self.mineral_field.closer_than(10, safe)
-            if safe.tag == base.tag or not fields:
-                continue
-            moved = 0
-            for worker in self.workers.closer_than(EVACUATE_RANGE, base):
-                if (worker.tag in self._scouts or worker.tag in self.unit_tags_received_action
-                        or worker.is_constructing_scv or worker.is_repairing):
-                    continue
-                worker.gather(fields.closest_to(safe))
-                self._evacuated[worker.tag] = self.time + EVACUATE_SECONDS
-                moved += 1
-            if moved:
-                self._action_stats["scvs_evacuated"] += moved
-                self.log("scvs_evacuated", game_loop=self.state.game_loop, base_tag=base.tag, to_base_tag=safe.tag,
-                         enemy_supply=supply, defense_supply=defense, workers=moved)
 
     def _balance_gas(self):
         """Move SCVs from gas to minerals while unspent gas piles up far beyond minerals."""
