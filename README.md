@@ -168,6 +168,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T40 | **CheatVision** | **Victory** | 19:02 | 3.46M | Recall reverted; SCVs evacuate raided, undefended bases (phase 3g, game 1, **Babylon LE**; commit `c0af324`) |
 | T41 | CheatVision | Defeat (stopped at 29:37, lost on the board) | 29:37 | 5.56M | None (phase 3g, game 2, **Babylon LE**; commit `d25d0eb`) |
 | T42 | CheatVision | Defeat (stopped at 25:17, lost on the board) | 25:17 | 4.64M | Lanes only around Factories (phase 3h, game 1, **Babylon LE**; commit `92856e2`) |
+| T43 | CheatVision | Defeat (stopped at 28:08, lost on the board) | 28:08 | 5.17M | None (phase 3i, **Babylon LE**; commit `5f1fcb7`) |
 
 One further VeryHard game was stopped by hand after the SC2 window stalled and is not counted. A CheatVision game on Ancient Cistern LE (commit `b361c1b`) was won in 10:01 but is also not counted: the Codex login stopped working mid-game (Astra's requests failed with authentication errors from 6:38), so Jev played mostly without plans; the control panel now shows "Astra unavailable" when this happens. A game on the reverted code (Ancient Cistern LE, commit `a9ef6e2`) was stopped at 12:29 when the Jev provider started refusing requests (HTTP 403, "RBAC: access denied"); it is not counted. A Babylon LE game on commit `1bae3ec` stopped the same way at 6:36 (HTTP 404) and is not counted either. OpenRouter began listing a new `typesafe/jev-router` the evening before; requests for `typesafe/jev-1.13` were still answered by `jev-1.13-20260917`, the version used in every game, but the provider briefly refused access twice. Access errors (401, 403, 404) are now retried for up to 60 seconds before a run stops. For comparison, the Protoss runs on the same machine the day before won three games against MediumHard and lost one against VeryHard.
 
@@ -193,7 +194,7 @@ Before testing other opponent races, confirm the Zerg results. Keep settings and
 | 3f. Recall on the baseline | Baseline plus the recall; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | Bases raided behind an attacking army are defended, without losing the Ancient Cistern results. On `7fe46ac`: one defeat on Babylon (T39). **Reverted**: the baseline won a Babylon game and the recall none |
 | 3g. SCV evacuation on the baseline | Baseline plus one change: SCVs leave a raided, undefended base; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | SCVs survive raids on Babylon without losing the Ancient Cistern results. On `c0af324`: one win on Babylon (T40); then one defeat (T41) |
 | 3h. Lanes around Factories | Baseline with SCV evacuation plus 2-cell lanes around Factories only; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | No Siege Tanks stuck in the main, without losing the Ancient Cistern results. On `92856e2`: one defeat on Babylon (T42). **Reverted** with the evacuation: with lanes the bot went 1–2 (T33, T34, T42), without them 4–2 (T35–T38, T40–T41) |
-| 3i. Baseline restored | The `fbe1a59` code with the three failure-only fixes (`2ca9f89`), proven on Ancient Cistern | Each further change is first played twice on Ancient Cistern LE and kept only if it does not hurt there, then tested on Babylon LE |
+| 3i. Baseline restored | The `fbe1a59` code with the three failure-only fixes (`2ca9f89`), proven on Ancient Cistern | Each further change is first played twice on Ancient Cistern LE and kept only if it does not hurt there, then tested on Babylon LE. On `5f1fcb7`: one defeat on Babylon (T43) |
 | 4. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
 | 5. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
 
@@ -260,6 +261,8 @@ The lanes are back, but only around Factories, where Siege Tanks come from: a ne
 T42, the first game with Factory lanes, lost on Babylon (stopped at 25:17). It was the strongest Babylon game through 20 minutes: 65 SCVs and 4 bases at 9:03, 71 SCVs and 5 bases at 12:03, 70 SCVs, 6 bases, 7 Siege Tanks and 4 Factories at 16:00, and maxed at 20:02 with 63 SCVs and 6 bases. Siege Tanks were seen leaving the main easily, though some still looked stuck later; at 18:00–18:22 none of its 11 tanks were sieged and all 20 depots were lowered, so the lane around a Factory probably opens into space that other packed buildings still enclose. The evacuation moved 22, 17 and 21 SCVs out of raided bases (9:02, 16:50, 22:13). From 21:08 Zerg took three bases in two minutes with a late-game army (about 97 visible supply at 23:21: 4 Brood Lords, 6 Ultralisks, 10 Mutalisks, Hydralisks, Roaches, Corruptors and Infestors), and SCVs fell from 63 to 18 by 25:04.
 
 The Factory lanes and the SCV evacuation were both removed, returning the bot code to the proven baseline `2ca9f89` (202 offline tests). Since T37 every change was aimed at Babylon and none was played on Ancient Cistern, so none showed that it keeps the Ancient Cistern results. From now on each change is first played twice on Ancient Cistern LE and kept only if it does not hurt there.
+
+T43, the first extra Babylon game on the restored baseline, lost (stopped at 28:08). It was on the winning path through 16:03 (maxed with 101 ready army supply, 67 SCVs, 6 bases and 17 Siege Tanks, no base lost), then lost bases at 16:29, 17:49, 19:54, 22:35 and 25:15 while its army kept growing: 152 ready army supply and 34 Siege Tanks at 25:05, with 30 SCVs and 3 bases. At the end the army was 23 Siege Tanks, 11 Marines, 6 Marauders and 8 Medivacs. Production drifted to Siege Tanks, which are slow, hard to get out of the packed main, and weak against raids without bio, so the large army did not protect the bases.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -434,6 +437,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 | T40 | **CheatVision** | **胜** | 19:02 | 346 万 | 撤回回防；SCV 撤离遭袭且无防守的基地（第 3g 阶段第 1 局，**Babylon LE**；提交 `c0af324`） |
 | T41 | CheatVision | 负（29:37 时手动停止，局面已输） | 29:37 | 556 万 | 无（第 3g 阶段第 2 局，**Babylon LE**；提交 `d25d0eb`） |
 | T42 | CheatVision | 负（25:17 时手动停止，局面已输） | 25:17 | 464 万 | 只围绕 Factory 的通道（第 3h 阶段第 1 局，**Babylon LE**；提交 `92856e2`） |
+| T43 | CheatVision | 负（28:08 时手动停止，局面已输） | 28:08 | 517 万 | 无（第 3i 阶段，**Babylon LE**；提交 `5f1fcb7`） |
 
 另有一局 VeryHard 因 SC2 窗口卡顿被手动停止，不计入。另一局 Ancient Cistern LE 上的 CheatVision 对局（提交 `b361c1b`）以 10:01 获胜，但同样不计入：对局中 Codex 登录失效（6:38 起 Astra 请求出现认证错误），Jev 基本在没有计划的情况下作战；控制面板现在会在这种情况下显示“Astra unavailable”。另一局在撤回后的代码上（Ancient Cistern LE，提交 `a9ef6e2`）于 12:29 因 Jev 服务开始拒绝请求（HTTP 403，“RBAC: access denied”）而停止，不计入。提交 `1bae3ec` 上的一局 Babylon LE 于 6:36 以同样方式停止（HTTP 404），同样不计入。OpenRouter 在前一晚开始列出新的 `typesafe/jev-router`；对 `typesafe/jev-1.13` 的请求仍由各局所用的 `jev-1.13-20260917` 应答，但服务两次短暂拒绝访问。现在访问错误（401、403、404）会重试最多 60 秒后才停止运行。作为对照，前一天同一台机器上的 Protoss 对局三胜 MediumHard、一负 VeryHard。
 
@@ -459,7 +463,7 @@ T7 失利：4:00–5:30 前后的 Zergling–Baneling 进攻（至少 25 只 Zer
 | 3f. 基线加回防 | 基线加回防；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 进攻时后方遭袭的基地得到防守，且不损失 Ancient Cistern 的战绩。`7fe46ac` 上 Babylon 1 负（T39）。**已撤回**：基线在 Babylon 赢过一局，回防一局未赢 |
 | 3g. 基线加 SCV 撤离 | 基线只加一项改动：SCV 撤离遭袭且无防守的基地；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 在 Babylon 上 SCV 能躲过袭击，同时不损失 Ancient Cistern 的战绩。`c0af324` 上 Babylon 1 胜（T40）；随后 1 负（T41） |
 | 3h. Factory 周围通道 | 基线加 SCV 撤离，再加仅围绕 Factory 的 2 格通道；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 主基地不再有 Siege Tank 被卡住，同时不损失 Ancient Cistern 的战绩。`92856e2` 上 Babylon 1 负（T42）。连同撤离一起**撤回**：有通道时 1 胜 2 负（T33、T34、T42），无通道时 4 胜 2 负（T35–T38、T40–T41） |
-| 3i. 恢复基线 | `fbe1a59` 代码加三项仅在失败时起作用的修复（`2ca9f89`），已在 Ancient Cistern 上得到验证 | 之后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留，然后再在 Babylon LE 上测试 |
+| 3i. 恢复基线 | `fbe1a59` 代码加三项仅在失败时起作用的修复（`2ca9f89`），已在 Ancient Cistern 上得到验证 | 之后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留，然后再在 Babylon LE 上测试。`5f1fcb7` 上 Babylon 1 负（T43） |
 | 4. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
 | 5. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
 
@@ -526,6 +530,8 @@ T41 在 Babylon 失利（29:37 手动停止，只剩 11 台 SCV 和 2 个基地�
 T42 是加入 Factory 通道后的第一局，在 Babylon 失利（25:17 手动停止）。它是前 20 分钟最强的 Babylon 对局：9:03 时 65 台 SCV、4 个基地，12:03 时 71 台 SCV、5 个基地，16:00 时 70 台 SCV、6 个基地、7 辆 Siege Tank、4 座 Factory，20:02 时满人口，63 台 SCV、6 个基地。可以看到 Siege Tank 轻松离开主基地，但后来仍有一些看似被卡住；18:00–18:22 时 11 辆坦克都未架起，20 个补给站全部降下，因此很可能是 Factory 周围的通道通向的空间仍被其他紧密排列的建筑包围。撤离从遭袭的基地移出了 22、17 和 21 台 SCV（9:02、16:50、22:13）。21:08 起 Zerg 用后期部队（23:21 时可见约 97 人口：4 只 Brood Lord、6 只 Ultralisk、10 只 Mutalisk，以及 Hydralisk、Roach、Corruptor 和 Infestor）在两分钟内拿下三个基地，SCV 到 25:04 从 63 台降到 18 台。
 
 Factory 通道和 SCV 撤离都已移除，Bot 代码回到已验证的基线 `2ca9f89`（202 项离线测试）。自 T37 以来每项改动都针对 Babylon，却没有一项在 Ancient Cistern 上打过，因此都没有证明能保住 Ancient Cistern 的战绩。今后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留。
+
+T43 是恢复基线后在 Babylon 加打的第一局，失利（28:08 手动停止）。它到 16:03 都在胜局的轨道上（满人口，101 就绪部队人口、67 台 SCV、6 个基地、17 辆 Siege Tank，未失去基地），之后在 16:29、17:49、19:54、22:35 和 25:15 相继失去基地，而部队却越来越大：25:05 时 152 就绪部队人口、34 辆 Siege Tank，只有 30 台 SCV 和 3 个基地。结束时部队为 23 辆 Siege Tank、11 个 Marine、6 个 Marauder 和 8 架 Medivac。生产偏向了 Siege Tank，它们行动慢、难以离开紧密排列的主基地，没有生化部队时也难以应对袭击，因此庞大的部队并没有保护好基地。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
