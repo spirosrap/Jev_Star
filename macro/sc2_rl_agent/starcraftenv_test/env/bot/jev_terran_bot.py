@@ -41,11 +41,11 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
-# During an attack: enemy supply at a base that recalls a far-away army, how far "far" is,
-# and how long attacking stays blocked afterwards.
-RECALL_THREAT_SUPPLY = 8
-RECALL_DISTANCE = 35
-RECALL_ATTACK_BLOCK = 30
+# When at least this much enemy supply attacks a base that our units there cannot match, its SCVs
+# go and mine at the safest base, and worker distribution leaves them alone for a while.
+EVACUATE_THREAT_SUPPLY = 4
+EVACUATE_RANGE = 12
+EVACUATE_SECONDS = 20
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
@@ -97,9 +97,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     contract = TERRAN
     stationary_army_types = frozenset({U.SIEGETANKSIEGED, U.WIDOWMINEBURROWED})
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
-                        "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
+                        "resume_unfinished_construction", "scv_evacuation_from_raids", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
-                        "recall_on_raid", "army_intent_execution", "tank_siege",
+                        "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
 
@@ -111,6 +111,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._rejected_spots = {}
         self._addon_blocked = {}
         self._gas_throttled = False
+        self._evacuated = {}
         self._lurker_seen = -1000
         self._last_scan = -1000
 
@@ -515,7 +516,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if not any(command.unit.type_id == U.SCV for command in self.actions):
             self._balance_gas()
             workers, gas_buildings = self.workers, self.gas_buildings
-            self.workers = workers.filter(lambda u: u.tag not in self._scouts)
+            self._evacuated = {tag: until for tag, until in self._evacuated.items() if until > self.time}
+            self.workers = workers.filter(lambda u: u.tag not in self._scouts and u.tag not in self._evacuated)
             if self._gas_throttled:
                 # Otherwise worker distribution refills the Refineries every second.
                 self.gas_buildings = gas_buildings.filter(lambda g: False)
@@ -527,7 +529,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         self._call_down_mules()
         self._resume_construction()
-        self._recall_to_defend()
+        self._evacuate_raided_bases()
         self._deploy_units()
         self._stim()
         # Before army orders, so units sent into a Bunker are not ordered elsewhere this frame.
@@ -536,6 +538,36 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    def _evacuate_raided_bases(self):
+        """Move SCVs away from a base that is being raided and not defended, so the economy survives."""
+        threats = self._threat_units()
+        bases = self.townhalls.ready
+        if not threats or bases.amount < 2:
+            return
+        army = self._combat_units()
+        for base in bases:
+            raid = threats.closer_than(EVACUATE_RANGE, base)
+            supply = sum(self.calculate_supply_cost(e.type_id) for e in raid)
+            defense = sum(self.calculate_supply_cost(u.type_id) for u in army.closer_than(EVACUATE_RANGE + 3, base))
+            if supply < EVACUATE_THREAT_SUPPLY or defense >= supply:
+                continue
+            safe = max(bases, key=lambda b: threats.closest_distance_to(b))
+            fields = self.mineral_field.closer_than(10, safe)
+            if safe.tag == base.tag or not fields:
+                continue
+            moved = 0
+            for worker in self.workers.closer_than(EVACUATE_RANGE, base):
+                if (worker.tag in self._scouts or worker.tag in self.unit_tags_received_action
+                        or worker.is_constructing_scv or worker.is_repairing):
+                    continue
+                worker.gather(fields.closest_to(safe))
+                self._evacuated[worker.tag] = self.time + EVACUATE_SECONDS
+                moved += 1
+            if moved:
+                self._action_stats["scvs_evacuated"] += moved
+                self.log("scvs_evacuated", game_loop=self.state.game_loop, base_tag=base.tag, to_base_tag=safe.tag,
+                         enemy_supply=supply, defense_supply=defense, workers=moved)
 
     def _balance_gas(self):
         """Move SCVs from gas to minerals while unspent gas piles up far beyond minerals."""
@@ -620,26 +652,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self._resume_orders[structure.tag] = self.time
                 self.log("construction_resumed", game_loop=self.state.game_loop, structure=structure.type_id.name,
                          structure_tag=structure.tag, worker_tag=worker.tag)
-
-    def _recall_to_defend(self):
-        """Bring an attacking army home when a base is raided behind it."""
-        if self.army_intent != "attack":
-            return
-        army = self._combat_units()
-        threats = self._threat_units()
-        if not army or not threats or not self.townhalls:
-            return
-        base = min(self.townhalls, key=lambda b: threats.closest_distance_to(b))
-        raid = threats.closer_than(20, base)
-        supply = sum(self.calculate_supply_cost(e.type_id) for e in raid)
-        if supply < RECALL_THREAT_SUPPLY or army.center.distance_to(base) < RECALL_DISTANCE:
-            return
-        self._set_army_intent("defend")
-        attack = self.contract.action_for("attack")
-        self.cooldowns[attack] = self.time + RECALL_ATTACK_BLOCK
-        self._action_stats["army_recalls"] += 1
-        self.log("army_recalled", game_loop=self.state.game_loop, base_tag=base.tag,
-                 enemy_supply=supply, army_distance=round(army.center.distance_to(base), 1))
 
     def _fast_micro(self):
         self._dodge_banelings()

@@ -391,31 +391,38 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         for point in self.bot._placement_candidates(U.SUPPLYDEPOT):
             self.assertFalse(abs(point.x - slot.x) < 2 and abs(point.y - slot.y) < 2, point)
 
-    def raid_world(self, raiders, army_at=(80, 80)):
+    def raid_on_natural(self, raiders, defenders=0):
         self.bot._initialize_navigation()
-        army = [FakeTerranUnit(100 + i, U.MARINE, army_at) for i in range(20)]
-        zerg = [FakeTerranUnit(300 + i, U.ZERGLING, (14, 12)) for i in range(raiders)]
+        natural = FakeTerranUnit(3, U.COMMANDCENTER, (40, 40))
+        miners = [FakeTerranUnit(10 + i, U.SCV, (42, 40)) for i in range(4)]
+        builder = FakeTerranUnit(20, U.SCV, (41, 41))
+        builder.is_constructing_scv = True
+        home = FakeTerranUnit(21, U.SCV, (12, 10))
+        army = [FakeTerranUnit(30 + i, U.MARINE, (41, 40)) for i in range(defenders)]
+        zerg = [FakeTerranUnit(50 + i, U.ZERGLING, (44, 40)) for i in range(raiders)]
         for z in zerg:
             z.can_attack = True
-        self.set_world([self.scv, *army], [self.cc], zerg)
-        self.bot.army_intent = "attack"
-        return army
+        self.set_world([*miners, builder, home, *army], [self.cc, natural], zerg)
+        self.bot.mineral_field = Units([FakeTerranUnit(90, U.MINERALFIELD, (5, 10))], self.bot)
+        return miners, builder, home
 
-    async def test_raid_behind_a_far_army_recalls_it(self):
-        army = self.raid_world(raiders=10)
-        self.bot._recall_to_defend()
-        self.assertEqual(self.bot.army_intent, "defend")
-        self.assertGreater(self.bot.cooldowns[66], self.bot.time)  # No immediate re-attack.
-        self.assertEqual(self.bot._action_stats["army_recalls"], 1)
+    async def test_scvs_leave_a_raided_undefended_base(self):
+        miners, builder, home = self.raid_on_natural(raiders=10)
+        self.bot._evacuate_raided_bases()
+        for worker in miners:
+            self.assertEqual(worker.gather.call_args.args[0].tag, 90)  # The main's minerals.
+            self.assertIn(worker.tag, self.bot._evacuated)
+        builder.gather.assert_not_called()
+        home.gather.assert_not_called()
+        self.assertEqual(self.bot._action_stats["scvs_evacuated"], 4)
 
-    async def test_small_raid_or_nearby_army_does_not_recall(self):
-        self.raid_world(raiders=3)
-        self.bot._recall_to_defend()
-        self.assertEqual(self.bot.army_intent, "attack")
-        self.raid_world(raiders=10, army_at=(20, 20))
-        self.bot._recall_to_defend()
-        self.assertEqual(self.bot.army_intent, "attack")
-
+    async def test_scvs_stay_when_the_raid_is_small_or_defended(self):
+        miners, _, _ = self.raid_on_natural(raiders=3)  # Below 4 supply (the fake world counts 1 per unit).
+        self.bot._evacuate_raided_bases()
+        miners[0].gather.assert_not_called()
+        miners, _, _ = self.raid_on_natural(raiders=10, defenders=10)
+        self.bot._evacuate_raided_bases()
+        miners[0].gather.assert_not_called()
 
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)
