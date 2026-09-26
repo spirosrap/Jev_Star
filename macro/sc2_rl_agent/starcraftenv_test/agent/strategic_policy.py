@@ -34,7 +34,8 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
     override = urgent_supply or urgent_defense
     # Minerals piling up means the plan is too narrow for the income; keep spending on the army.
     banked = ((action in contract.bank_override_actions and resource["mineral"] >= contract.bank_minerals)
-              or action in tech_due(contract, game_time, catalog))
+              or action in tech_due(contract, game_time, catalog)
+              or catalog.get(str(action), {}).get("recommended", False))
     if action in contract.spending_actions and not override:
         if action not in plan["allowed_spending_actions"] and not banked:
             return "plan_spending_not_allowed"

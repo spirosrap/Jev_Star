@@ -200,11 +200,17 @@ class TerranContractTests(unittest.TestCase):
 
     def test_tech_schedule_recommends_upgrades_on_time(self):
         catalog = terran_catalog()
-        self.assertEqual(tech_due(TERRAN, 300, catalog), ())
+        self.assertEqual(tech_due(TERRAN, 250, catalog), ())
+        self.assertEqual(tech_due(TERRAN, 300, catalog), (21,))  # Factory first.
         due = tech_due(TERRAN, 500, catalog)
-        self.assertEqual(due[:4], (20, 37, 40, 23))  # Engineering Bay, weapons 1, armor 1, Armory.
+        # Factory, Factory Tech Lab, Siege Tanks, Widow Mines, then Engineering Bay, upgrades, Armory.
+        self.assertEqual(due[:8], (21, 28, 7, 6, 20, 37, 40, 23))
         catalog["20"]["count_with_pending"] = 1  # Engineering Bay started: no longer due.
         self.assertNotIn(20, tech_due(TERRAN, 500, catalog))
+        catalog["7"]["count_with_pending"] = 1  # One Siege Tank of the two: still due.
+        self.assertIn(7, tech_due(TERRAN, 500, catalog))
+        catalog["7"]["count_with_pending"] = 2
+        self.assertNotIn(7, tech_due(TERRAN, 500, catalog))
         plan = terran_plan(reserve_for_action=None)
         choices = {1: "TRAIN MARINE", 20: "BUILD ENGINEERINGBAY", 23: "BUILD ARMORY"}
         self.assertEqual(primary_action(plan, choices, "defend", 5, contract=TERRAN, tech_due=(20, 23)),
@@ -711,6 +717,29 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(marine.commands[-1][0], "attack")
         self.bot.army_intent = "defend"
         self.assertEqual(self.bot._held_army_tags(), set())
+
+    async def test_deployed_tanks_and_mines_still_count(self):
+        units = [FakeTerranUnit(3, U.SIEGETANKSIEGED), FakeTerranUnit(4, U.SIEGETANK),
+                 FakeTerranUnit(5, U.WIDOWMINEBURROWED)]
+        self.set_world([self.scv, *units], [self.cc])
+        self.assertEqual(self.bot._count_with_pending(U.SIEGETANK), 2)
+        self.assertEqual(self.bot._count_with_pending(U.WIDOWMINE), 1)
+
+    async def test_planetary_fortress_goes_to_the_exposed_base_after_banelings(self):
+        main = self.cc
+        natural, third = FakeTerranUnit(3, U.COMMANDCENTER, (40, 40)), FakeTerranUnit(4, U.COMMANDCENTER, (70, 70))
+        self.set_world([self.scv], [main, natural, third])
+        catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
+        self.assertEqual(self.bot._conditional_tech(catalog), ())
+        self.bot._banelings_seen = True
+        self.assertEqual(self.bot._conditional_tech(catalog), (33,))
+        for cc in (main, natural, third):
+            self.abilities[cc.tag] = {A.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS, A.UPGRADETOORBITAL_ORBITALCOMMAND}
+        await self.bot._refresh_abilities()
+        self.assertIs(self.bot._morph_hosts(U.PLANETARYFORTRESS)[0], third)
+        self.assertIs(self.bot._morph_hosts(U.ORBITALCOMMAND)[0], main)
+        catalog["33"]["count_with_pending"] = 1
+        self.assertEqual(self.bot._conditional_tech(catalog), ())
 
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)

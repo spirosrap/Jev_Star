@@ -114,6 +114,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._addon_blocked = {}
         self._gas_throttled = False
         self._lurker_seen = -1000
+        self._banelings_seen = False
         self._last_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
@@ -130,7 +131,20 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             kinds = DEPOTS if kind == U.SUPPLYDEPOT else {kind}
             # Unfinished structures count even after losing their SCV.
             return self.structures.of_type(kinds).amount + self.worker_en_route_to_build(kind)
-        return self.units(kind).ready.amount + self.already_pending(kind)
+        # Deployed forms are the same unit for counting purposes.
+        forms = {U.SIEGETANK: {U.SIEGETANK, U.SIEGETANKSIEGED},
+                 U.WIDOWMINE: {U.WIDOWMINE, U.WIDOWMINEBURROWED},
+                 U.VIKINGFIGHTER: {U.VIKINGFIGHTER, U.VIKINGASSAULT},
+                 U.LIBERATOR: {U.LIBERATOR, U.LIBERATORAG}}.get(kind, {kind})
+        return self.units.of_type(forms).ready.amount + self.already_pending(kind)
+
+    def _conditional_tech(self, catalog):
+        """A Planetary Fortress at the third base once Banelings have been seen."""
+        pf = next(a for a, d in self.contract.actions.items() if d == "MORPH PLANETARYFORTRESS")
+        if (self._banelings_seen and self.townhalls.amount >= 3
+                and catalog.get(str(pf), {}).get("count_with_pending", 0) == 0):
+            return (pf,)
+        return ()
 
     def _ready_base_count(self):
         # A finished Orbital/Planetary morph reports build progress below 1 for a frame.
@@ -234,9 +248,12 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         return None
 
     def _morph_hosts(self, target, ignore_resources=False):
-        return [c for c in self.structures(U.COMMANDCENTER).ready
-                if c.is_idle and c.tag not in self.unit_tags_received_action
-                and self._has_ability(c, MORPHS[target], ignore_resources=ignore_resources)]
+        hosts = [c for c in self.structures(U.COMMANDCENTER).ready
+                 if c.is_idle and c.tag not in self.unit_tags_received_action
+                 and self._has_ability(c, MORPHS[target], ignore_resources=ignore_resources)]
+        # Orbitals at the safe main first; a Planetary Fortress on the most exposed base.
+        return sorted(hosts, key=lambda c: c.distance_to(self.start_location),
+                      reverse=target == U.PLANETARYFORTRESS)
 
     def _morph_reason(self, target, ignore_resources=False):
         if not ignore_resources and not self.can_afford(target):
@@ -631,6 +648,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         banelings = [e for e in self.enemy_units if e.type_id == U.BANELING and e.is_visible]
         if not banelings:
             return
+        self._banelings_seen = True
         builders = {w.tag for w in self.workers if w.is_constructing_scv or w.is_repairing}
         dodgers = list(self.units(U.MARINE).ready) + [w for w in self.workers
                                                         if w.tag not in builders and w.tag not in self._scouts]

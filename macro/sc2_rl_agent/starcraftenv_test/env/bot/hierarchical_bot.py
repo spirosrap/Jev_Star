@@ -99,7 +99,10 @@ class HierarchicalMixin:
             catalog[str(action)]["reservation_blocked"] = self._reservation_reason(action)
             if action_kind == "research":
                 catalog[str(action)]["exists_in_game_version"] = data is not None and data.research_ability is not None
+        for action in self._conditional_tech(catalog):
+            catalog[str(action)]["recommended"] = True
         return catalog
+
 
     def _strategy_snapshot(self):
         state = super()._snapshot()
@@ -185,7 +188,7 @@ class HierarchicalMixin:
                                          acknowledged_actions={key[1] for key in self._acknowledged_priorities},
                                          contract=self.contract, minerals=resource["mineral"],
                                          supply_used=resource["supply_used"],
-                                         tech_due=tech_due(self.contract, self.time, catalog))
+                                         tech_due=self._conditional_tech(catalog) + tech_due(self.contract, self.time, catalog))
         if action is not None:
             key = (plan["plan_id"], action)
             previous = self._execution_directive

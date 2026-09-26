@@ -43,7 +43,7 @@ class RaceContract:
     min_attack_army: int = 0
     # A lower floor that applies once total supply reaches 190 (a maxed army); 0 keeps min_attack_army.
     maxed_attack_army: int = 0
-    # (game seconds, action): buildings and upgrades recommended from that time until started once.
+    # (game seconds, action[, count]): recommended from that time until this many exist or are pending.
     tech_schedule: tuple = ()
     # Under a defend plan, do not retreat from an attacked base while the army is above the plan's retreat threshold.
     hold_defense: bool = False
@@ -143,12 +143,15 @@ def _terran():
         bank_override_actions=frozenset(ids[n] for n in (
             "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")),
         supply_reserve=True, min_attack_army=40, bank_minerals=600, hold_defense=True,
-        tech_schedule=tuple((t, ids[n]) for t, n in (
-            (390, "BUILD ENGINEERINGBAY"),
-            (420, "RESEARCH TERRANINFANTRYWEAPONSLEVEL1"), (420, "RESEARCH TERRANINFANTRYARMORSLEVEL1"),
-            (480, "BUILD ARMORY"),
-            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL2"), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL2"),
-            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL3"), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL3"))),
+        tech_schedule=tuple((t, ids[n], c) for t, n, c in (
+            # Anti-Baneling defense first: sieged Tanks and Widow Mines hold the mid-game attack.
+            (300, "BUILD FACTORY", 1), (330, "ADDON FACTORYTECHLAB", 1),
+            (390, "TRAIN SIEGETANK", 2), (420, "TRAIN WIDOWMINE", 4),
+            (390, "BUILD ENGINEERINGBAY", 1),
+            (420, "RESEARCH TERRANINFANTRYWEAPONSLEVEL1", 1), (420, "RESEARCH TERRANINFANTRYARMORSLEVEL1", 1),
+            (480, "BUILD ARMORY", 1),
+            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL2", 1), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL2", 1),
+            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL3", 1), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL3", 1))),
         bank_spend_actions=(ids["BUILD BARRACKS"],))
 
 
@@ -168,9 +171,14 @@ MAXED_SUPPLY = 190
 
 
 def tech_due(contract, game_time, catalog):
-    """Scheduled buildings and upgrades whose time has come and that were never started."""
-    return tuple(action for t, action in contract.tech_schedule
-                 if game_time >= t and catalog.get(str(action), {}).get("count_with_pending", 0) == 0)
+    """Scheduled units, buildings and upgrades whose time has come and that are still short."""
+    due = []
+    for entry in contract.tech_schedule:
+        time_due, action = entry[0], entry[1]
+        target = entry[2] if len(entry) > 2 else 1
+        if game_time >= time_due and catalog.get(str(action), {}).get("count_with_pending", 0) < target:
+            due.append(action)
+    return tuple(due)
 
 
 def attack_floor(contract, plan_threshold, supply_used=0):

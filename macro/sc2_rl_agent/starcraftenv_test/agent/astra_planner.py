@@ -226,6 +226,9 @@ enemy supply raids a base while the army is far away, local code brings the army
 blocks attacking for 30 seconds. An Engineering Bay (from 6:30), Infantry Weapons and Armor
 (from 7:00) and an Armory with level 2-3 upgrades (from 8:00) are recommended to Jev on that
 schedule even if the plan omits them; include them in the plan and keep gas for them.
+Against Zerg the schedule also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by
+6:30 and four Widow Mines by 7:00 (sieged Tanks and Mines kill Banelings before they reach the
+Marines), and, once Banelings are seen and a third base exists, a Planetary Fortress there.
 """
 
 

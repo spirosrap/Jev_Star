@@ -109,6 +109,10 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
     def _ready_base_count(self):
         return self.townhalls.ready.amount
 
+    def _conditional_tech(self, catalog):
+        """Purchases a race recommends when the game situation calls for them (beyond the timed schedule)."""
+        return ()
+
     def _ability_query_units(self):
         """Units other than structures and one builder whose abilities decide legality."""
         return []
