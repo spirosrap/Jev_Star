@@ -12,7 +12,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 
 from ...agent.astra_planner import StrategicPlanner
-from ...agent.macro_contract import SPENDING_KINDS, primary_action, tech_due
+from ...agent.macro_contract import SPENDING_KINDS, primary_action
 from ...agent.strategic_policy import plan_progress, policy_reason
 
 
@@ -97,15 +97,9 @@ class HierarchicalMixin:
                                     "production_alternatives": requirements,
                                     "last_legality_rejection": self._last_legal_blocked.get(str(action))}
             catalog[str(action)]["reservation_blocked"] = self._reservation_reason(action)
-            if action_kind == "train" and contract.supply_reserve:
-                # Races that reserve supply (Terran) also keep it free for due counter units.
-                catalog[str(action)]["supply"] = self.calculate_supply_cost(U[contract.kind_name(action)])
             if action_kind == "research":
                 catalog[str(action)]["exists_in_game_version"] = data is not None and data.research_ability is not None
-        for action in self._conditional_tech(catalog):
-            catalog[str(action)]["recommended"] = True
         return catalog
-
 
     def _strategy_snapshot(self):
         state = super()._snapshot()
@@ -114,9 +108,6 @@ class HierarchicalMixin:
             state["attack_rule"] = {
                 "min_ready_army_supply": self.contract.min_attack_army,
                 "min_ready_army_supply_at_190_supply": self.contract.maxed_attack_army or self.contract.min_attack_army,
-                **({"min_ready_army_supply_before_game_seconds": {
-                    "seconds": self.contract.early_attack_seconds, "supply": self.contract.early_attack_army}}
-                   if self.contract.early_attack_army else {}),
                 "note": "No attack starts below this, whatever attack_min_army says; set attack_min_army at or above it."}
         score = self.state.score
         state["strategic_metrics"] = {
@@ -193,9 +184,7 @@ class HierarchicalMixin:
                                          target_changed=self._planned_target() != self._army_target_id,
                                          acknowledged_actions={key[1] for key in self._acknowledged_priorities},
                                          contract=self.contract, minerals=resource["mineral"],
-                                         supply_used=resource["supply_used"],
-                                         tech_due=self._conditional_tech(catalog) + tech_due(self.contract, self.time, catalog),
-                                         game_time=self.time)
+                                         supply_used=resource["supply_used"])
         if action is not None:
             key = (plan["plan_id"], action)
             previous = self._execution_directive

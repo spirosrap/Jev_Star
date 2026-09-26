@@ -218,25 +218,9 @@ retreating abandons that base. Under a defend plan, retreat is refused while a b
 and ready army supply is at least retreat_below_army. Against Lurkers, keep a Raven with the
 army or leave Orbital energy for scans. Attack once Stimpack is done and the army clearly outnumbers
 what has been seen. No attack starts below state.attack_rule (40 ready army supply normally,
-90 against the cheating AIs until 190 supply, and 120 before 12:00 unless supply is maxed); a small
-early attack that dies leaves the bases undefended. A retreat gives move orders, so the army does
-not shoot back; local code turns any retreat into defense after 8 seconds and refuses retreat for
-20 seconds, so prefer MULTI-DEFEND when enemies are close. Against the cheating AIs, defend behind the Bunker and sieged Tanks and keep
+90 against the cheating AIs until 190 supply); a small early attack that dies leaves the bases
+undefended. Against the cheating AIs, defend behind the Bunker and sieged Tanks and keep
 expanding until that size is reached, then attack with Tanks, Medivacs and bio together.
-During an attack the two Siege Tanks nearest the exposed base stay home, and if 8 or more
-enemy supply raids a base while the army is far away, local code brings the army home and
-blocks attacking for 30 seconds. An Engineering Bay (from 6:30), Infantry Weapons and Armor
-(from 7:00) and an Armory with level 2-3 upgrades (from 8:00) are recommended to Jev on that
-schedule even if the plan omits them; include them in the plan and keep gas for them.
-Against Zerg the schedule also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by
-6:30 and four Widow Mines by 7:00 (sieged Tanks and Mines kill Banelings before they reach the
-Marines), and, once Banelings are seen and a third base exists, a Planetary Fortress there.
-Games against the cheating AIs are lost after about 20 minutes to Brood Lords, Ultralisks,
-Mutalisks, Infestors and Vipers, not to the early army. Seen late-game units make counters
-recommended automatically: Vikings (two per Brood Lord, one per Corruptor) with a second
-Starport, Thors (one per four Mutalisks) with a Factory Tech Lab, and Marauders (three per
-Ultralisk) with Barracks Tech Labs; while one is due, other army production keeps its money and
-supply free. Plan for these counters (and vehicle/ship upgrades) instead of more Marines late.
 """
 
 

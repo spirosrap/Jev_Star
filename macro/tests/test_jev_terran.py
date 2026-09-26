@@ -19,7 +19,7 @@ from sc2.units import Units
 import test_jev_protoss as support
 from sc2_rl_agent.starcraftenv_test.agent.astra_planner import PlannerError, plan_schema, validate_plan
 from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, TERRAN_INSTRUCTIONS
-from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action, tech_due
+from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import policy_reason
 from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_terran_bot import HierarchicalTerranBot
 from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import JevTerranBot
@@ -124,35 +124,6 @@ class TerranContractTests(unittest.TestCase):
         # Protoss keeps following the plan strictly.
         self.assertEqual(PROTOSS.bank_override_actions, frozenset())
 
-    def test_due_tech_keeps_its_money(self):
-        plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 16, 18, 19, 26, 34])
-        catalog = terran_catalog()
-        catalog["0"]["count_with_pending"] = 10
-        catalog["10"].update(cost={"minerals": 150, "gas": 75}, recommended=True)  # Vikings.
-        catalog["1"]["cost"] = {"minerals": 50, "gas": 0}
-        catalog["26"]["cost"] = {"minerals": 50, "gas": 50}
-        args = lambda m, g: (plan, catalog, resource(mineral=m, gas=g, supply_left=20, needs_supply=False),
-                             "defend", 0, 100, False)
-        self.assertEqual(policy_reason(1, *args(180, 100), contract=TERRAN), "scheduled_tech_reservation")
-        self.assertEqual(policy_reason(26, *args(400, 100), contract=TERRAN), "scheduled_tech_reservation")
-        self.assertIsNone(policy_reason(1, *args(250, 100), contract=TERRAN))
-        self.assertIsNone(policy_reason(10, *args(180, 100), contract=TERRAN))
-        self.assertIsNone(policy_reason(0, *args(100, 0), contract=TERRAN))  # Workers and depots go on.
-        catalog["10"]["reservation_blocked"] = "no_ready_producer_with_available_ability"
-        self.assertIsNone(policy_reason(1, *args(180, 100), contract=TERRAN))
-
-    def test_due_counter_unit_keeps_supply_free(self):
-        plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 2, 10, 16, 18, 19, 26, 34])
-        catalog = terran_catalog()
-        catalog["0"]["count_with_pending"] = 10
-        catalog["10"].update(cost={"minerals": 150, "gas": 75}, recommended=True, supply=2)
-        catalog["1"].update(cost={"minerals": 50, "gas": 0}, supply=1)
-        args = lambda left: (plan, catalog, resource(mineral=2000, gas=1000, supply_left=left, supply_cap=200,
-                                                     needs_supply=False), "defend", 0, 100, False)
-        self.assertEqual(policy_reason(1, *args(2), contract=TERRAN), "scheduled_supply_reservation")
-        self.assertIsNone(policy_reason(1, *args(3), contract=TERRAN))
-        self.assertIsNone(policy_reason(10, *args(2), contract=TERRAN))
-
     def test_supply_reserve_keeps_money_for_a_needed_depot(self):
         plan = terran_plan(reserve_for_action=None, allowed_spending_actions=[0, 1, 16, 18, 19, 26, 34])
         catalog = terran_catalog()
@@ -227,38 +198,6 @@ class TerranContractTests(unittest.TestCase):
                 "sc2_rl_agent.starcraftenv_test.agent.astra_planner.find_codex", return_value=Path("codex")):
             client = CodexPlannerClient(tmp, contract=cheat)
         self.assertIs(client.instructions, TERRAN_PLANNER_INSTRUCTIONS)
-
-    def test_tech_schedule_recommends_upgrades_on_time(self):
-        catalog = terran_catalog()
-        self.assertEqual(tech_due(TERRAN, 250, catalog), ())
-        self.assertEqual(tech_due(TERRAN, 300, catalog), (21,))  # Factory first.
-        due = tech_due(TERRAN, 500, catalog)
-        # Factory, Factory Tech Lab, Siege Tanks, Widow Mines, then Engineering Bay, upgrades, Armory.
-        self.assertEqual(due[:8], (21, 28, 7, 6, 20, 37, 40, 23))
-        catalog["20"]["count_with_pending"] = 1  # Engineering Bay started: no longer due.
-        self.assertNotIn(20, tech_due(TERRAN, 500, catalog))
-        catalog["7"]["count_with_pending"] = 1  # One Siege Tank of the two: still due.
-        self.assertIn(7, tech_due(TERRAN, 500, catalog))
-        catalog["7"]["count_with_pending"] = 2
-        self.assertNotIn(7, tech_due(TERRAN, 500, catalog))
-        plan = terran_plan(reserve_for_action=None)
-        choices = {1: "TRAIN MARINE", 20: "BUILD ENGINEERINGBAY", 23: "BUILD ARMORY"}
-        self.assertEqual(primary_action(plan, choices, "defend", 5, contract=TERRAN, tech_due=(20, 23)),
-                         (20, "tech_schedule"))
-        # The commander's own priority still comes first.
-        self.assertEqual(primary_action(terran_plan(priority_action=1, reserve_for_action=None), choices,
-                                        "defend", 5, contract=TERRAN, tech_due=(20,))[0], 1)
-        self.assertEqual(PROTOSS.tech_schedule, ())
-
-    def test_scheduled_tech_is_allowed_beyond_the_plan(self):
-        plan = terran_plan(reserve_for_action=None)  # Engineering Bay (20) is not in the plan.
-        catalog = terran_catalog()
-        early = (plan, catalog, resource(mineral=200), "defend", 0, 300, False)
-        late = (plan, catalog, resource(mineral=200), "defend", 0, 400, False)
-        self.assertEqual(policy_reason(20, *early, contract=TERRAN), "plan_spending_not_allowed")
-        self.assertIsNone(policy_reason(20, *late, contract=TERRAN))
-        catalog["20"]["count_with_pending"] = 1
-        self.assertEqual(policy_reason(20, *late, contract=TERRAN), "plan_spending_not_allowed")
 
     def test_attack_needs_forty_ready_army_supply(self):
         plan = terran_plan(army_posture="attack", attack_min_army=28, reserve_for_action=None)
@@ -452,6 +391,28 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         for point in self.bot._placement_candidates(U.SUPPLYDEPOT):
             self.assertFalse(abs(point.x - slot.x) < 2 and abs(point.y - slot.y) < 2, point)
 
+    async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
+        armory = FakeTerranUnit(5, U.ARMORY)
+        armory.is_idle = True
+        self.set_world([self.scv], [self.cc, armory])
+        self.bot._producers = [armory]
+        upgrade = UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1
+        specific = RESEARCH_INFO[U.ARMORY][upgrade]["ability"]
+        self.bot.game_data = SimpleNamespace(abilities={specific.value: SimpleNamespace(id=A.RESEARCH_TERRANVEHICLEANDSHIPPLATING)},
+                                             upgrades={})
+        self.bot._abilities = {armory.tag: {A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
+        self.bot._research_one(40, upgrade)
+        self.assertEqual(armory.commands, [(A.RESEARCH_TERRANVEHICLEANDSHIPPLATING, None)])
+        # The running game's own research ability comes first when the unit offers it.
+        armory.commands.clear()
+        own = SimpleNamespace(exact_id=A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
+                              id=A.RESEARCH_TERRANVEHICLEANDSHIPPLATING)
+        self.bot.game_data.upgrades = {upgrade.value: SimpleNamespace(research_ability=own)}
+        self.bot._abilities = {armory.tag: {A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
+                                            A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
+        self.bot._research_one(40, upgrade)
+        self.assertEqual(armory.commands, [(A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1, None)])
+
     async def test_new_buildings_leave_a_lane_for_tanks(self):
         self.use_open_grid()
         rax = FakeTerranUnit(3, U.BARRACKS, (20.5, 20.5))
@@ -539,33 +500,18 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.set_world([self.scv, to_gas, carrying], [self.cc, refinery])
         self.assertIs(self.bot._builder(Point2((40, 38))), self.scv)
 
-    async def test_marines_shoot_banelings_and_step_away_while_reloading(self):
+    async def test_marines_and_miners_step_away_from_banelings(self):
         baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
-        ready, reloading = FakeTerranUnit(3, U.MARINE, (24, 20)), FakeTerranUnit(7, U.MARINE, (22, 20))
-        on_top, far = FakeTerranUnit(8, U.MARINE, (21, 20)), FakeTerranUnit(4, U.MARINE, (40, 20))
-        reloading.weapon_cooldown = 5
-        self.set_world([ready, reloading, on_top, far], [self.cc], [baneling])
-        self.bot._fast_micro()
-        self.assertEqual(ready.commands, [("attack", baneling)])
-        for unit in (reloading, on_top):
-            (kind, target), = unit.commands
-            self.assertEqual(kind, "move")
-            self.assertGreater(target.distance_to(baneling.position), unit.distance_to(baneling))
-        self.assertEqual(far.commands, [])
-        # No repeated order while already shooting at that Baneling.
-        ready.order_target = baneling.tag
-        ready.commands.clear()
-        self.bot.unit_tags_received_action = set()
-        self.bot._dodge_banelings()
-        self.assertEqual(ready.commands, [])
-
-    async def test_miners_step_away_from_banelings(self):
-        baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
+        near, far = FakeTerranUnit(3, U.MARINE, (22, 20)), FakeTerranUnit(4, U.MARINE, (40, 20))
         miner = FakeTerranUnit(5, U.SCV, (20, 23))
         builder = FakeTerranUnit(6, U.SCV, (19, 20))
         builder.is_constructing_scv = True
-        self.set_world([miner, builder], [self.cc], [baneling])
+        self.set_world([near, far, miner, builder], [self.cc], [baneling])
         self.bot._fast_micro()
+        (kind, target), = near.commands
+        self.assertEqual(kind, "move")
+        self.assertGreater(target.distance_to(baneling.position), near.distance_to(baneling))
+        self.assertEqual(far.commands, [])
         self.assertEqual(miner.commands[0][0], "move")
         self.assertGreater(miner.commands[0][1].distance_to(baneling.position), miner.distance_to(baneling))
         self.assertEqual(builder.commands, [])
@@ -573,7 +519,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_neighbouring_marines_spread_to_different_sides(self):
         baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
         a, b = FakeTerranUnit(3, U.MARINE, (23, 20)), FakeTerranUnit(4, U.MARINE, (23, 20))
-        a.weapon_cooldown = b.weapon_cooldown = 5
         self.set_world([a, b], [self.cc], [baneling])
         self.bot._fast_micro()
         self.assertNotEqual(a.commands[0][1].y, b.commands[0][1].y)
@@ -743,247 +688,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.supply_used = 195
         self.assertIsNone(self.bot._posture_reason("attack"))
 
-    def raid_world(self, raiders, army_at=(80, 80)):
-        self.bot._initialize_navigation()
-        army = [FakeTerranUnit(100 + i, U.MARINE, army_at) for i in range(20)]
-        zerg = [FakeTerranUnit(300 + i, U.ZERGLING, (14, 12)) for i in range(raiders)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([self.scv, *army], [self.cc], zerg)
-        self.bot.army_intent = "attack"
-        return army
-
-    async def test_raid_behind_a_far_army_recalls_it(self):
-        army = self.raid_world(raiders=10)
-        self.bot._recall_to_defend()
-        self.assertEqual(self.bot.army_intent, "defend")
-        self.assertGreater(self.bot.cooldowns[66], self.bot.time)  # No immediate re-attack.
-        self.assertEqual(self.bot._action_stats["army_recalls"], 1)
-
-    async def test_small_raid_or_nearby_army_does_not_recall(self):
-        self.raid_world(raiders=3)
-        self.bot._recall_to_defend()
-        self.assertEqual(self.bot.army_intent, "attack")
-        self.raid_world(raiders=10, army_at=(20, 20))
-        self.bot._recall_to_defend()
-        self.assertEqual(self.bot.army_intent, "attack")
-
-    def battle_world(self, ours, theirs, lost_from=None):
-        self.bot._initialize_navigation()
-        army = [FakeTerranUnit(100 + i, U.MARINE, (60, 60)) for i in range(ours)]
-        zerg = [FakeTerranUnit(300 + i, U.ROACH, (66, 60)) for i in range(theirs)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([self.scv, *army], [self.cc], zerg)
-        self.bot.army_intent = "attack"
-        if lost_from is not None:
-            self.bot._attack_peak = lost_from
-        return army
-
-    async def test_attack_into_a_much_bigger_army_pulls_back_then_defends(self):
-        army = self.battle_world(ours=20, theirs=30)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "retreat")
-        self.assertEqual(army[0].commands[-1][0], "move")
-        self.assertGreater(self.bot.cooldowns[66], self.bot.time + 30)
-        self.assertEqual(self.bot._action_stats["army_disengages"], 1)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "retreat")  # Still moving away.
-        self.bot.state.game_loop += 9 * 22.4
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "defend")
-
-    async def test_even_fight_continues_unless_it_already_cost_much_of_the_army(self):
-        self.battle_world(ours=20, theirs=22)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "attack")
-        self.battle_world(ours=20, theirs=22, lost_from=40)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "retreat")
-        # A small enemy group never triggers it, and a winning fight goes on.
-        self.battle_world(ours=5, theirs=8, lost_from=40)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "attack")
-        self.battle_world(ours=30, theirs=15, lost_from=40)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "attack")
-
-    async def test_mutalisks_and_ultralisks_call_for_thors_and_marauders(self):
-        catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
-        zerg = [FakeTerranUnit(300 + i, U.MUTALISK, (60, 60)) for i in range(9)]
-        zerg += [FakeTerranUnit(320 + i, U.ULTRALISK, (60, 60)) for i in range(4)]
-        self.set_world([self.scv], [self.cc], zerg)
-        self.bot._track_enemy_tech()
-        # Thors (3 for 9 Mutalisks) with a Factory Tech Lab; 12 Marauders with two Barracks Tech Labs.
-        self.assertEqual(set(self.bot._conditional_tech(catalog)), {9, 28, 2, 26})
-        catalog["9"]["count_with_pending"] = 3
-        catalog["28"]["count_with_pending"] = 1
-        catalog["2"]["count_with_pending"] = 12
-        catalog["26"]["count_with_pending"] = 2
-        self.assertEqual(self.bot._conditional_tech(catalog), ())
-        # Fewer seen later does not lower the target while they are remembered.
-        self.set_world([self.scv], [self.cc], zerg[:2])
-        self.bot._track_enemy_tech()
-        self.assertEqual(self.bot._recent_enemy_tech(), {"MUTALISK": 9, "ULTRALISK": 4})
-
-    async def test_fight_is_measured_where_the_army_meets_the_enemy(self):
-        # Half the army fights evenly far from the other half: the army's center is empty ground.
-        self.bot._initialize_navigation()
-        front = [FakeTerranUnit(100 + i, U.MARINE, (80, 60)) for i in range(20)]
-        rear = [FakeTerranUnit(200 + i, U.MARINE, (40, 60)) for i in range(20)]
-        zerg = [FakeTerranUnit(300 + i, U.ROACH, (86, 60)) for i in range(22)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([self.scv, *front, *rear], [self.cc], zerg)
-        self.bot.army_intent = "attack"
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "attack")
-        # Only the front half meets 35 Roaches: pull back.
-        zerg += [FakeTerranUnit(400 + i, U.ROACH, (86, 62)) for i in range(13)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([self.scv, *front, *rear], [self.cc], zerg)
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "retreat")
-
-    async def test_a_skirmish_at_the_front_does_not_pull_back_the_army(self):
-        self.bot._initialize_navigation()
-        scouts = [FakeTerranUnit(100 + i, U.MARINE, (80, 60)) for i in range(3)]
-        main = [FakeTerranUnit(200 + i, U.MARINE, (40, 60)) for i in range(40)]
-        zerg = [FakeTerranUnit(300 + i, U.ROACH, (86, 60)) for i in range(15)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([self.scv, *scouts, *main], [self.cc], zerg)
-        self.bot.army_intent = "attack"
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "attack")
-        # After heavy losses in the attack the same picture does pull back.
-        self.bot._attack_peak = 80
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "retreat")
-
-    async def test_a_retreat_turns_into_defense_after_a_few_seconds(self):
-        self.bot._initialize_navigation()
-        army = [FakeTerranUnit(100 + i, U.MARINE, (60, 60)) for i in range(10)]
-        self.set_world([self.scv, *army], [self.cc])
-        self.bot._set_army_intent("retreat")
-        self.bot._limit_retreat()
-        self.assertEqual(self.bot.army_intent, "retreat")
-        self.bot.state.game_loop += 5 * 22.4
-        self.bot._limit_retreat()
-        self.assertEqual(self.bot.army_intent, "retreat")
-        self.bot.state.game_loop += 4 * 22.4
-        self.bot._limit_retreat()
-        self.assertEqual(self.bot.army_intent, "defend")
-        self.assertEqual(army[0].commands[-1][0], "attack")  # Fights back at home.
-        self.assertGreater(self.bot.cooldowns[67], self.bot.time + 10)
-        self.assertEqual(self.bot._action_stats["retreats_ended"], 1)
-
-    async def test_early_unmaxed_attack_needs_a_bigger_army(self):
-        import dataclasses
-        self.bot.contract = dataclasses.replace(TERRAN, min_attack_army=90, maxed_attack_army=60,
-                                                early_attack_army=120, early_attack_seconds=720)
-        marines = [FakeTerranUnit(10 + i, U.MARINE, (30, 30)) for i in range(100)]
-        self.set_world([self.scv, *marines], [self.cc])
-        self.bot.supply_used = 175
-        self.bot.state.game_loop = 600 * 22.4
-        self.assertEqual(self.bot._posture_reason("attack"), "need_army_or_already_attacking")
-        self.bot.supply_used = 195  # Maxed: the maxed floor applies even early.
-        self.assertIsNone(self.bot._posture_reason("attack"))
-        self.bot.supply_used = 175
-        self.bot.state.game_loop = 730 * 22.4
-        self.assertIsNone(self.bot._posture_reason("attack"))
-
-    async def test_enemies_at_our_bases_are_left_to_the_recall(self):
-        self.bot._initialize_navigation()
-        army = [FakeTerranUnit(100 + i, U.MARINE, (16, 10)) for i in range(5)]
-        zerg = [FakeTerranUnit(300 + i, U.ROACH, (12, 12)) for i in range(20)]
-        for z in zerg:
-            z.can_attack = True
-        self.set_world([self.scv, *army], [self.cc], zerg)
-        self.bot.army_intent = "attack"
-        self.bot._disengage()
-        self.assertEqual(self.bot.army_intent, "attack")
-
-    async def test_bio_waits_for_the_tanks_unless_fighting(self):
-        self.bot._initialize_navigation()
-        guard = [FakeTerranUnit(400 + i, U.SIEGETANK, (12 + i, 12)) for i in range(2)]
-        tank = FakeTerranUnit(410, U.SIEGETANK, (50, 50))
-        ahead, beside = FakeTerranUnit(420, U.MARINE, (68, 68)), FakeTerranUnit(421, U.MARINE, (52, 52))
-        fighting = FakeTerranUnit(422, U.MARINE, (78, 78))
-        ling = FakeTerranUnit(300, U.ZERGLING, (82, 80))
-        ling.can_attack = True
-        self.set_world([self.scv, *guard, tank, ahead, beside, fighting], [self.cc], [ling])
-        self.bot.army_intent = "attack"
-        self.bot._army_destination = Point2((90, 90))
-        self.bot._wait_for_tanks()
-        (kind, target), = ahead.commands
-        self.assertEqual(kind, "move")
-        self.assertLess(target.distance_to(tank.position), 3)
-        self.assertEqual(beside.commands, [])
-        self.assertEqual(fighting.commands, [])
-        self.bot.army_intent = "defend"
-        ahead.commands.clear()
-        self.bot._wait_for_tanks()
-        self.assertEqual(ahead.commands, [])
-
-    async def test_brood_lords_call_for_vikings_and_a_starport(self):
-        catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
-        self.assertEqual(self.bot._conditional_tech(catalog), ())
-        lords = [FakeTerranUnit(300 + i, U.BROODLORD, (60, 60)) for i in range(3)]
-        self.set_world([self.scv], [self.cc], lords)
-        self.bot._track_enemy_tech()
-        self.assertEqual(self.bot._recent_enemy_tech(), {"BROODLORD": 3})
-        self.assertEqual(set(self.bot._conditional_tech(catalog)), {10, 22})  # Vikings, Starport.
-        catalog["22"]["count_with_pending"] = 1
-        self.assertEqual(self.bot._conditional_tech(catalog), (10, 22))  # Six Vikings want a second Starport.
-        catalog["22"]["count_with_pending"] = 2
-        self.assertEqual(self.bot._conditional_tech(catalog), (10,))
-        catalog["10"]["count_with_pending"] = 6
-        self.assertEqual(self.bot._conditional_tech(catalog), ())
-        catalog["10"]["count_with_pending"] = 2
-        self.bot.state.game_loop += 200 * 22.4  # Not seen for a long time.
-        self.assertEqual(self.bot._conditional_tech(catalog), ())
-
-    async def test_two_tanks_stay_home_during_an_attack(self):
-        self.bot._initialize_navigation()
-        near = [FakeTerranUnit(400 + i, U.SIEGETANK, (30 + i, 30)) for i in range(2)]
-        far = FakeTerranUnit(410, U.SIEGETANK, (60, 60))
-        marine = FakeTerranUnit(420, U.MARINE, (30, 30))
-        self.set_world([self.scv, *near, far, marine], [self.cc])
-        self.bot._known_enemy_buildings = {1: {"id": "enemy_1", "type": "HATCHERY", "position": [90, 90], "last_seen": 0}}
-        self.bot.army_intent = "attack"
-        self.bot._issue_army_intent()
-        for tank in near:
-            self.assertEqual(tank.commands[-1][0], "move")  # Back to the base, not to the enemy.
-        self.assertEqual(far.commands[-1][0], "attack")
-        self.assertEqual(marine.commands[-1][0], "attack")
-        self.bot.army_intent = "defend"
-        self.assertEqual(self.bot._held_army_tags(), set())
-
-    async def test_deployed_tanks_and_mines_still_count(self):
-        units = [FakeTerranUnit(3, U.SIEGETANKSIEGED), FakeTerranUnit(4, U.SIEGETANK),
-                 FakeTerranUnit(5, U.WIDOWMINEBURROWED)]
-        self.set_world([self.scv, *units], [self.cc])
-        self.assertEqual(self.bot._count_with_pending(U.SIEGETANK), 2)
-        self.assertEqual(self.bot._count_with_pending(U.WIDOWMINE), 1)
-
-    async def test_planetary_fortress_goes_to_the_exposed_base_after_banelings(self):
-        main = self.cc
-        natural, third = FakeTerranUnit(3, U.COMMANDCENTER, (40, 40)), FakeTerranUnit(4, U.COMMANDCENTER, (70, 70))
-        self.set_world([self.scv], [main, natural, third])
-        catalog = {str(a): {"count_with_pending": 0} for a in TERRAN.actions}
-        self.assertEqual(self.bot._conditional_tech(catalog), ())
-        self.bot._banelings_seen = True
-        self.assertEqual(self.bot._conditional_tech(catalog), (33,))
-        for cc in (main, natural, third):
-            self.abilities[cc.tag] = {A.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS, A.UPGRADETOORBITAL_ORBITALCOMMAND}
-        await self.bot._refresh_abilities()
-        self.assertIs(self.bot._morph_hosts(U.PLANETARYFORTRESS)[0], third)
-        self.assertIs(self.bot._morph_hosts(U.ORBITALCOMMAND)[0], main)
-        catalog["33"]["count_with_pending"] = 1
-        self.assertEqual(self.bot._conditional_tech(catalog), ())
-
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)
         choices, _ = await self.bot.available_actions()
@@ -1042,28 +746,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.set_world([self.scv], [orbital])
         self.bot._call_down_mules()
         self.assertEqual(orbital.commands, [(A.CALLDOWNMULE_CALLDOWNMULE, rich)])
-
-    async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
-        armory = FakeTerranUnit(5, U.ARMORY)
-        armory.is_idle = True
-        self.set_world([self.scv], [self.cc, armory])
-        self.bot._producers = [armory]
-        upgrade = UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1
-        specific = RESEARCH_INFO[U.ARMORY][upgrade]["ability"]
-        self.bot.game_data = SimpleNamespace(abilities={specific.value: SimpleNamespace(id=A.RESEARCH_TERRANVEHICLEANDSHIPPLATING)},
-                                             upgrades={})
-        self.bot._abilities = {armory.tag: {A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
-        self.bot._research_one(40, upgrade)
-        self.assertEqual(armory.commands, [(A.RESEARCH_TERRANVEHICLEANDSHIPPLATING, None)])
-        # The running game's own research ability comes first when the unit offers it.
-        armory.commands.clear()
-        own = SimpleNamespace(exact_id=A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
-                              id=A.RESEARCH_TERRANVEHICLEANDSHIPPLATING)
-        self.bot.game_data.upgrades = {upgrade.value: SimpleNamespace(research_ability=own)}
-        self.bot._abilities = {armory.tag: {A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
-                                            A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
-        self.bot._research_one(40, upgrade)
-        self.assertEqual(armory.commands, [(A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1, None)])
 
     async def test_stim_only_when_researched_and_in_combat(self):
         marine = FakeTerranUnit(3, U.MARINE, (20, 20))

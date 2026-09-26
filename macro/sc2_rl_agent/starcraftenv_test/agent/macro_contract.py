@@ -43,12 +43,6 @@ class RaceContract:
     min_attack_army: int = 0
     # A lower floor that applies once total supply reaches 190 (a maxed army); 0 keeps min_attack_army.
     maxed_attack_army: int = 0
-    # A higher floor before this game time (seconds), unless supply is maxed: early pushes that are
-    # not maxed lose to the Baneling-heavy mid-game army. 0 disables it.
-    early_attack_army: int = 0
-    early_attack_seconds: int = 0
-    # (game seconds, action[, count]): recommended from that time until this many exist or are pending.
-    tech_schedule: tuple = ()
     # Under a defend plan, do not retreat from an attacked base while the army is above the plan's retreat threshold.
     hold_defense: bool = False
 
@@ -147,15 +141,6 @@ def _terran():
         bank_override_actions=frozenset(ids[n] for n in (
             "TRAIN MARINE", "TRAIN MARAUDER", "TRAIN SIEGETANK", "TRAIN MEDIVAC", "BUILD BARRACKS")),
         supply_reserve=True, min_attack_army=40, bank_minerals=600, hold_defense=True,
-        tech_schedule=tuple((t, ids[n], c) for t, n, c in (
-            # Anti-Baneling defense first: sieged Tanks and Widow Mines hold the mid-game attack.
-            (300, "BUILD FACTORY", 1), (330, "ADDON FACTORYTECHLAB", 1),
-            (390, "TRAIN SIEGETANK", 2), (420, "TRAIN WIDOWMINE", 4),
-            (390, "BUILD ENGINEERINGBAY", 1),
-            (420, "RESEARCH TERRANINFANTRYWEAPONSLEVEL1", 1), (420, "RESEARCH TERRANINFANTRYARMORSLEVEL1", 1),
-            (480, "BUILD ARMORY", 1),
-            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL2", 1), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL2", 1),
-            (480, "RESEARCH TERRANINFANTRYWEAPONSLEVEL3", 1), (480, "RESEARCH TERRANINFANTRYARMORSLEVEL3", 1))),
         bank_spend_actions=(ids["BUILD BARRACKS"],))
 
 
@@ -174,41 +159,25 @@ ACTION_LIMITS = PROTOSS.limits
 MAXED_SUPPLY = 190
 
 
-def tech_due(contract, game_time, catalog):
-    """Scheduled units, buildings and upgrades whose time has come and that are still short."""
-    due = []
-    for entry in contract.tech_schedule:
-        time_due, action = entry[0], entry[1]
-        target = entry[2] if len(entry) > 2 else 1
-        if game_time >= time_due and catalog.get(str(action), {}).get("count_with_pending", 0) < target:
-            due.append(action)
-    return tuple(due)
-
-
-def attack_floor(contract, plan_threshold, supply_used=0, game_time=None):
+def attack_floor(contract, plan_threshold, supply_used=0):
     """Ready army supply an attack needs: the plan's threshold, raised to the race's floor."""
     floor = contract.min_attack_army
-    if contract.early_attack_army and game_time is not None and game_time < contract.early_attack_seconds:
-        floor = max(floor, contract.early_attack_army)
     if contract.maxed_attack_army and supply_used >= MAXED_SUPPLY:
         floor = contract.maxed_attack_army
     return max(plan_threshold, floor)
 
 
 def primary_action(plan, choices, army_intent, ready_army_supply, target_changed=False, acknowledged_actions=(),
-                   contract=PROTOSS, minerals=0, supply_used=0, tech_due=(), game_time=None):
+                   contract=PROTOSS, minerals=0, supply_used=0):
     """Recommend a legal next action; Jev still selects the actual command."""
     desired = contract.action_for(plan["army_posture"])
     ready = (plan["army_posture"] != "attack"
-             or ready_army_supply >= attack_floor(contract, plan["attack_min_army"], supply_used, game_time))
+             or ready_army_supply >= attack_floor(contract, plan["attack_min_army"], supply_used))
     if ready and (army_intent != plan["army_posture"] or target_changed) and desired in choices:
         return desired, "apply_army_order_before_optional_production"
     preferred = plan.get("priority_action")
     if preferred in choices and preferred != contract.empty_action and preferred not in acknowledged_actions:
         return preferred, "commander_priority"
-    for action in tech_due:
-        if action in choices:
-            return action, "tech_schedule"
     if minerals >= contract.bank_minerals:
         for action in contract.bank_spend_actions:
             if action in choices:

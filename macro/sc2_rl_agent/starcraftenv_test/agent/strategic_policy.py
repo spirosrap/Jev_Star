@@ -1,6 +1,6 @@
 """Pure, testable constraints for an Astra plan over the existing macro actions."""
 
-from .macro_contract import PROTOSS, attack_floor, tech_due
+from .macro_contract import PROTOSS, attack_floor
 
 
 def plan_progress(plan, catalog, resource):
@@ -14,14 +14,6 @@ def plan_progress(plan, catalog, resource):
     return {"remaining_goals": remaining, "reserve_for_action": reserve if active_reserve else None,
             "reserved_minerals": cost["minerals"], "reserved_gas": cost["gas"],
             "reservation_suspended_reason": catalog[str(reserve)].get("reservation_blocked") if reserve is not None else None}
-
-
-def scheduled_reserve(contract, game_time, catalog):
-    """Scheduled or recommended purchases, and the first of them that only lacks resources."""
-    due = [int(a) for a, entry in catalog.items() if entry.get("recommended")]
-    due += [a for a in tech_due(contract, game_time, catalog) if a not in due]
-    held = next((a for a in due if not catalog[str(a)].get("reservation_blocked")), None)
-    return due, held
 
 
 def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time, game_time, emergency,
@@ -41,9 +33,7 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
                                     and action in contract.army_production_actions)
     override = urgent_supply or urgent_defense
     # Minerals piling up means the plan is too narrow for the income; keep spending on the army.
-    banked = ((action in contract.bank_override_actions and resource["mineral"] >= contract.bank_minerals)
-              or action in tech_due(contract, game_time, catalog)
-              or catalog.get(str(action), {}).get("recommended", False))
+    banked = action in contract.bank_override_actions and resource["mineral"] >= contract.bank_minerals
     if action in contract.spending_actions and not override:
         if action not in plan["allowed_spending_actions"] and not banked:
             return "plan_spending_not_allowed"
@@ -55,17 +45,6 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
             if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < progress["reserved_minerals"])
                     or (cost["gas"] and resource["gas"] - cost["gas"] < progress["reserved_gas"])):
                 return "plan_resource_reservation"
-        # Keep the money for due tech (e.g. Tanks, Vikings) instead of spending it on something else first.
-        due, held = scheduled_reserve(contract, game_time, catalog)
-        if held is not None and action not in due and action not in (worker, contract.supply_action):
-            cost, reserved = catalog[str(action)]["cost"], catalog[str(held)]["cost"]
-            if ((cost["minerals"] and resource["mineral"] - cost["minerals"] < reserved["minerals"])
-                    or (cost["gas"] and resource["gas"] - cost["gas"] < reserved["gas"])):
-                return "scheduled_tech_reservation"
-            # A due counter unit also keeps supply free, so a maxed army refills with it first.
-            supply, needed = catalog[str(action)].get("supply", 0), catalog[str(held)].get("supply", 0)
-            if supply and needed and resource["supply_left"] - supply < needed:
-                return "scheduled_supply_reservation"
     if (contract.supply_reserve and action in contract.spending_actions and action != contract.supply_action
             and resource.get("needs_supply") and resource["supply_left"] <= 4 and resource["supply_cap"] < 200
             and not catalog[str(contract.supply_action)].get("pending")):
@@ -86,7 +65,7 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
         if (target != army_intent and game_time - last_intent_time < plan["min_posture_seconds"]
                 and not urgent_withdrawal and not new_defense_order):
             return "plan_hold_army_intent"
-        floor = attack_floor(contract, plan["attack_min_army"], resource.get("supply_used", 0), game_time)
+        floor = attack_floor(contract, plan["attack_min_army"], resource.get("supply_used", 0))
         if target == "attack" and (plan["army_posture"] != "attack" or ready_army < floor):
             return "plan_attack_not_ready"
         if target == "retreat" and plan["army_posture"] == "attack" and not retreat_needed:
