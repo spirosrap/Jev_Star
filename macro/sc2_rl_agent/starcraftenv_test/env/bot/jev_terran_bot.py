@@ -41,9 +41,11 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
-# Cells kept clear between a new building (other than a Supply Depot) and existing ones, so that
-# Siege Tanks and other large units can leave the production area. Lowered depots are walkable.
+# Cells kept clear around Factories so the Siege Tanks they build can leave: a new Factory keeps this
+# lane from every building, and other new buildings (except Supply Depots, which are lowered and
+# walkable) keep it from Factories and their add-ons. Everything else is packed as before.
 BUILDING_GAP = 2
+FACTORY_TYPES = {U.FACTORY, U.FACTORYFLYING, U.FACTORYTECHLAB, U.FACTORYREACTOR}
 SMALL_FOOTPRINTS = {U.MISSILETURRET: 1, U.BARRACKSTECHLAB: 1, U.BARRACKSREACTOR: 1, U.FACTORYTECHLAB: 1,
                     U.FACTORYREACTOR: 1, U.STARPORTTECHLAB: 1, U.STARPORTREACTOR: 1,
                     U.TECHLAB: 1, U.REACTOR: 1}
@@ -404,11 +406,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         areas += [(Point2(p), 1.5) for p in self._rejected_spots]
         return areas
 
-    def _occupied_areas(self):
+    def _occupied_areas(self, factories_only=False):
         """(centre, half-size) of standing buildings and free add-on slots that need a lane around them."""
         areas = []
         for b in self.structures:
-            if b.type_id in DEPOTS or b.is_flying:
+            if b.type_id in DEPOTS or b.is_flying or (factories_only and b.type_id not in FACTORY_TYPES):
                 continue
             half = 2.5 if b.type_id in TOWNHALL_TYPES else SMALL_FOOTPRINTS.get(b.type_id, 1.5)
             areas.append((b.position, half))
@@ -482,8 +484,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         odd = kind not in {U.SUPPLYDEPOT, U.MISSILETURRET}  # 3x3 footprints centre on half cells.
         half = 1.5 if odd else 1
         reserved = self._reserved_areas()
-        # Depots are lowered and walkable; everything else keeps a lane free around it.
-        spaced = [] if kind == U.SUPPLYDEPOT else [(c, h + BUILDING_GAP) for c, h in self._occupied_areas()]
+        # A Factory keeps a lane from everything; other buildings only from Factories. Depots are walkable.
+        spaced = ([] if kind == U.SUPPLYDEPOT else
+                  [(c, h + BUILDING_GAP) for c, h in self._occupied_areas(factories_only=kind != U.FACTORY)])
         candidates, seen = [], set()
         for anchor in self._anchors(kind):
             for dx, dy in sorted(((x, y) for x in range(-4, 5, 2) for y in range(-4, 5, 2)),

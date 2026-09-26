@@ -191,7 +191,7 @@ Before testing other opponent races, confirm the Zerg results. Keep settings and
 | 3e. Baseline rebuild | Branch `terran-baseline`: the `fbe1a59` bot code with only the builder path check, Jev access retry, research-ability fix and lanes for Siege Tanks; 40-minute limit, Ancient Cistern LE against CheatVision Zerg | Confirm the baseline (2 games), then add the later changes back one at a time, 2 games each, keeping only those that do not hurt. On `4bf68a8`: one win (T33), then one defeat (T34). The lanes between buildings were then removed so that the baseline plays exactly like `fbe1a59`; on `b9dbf44` and `27e2adc` (README only) two wins (T35–T36), which confirms the baseline |
 | 3f. Recall on the baseline | Baseline plus the recall; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | Bases raided behind an attacking army are defended, without losing the Ancient Cistern results. On `7fe46ac`: one defeat on Babylon (T39). **Reverted**: the baseline won a Babylon game and the recall none |
 | 3g. SCV evacuation on the baseline | Baseline plus one change: SCVs leave a raided, undefended base; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | SCVs survive raids on Babylon without losing the Ancient Cistern results. On `c0af324`: one win on Babylon (T40); then one defeat (T41) |
-| 3h. Lanes back | Baseline with SCV evacuation plus the 2-cell lanes between buildings (as in T33); 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | No Siege Tanks stuck in the main, without losing the Ancient Cistern results |
+| 3h. Lanes around Factories | Baseline with SCV evacuation plus 2-cell lanes around Factories only; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | No Siege Tanks stuck in the main, without losing the Ancient Cistern results |
 | 4. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
 | 5. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
 
@@ -253,7 +253,7 @@ T40, the first game with the evacuation, won on Babylon at 19:02 without losing 
 
 T41 lost on Babylon (stopped at 29:37 with 11 SCVs and 2 bases). It held two early Zerg attacks and still had 64 SCVs and 5 bases at 16:02, which T38–T39 did not, but from 18:55 Zerg attacked one base after another. The evacuation acted in each raid (8 SCVs at 18:55, 17 at 19:24, 15 at 23:07; the `scvs_evacuated` stat counts repeated orders, not SCVs), so SCVs fell gradually (46 at 20:00, 32 at 25:01) instead of collapsing, but bases fell at 19:01, 19:35, 23:31, 26:05 and 29:35. Many Siege Tanks were seen stuck between buildings far back in the main again: without the lanes, buildings are packed side by side and tanks built inside cannot leave, so part of the counted army never reached the raided bases. All six Babylon games (T20, T21, T37–T41) ran without lanes; the wins (T37, T40) had no base raided before 16:00, and the losses were decided by raids from about 14 minutes.
 
-The lanes are back, unchanged from T33: new buildings other than Supply Depots keep a 2-cell lane from existing buildings and free add-on slots. The SCV evacuation stays (208 offline tests).
+The lanes are back, but only around Factories, where Siege Tanks come from: a new Factory (and its add-on slot) keeps a 2-cell lane from every building, and other new buildings except Supply Depots keep that lane only from Factories and their add-ons. Everything else is packed as in the baseline. The lanes have never been played on Babylon (T28–T30 and T33–T34 were all on Ancient Cistern). The SCV evacuation stays (208 offline tests).
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -451,7 +451,7 @@ T7 失利：4:00–5:30 前后的 Zergling–Baneling 进攻（至少 25 只 Zer
 | 3e. 基线重建 | 分支 `terran-baseline`：`fbe1a59` 的 Bot 代码，只加入建造路径检查、Jev 访问重试、研究技能修复和 Siege Tank 通道；40 分钟上限，Ancient Cistern LE 对 CheatVision Zerg | 先确认基线（2 局），再逐项加回后来的改动，每项 2 局，只保留不造成损害的改动。`4bf68a8` 上 1 胜（T33），随后 1 负（T34）。之后移除了建筑间通道，使基线的打法与 `fbe1a59` 完全一致；`b9dbf44` 和 `27e2adc`（仅 README）上 2 胜（T35–T36），基线得到确认 |
 | 3f. 基线加回防 | 基线加回防；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 进攻时后方遭袭的基地得到防守，且不损失 Ancient Cistern 的战绩。`7fe46ac` 上 Babylon 1 负（T39）。**已撤回**：基线在 Babylon 赢过一局，回防一局未赢 |
 | 3g. 基线加 SCV 撤离 | 基线只加一项改动：SCV 撤离遭袭且无防守的基地；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 在 Babylon 上 SCV 能躲过袭击，同时不损失 Ancient Cistern 的战绩。`c0af324` 上 Babylon 1 胜（T40）；随后 1 负（T41） |
-| 3h. 恢复通道 | 基线加 SCV 撤离，再加建筑间 2 格通道（与 T33 相同）；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 主基地不再有 Siege Tank 被卡住，同时不损失 Ancient Cistern 的战绩 |
+| 3h. Factory 周围通道 | 基线加 SCV 撤离，再加仅围绕 Factory 的 2 格通道；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 主基地不再有 Siege Tank 被卡住，同时不损失 Ancient Cistern 的战绩 |
 | 4. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
 | 5. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
 
@@ -513,7 +513,7 @@ T40 是加入撤离后的第一局，在 Babylon 于 19:02 获胜，没有失去
 
 T41 在 Babylon 失利（29:37 手动停止，只剩 11 台 SCV 和 2 个基地）。它挡住了两次早期进攻，16:02 时仍有 64 台 SCV 和 5 个基地，这是 T38–T39 没做到的；但从 18:55 起 Zerg 逐个进攻基地。每次袭击中撤离都起了作用（18:55 撤出 8 台 SCV，19:24 撤出 17 台，23:07 撤出 15 台；`scvs_evacuated` 统计的是重复下达的命令而非 SCV 数），因此 SCV 是逐步减少（20:00 时 46 台，25:01 时 32 台）而不是崩溃，但基地在 19:01、19:35、23:31、26:05 和 29:35 相继失守。再次看到许多 Siege Tank 卡在主基地深处的建筑之间：没有通道时建筑紧挨着排列，在其中生产的坦克出不来，部分计入的部队从未到达遭袭的基地。Babylon 的六局（T20、T21、T37–T41）都没有通道；胜局（T37、T40）在 16:00 前没有基地遭袭，败局都由约 14 分钟起的袭击决定。
 
-通道已恢复，与 T33 相同：除补给站外的新建筑与已有建筑及空闲附属建筑位置之间保留 2 格通道。SCV 撤离保留（208 项离线测试）。
+通道已恢复，但只围绕生产 Siege Tank 的 Factory：新 Factory（及其附属建筑位置）与所有建筑之间保留 2 格通道，除补给站外的其他新建筑只与 Factory 及其附属建筑保持该通道。其余建筑仍像基线一样紧挨排列。通道从未在 Babylon 上使用过（T28–T30 和 T33–T34 都在 Ancient Cistern）。SCV 撤离保留（208 项离线测试）。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 

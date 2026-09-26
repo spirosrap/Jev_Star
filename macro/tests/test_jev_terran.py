@@ -424,27 +424,30 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._evacuate_raided_bases()
         miners[0].gather.assert_not_called()
 
-    async def test_new_buildings_leave_a_lane_for_tanks(self):
+    async def test_factories_get_a_lane_for_tanks_and_other_buildings_stay_packed(self):
         self.use_open_grid()
         rax = FakeTerranUnit(3, U.BARRACKS, (20.5, 20.5))
         rax.has_add_on = True
         lab = FakeTerranUnit(4, U.BARRACKSTECHLAB, (23, 20))
-        depot = FakeTerranUnit(5, U.SUPPLYDEPOTLOWERED, (16, 26))
-        self.set_world([self.scv], [self.cc, rax, lab, depot])
-        for kind in (U.FACTORY, U.ENGINEERINGBAY):
-            for point in self.bot._placement_candidates(kind):
-                for building, half in ((rax, 1.5), (lab, 1)):
-                    gap = max(abs(point.x - building.position.x), abs(point.y - building.position.y)) - 1.5 - half
-                    self.assertGreaterEqual(gap, 2, (kind, point, building.type_id))
-                if kind == U.FACTORY:  # Its add-on keeps the lane too.
-                    slot = point.offset((2.5, -0.5))
-                    gap = max(abs(slot.x - rax.position.x), abs(slot.y - rax.position.y)) - 1 - 1.5
-                    self.assertGreaterEqual(gap, 2, point)
-        # Depots are lowered and walkable, so they may sit next to anything.
-        depots = self.bot._placement_candidates(U.SUPPLYDEPOT)
-        self.assertTrue(any(max(abs(p.x - rax.position.x), abs(p.y - rax.position.y)) < 4 for p in depots))
+        factory = FakeTerranUnit(5, U.FACTORY, (20.5, 30.5))
+        factory.has_add_on = True
+        flab = FakeTerranUnit(6, U.FACTORYTECHLAB, (23, 30))
+        self.set_world([self.scv], [self.cc, rax, lab, factory, flab])
 
+        def gap(point, building, half, own=1.5):
+            return max(abs(point.x - building.position.x), abs(point.y - building.position.y)) - own - half
 
+        # A new Factory keeps a lane from every building, and so does its add-on slot.
+        for point in self.bot._placement_candidates(U.FACTORY):
+            for building, half in ((rax, 1.5), (lab, 1), (factory, 1.5), (flab, 1)):
+                self.assertGreaterEqual(gap(point, building, half), 2, (point, building.type_id))
+            self.assertGreaterEqual(gap(point.offset((2.5, -0.5)), rax, 1.5, own=1), 2, point)
+        # Other buildings keep a lane only from the Factory; next to the Barracks is allowed.
+        bays = self.bot._placement_candidates(U.ENGINEERINGBAY)
+        for point in bays:
+            for building, half in ((factory, 1.5), (flab, 1)):
+                self.assertGreaterEqual(gap(point, building, half), 2, (point, building.type_id))
+        self.assertTrue(any(0 <= gap(p, rax, 1.5) < 2 for p in bays))
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)
         armory.is_idle = True
