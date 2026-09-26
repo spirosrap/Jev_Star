@@ -11,6 +11,7 @@ from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
+from sc2.units import Units
 
 from ...agent.macro_contract import TERRAN, SPENDING_KINDS
 from .jev_macro_bot import JevMacroBot
@@ -50,6 +51,10 @@ GAS_THROTTLE_OFF = 150
 LURKERS = {U.LURKERMP, U.LURKERMPBURROWED, U.LURKERMPEGG, U.LURKERDENMP}
 LURKER_MEMORY = 90
 SCAN_INTERVAL = 12
+# During an attack, new units farther than this from the fighting army gather near home
+# and set off together once the group reaches REINFORCEMENT_GROUP_SUPPLY.
+REINFORCEMENT_DISTANCE = 25
+REINFORCEMENT_GROUP_SUPPLY = 8
 
 
 class TerranObservation(BotAI):
@@ -105,6 +110,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._addon_blocked = {}
         self._gas_throttled = False
         self._lurker_seen = -1000
+        self._staging = set()
+        self._released = set()
         self._last_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
@@ -623,6 +630,52 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             side = 1 if unit.tag % 2 else -1
             unit.move(Point2((away.x - dy * side * .5, away.y + dx * side * .5)))
             self._action_stats["baneling_dodges"] += 1
+
+    def _held_army_tags(self):
+        return self._staging
+
+    def _issue_army_intent(self, include_busy=False):
+        if self.army_intent == "attack":
+            self._gather_reinforcements()
+        else:
+            self._staging.clear()
+            self._released.clear()
+        super()._issue_army_intent(include_busy)
+
+    def _gather_reinforcements(self):
+        """Stop new units trickling one by one into the enemy; send them out as a group."""
+        army = self._combat_units().filter(lambda u: u.tag not in self._scouts
+                                           and u.type_id not in self.stationary_army_types)
+        alive = {u.tag for u in army}
+        self._staging &= alive
+        self._released &= alive
+        if not army:
+            return
+        _, target = self._attack_position()
+        staging = self._defense_position().towards(target, 8)
+        fighting = sorted((u for u in army if u.tag not in self._staging), key=lambda u: u.distance_to(target))
+        front = Units(fighting[:max(1, len(fighting) // 2)], self).center if fighting else None
+        for unit in army:
+            if unit.tag in self._staging or unit.tag in self._released or front is None:
+                continue
+            if (unit.distance_to(front) > REINFORCEMENT_DISTANCE
+                    and unit.distance_to(staging) < front.distance_to(staging)):
+                self._staging.add(unit.tag)
+        waiting = [u for u in army if u.tag in self._staging]
+        ready = [u for u in waiting if u.distance_to(staging) < 6]
+        # With no army left in the field, the waiting units are the army.
+        if front is None or sum(self.calculate_supply_cost(u.type_id) for u in ready) >= REINFORCEMENT_GROUP_SUPPLY:
+            group = waiting if front is None else ready
+            for unit in group:
+                unit.attack(target)
+                self._staging.discard(unit.tag)
+                self._released.add(unit.tag)
+            if group:
+                self._action_stats["reinforcement_groups"] += 1
+        for unit in waiting:
+            if (unit.tag in self._staging and unit.distance_to(staging) > 4
+                    and unit.tag not in self.unit_tags_received_action):
+                unit.move(staging)
 
     def _ground_threats(self):
         return [e for e in self.enemy_units if e.is_visible and e.can_attack and not e.is_flying
