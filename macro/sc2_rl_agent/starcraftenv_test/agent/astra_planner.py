@@ -217,8 +217,10 @@ Prefer MULTI-DEFEND over retreat while a base with a Bunker or Siege Tanks is un
 retreating abandons that base. Under a defend plan, retreat is refused while a base is attacked
 and ready army supply is at least retreat_below_army. Against Lurkers, keep a Raven with the
 army or leave Orbital energy for scans. Attack once Stimpack is done and the army clearly outnumbers
-what has been seen. No attack starts below 40 ready army supply, whatever attack_min_army says;
-a small early attack that dies leaves the bases undefended.
+what has been seen. No attack starts below state.attack_rule (40 ready army supply normally,
+90 against the cheating AIs until 190 supply); a small early attack that dies leaves the bases
+undefended. Against the cheating AIs, defend behind the Bunker and sieged Tanks and keep
+expanding until that size is reached, then attack with Tanks, Medivacs and bio together.
 """
 
 
@@ -332,7 +334,7 @@ class CodexPlannerClient:
         self.executable = find_codex(executable)
         self.model, self.timeout, self.effort = model, timeout, effort
         self.contract = contract
-        self.instructions = TERRAN_PLANNER_INSTRUCTIONS if contract is TERRAN else PLANNER_INSTRUCTIONS
+        self.instructions = TERRAN_PLANNER_INSTRUCTIONS if contract.race == "Terran" else PLANNER_INSTRUCTIONS
         self.directory = Path(output_dir) / "planner"
         self.directory.mkdir(parents=True, exist_ok=True)
         self.schema_path = self.directory / "plan.schema.json"

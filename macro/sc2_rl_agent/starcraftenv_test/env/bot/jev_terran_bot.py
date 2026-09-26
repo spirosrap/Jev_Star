@@ -12,7 +12,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
 
-from ...agent.macro_contract import TERRAN, SPENDING_KINDS
+from ...agent.macro_contract import TERRAN, SPENDING_KINDS, attack_floor
 from .jev_macro_bot import JevMacroBot
 
 PRODUCTION = {U.BARRACKS, U.FACTORY, U.STARPORT}
@@ -291,7 +291,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         army = self._combat_units()
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
-            floor = max(10, self.contract.min_attack_army)
+            floor = max(10, attack_floor(self.contract, 0, self.supply_used))
             if not army or self._ready_army_supply() < floor or (self.army_intent == "attack" and not retarget):
                 return "need_army_or_already_attacking"
         elif not army or self.army_intent == posture:

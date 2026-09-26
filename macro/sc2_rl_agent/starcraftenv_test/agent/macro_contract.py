@@ -41,6 +41,8 @@ class RaceContract:
     supply_reserve: bool = False
     # Ready army supply below which no attack starts, whatever the plan says.
     min_attack_army: int = 0
+    # A lower floor that applies once total supply reaches 190 (a maxed army); 0 keeps min_attack_army.
+    maxed_attack_army: int = 0
     # Under a defend plan, do not retreat from an attacked base while the army is above the plan's retreat threshold.
     hold_defense: bool = False
 
@@ -154,12 +156,23 @@ BUILDING_LIMITS = PROTOSS.building_limits
 ACTION_LIMITS = PROTOSS.limits
 
 
+MAXED_SUPPLY = 190
+
+
+def attack_floor(contract, plan_threshold, supply_used=0):
+    """Ready army supply an attack needs: the plan's threshold, raised to the race's floor."""
+    floor = contract.min_attack_army
+    if contract.maxed_attack_army and supply_used >= MAXED_SUPPLY:
+        floor = contract.maxed_attack_army
+    return max(plan_threshold, floor)
+
+
 def primary_action(plan, choices, army_intent, ready_army_supply, target_changed=False, acknowledged_actions=(),
-                   contract=PROTOSS, minerals=0):
+                   contract=PROTOSS, minerals=0, supply_used=0):
     """Recommend a legal next action; Jev still selects the actual command."""
     desired = contract.action_for(plan["army_posture"])
     ready = (plan["army_posture"] != "attack"
-             or ready_army_supply >= max(plan["attack_min_army"], contract.min_attack_army))
+             or ready_army_supply >= attack_floor(contract, plan["attack_min_army"], supply_used))
     if ready and (army_intent != plan["army_posture"] or target_changed) and desired in choices:
         return desired, "apply_army_order_before_optional_production"
     preferred = plan.get("priority_action")

@@ -104,6 +104,11 @@ class HierarchicalMixin:
     def _strategy_snapshot(self):
         state = super()._snapshot()
         state["execution_directive"] = self._execution_directive
+        if self.contract.min_attack_army:
+            state["attack_rule"] = {
+                "min_ready_army_supply": self.contract.min_attack_army,
+                "min_ready_army_supply_at_190_supply": self.contract.maxed_attack_army or self.contract.min_attack_army,
+                "note": "No attack starts below this, whatever attack_min_army says; set attack_min_army at or above it."}
         score = self.state.score
         state["strategic_metrics"] = {
             "mineral_income_per_minute": round(score.collection_rate_minerals, 1),
@@ -178,7 +183,8 @@ class HierarchicalMixin:
         action, reason = primary_action(plan, choices, self.army_intent, resource["ready_army_supply"],
                                          target_changed=self._planned_target() != self._army_target_id,
                                          acknowledged_actions={key[1] for key in self._acknowledged_priorities},
-                                         contract=self.contract, minerals=resource["mineral"])
+                                         contract=self.contract, minerals=resource["mineral"],
+                                         supply_used=resource["supply_used"])
         if action is not None:
             key = (plan["plan_id"], action)
             previous = self._execution_directive

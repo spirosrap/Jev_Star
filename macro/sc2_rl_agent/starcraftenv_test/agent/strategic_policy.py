@@ -1,6 +1,6 @@
 """Pure, testable constraints for an Astra plan over the existing macro actions."""
 
-from .macro_contract import PROTOSS
+from .macro_contract import PROTOSS, attack_floor
 
 
 def plan_progress(plan, catalog, resource):
@@ -65,8 +65,8 @@ def policy_reason(action, plan, catalog, resource, army_intent, last_intent_time
         if (target != army_intent and game_time - last_intent_time < plan["min_posture_seconds"]
                 and not urgent_withdrawal and not new_defense_order):
             return "plan_hold_army_intent"
-        attack_floor = max(plan["attack_min_army"], contract.min_attack_army)
-        if target == "attack" and (plan["army_posture"] != "attack" or ready_army < attack_floor):
+        floor = attack_floor(contract, plan["attack_min_army"], resource.get("supply_used", 0))
+        if target == "attack" and (plan["army_posture"] != "attack" or ready_army < floor):
             return "plan_attack_not_ready"
         if target == "retreat" and plan["army_posture"] == "attack" and not retreat_needed:
             return "plan_continue_attack"

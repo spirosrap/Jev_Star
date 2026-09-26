@@ -171,6 +171,33 @@ class TerranContractTests(unittest.TestCase):
         self.assertIsNone(policy_reason(67, *calm, contract=TERRAN))
         self.assertFalse(PROTOSS.hold_defense)
 
+    def test_cheating_ai_attack_floor_waits_for_a_big_army(self):
+        import dataclasses
+        cheat = dataclasses.replace(TERRAN, min_attack_army=90, maxed_attack_army=60)
+        plan = terran_plan(army_posture="attack", attack_min_army=45, reserve_for_action=None)
+        def reason(ready, supply):
+            return policy_reason(66, plan, terran_catalog(), resource(ready_army_supply=ready, supply_used=supply),
+                                 "defend", 0, 100, False, contract=cheat)
+        self.assertEqual(reason(60, 150), "plan_attack_not_ready")
+        self.assertIsNone(reason(95, 150))
+        self.assertIsNone(reason(65, 192))  # A maxed army may attack with less ready supply.
+        self.assertEqual(reason(55, 192), "plan_attack_not_ready")
+        self.assertEqual(primary_action(plan, {66: "MULTI-ATTACK"}, "defend", 60, contract=cheat, supply_used=150)[0], None)
+        self.assertEqual(primary_action(plan, {66: "MULTI-ATTACK"}, "defend", 95, contract=cheat, supply_used=150)[0], 66)
+        # The normal floor is unchanged.
+        self.assertIsNone(policy_reason(66, plan, terran_catalog(), resource(ready_army_supply=60, supply_used=150),
+                                        "defend", 0, 100, False, contract=TERRAN))
+
+    def test_planner_uses_terran_prompt_for_a_modified_terran_contract(self):
+        import dataclasses, tempfile
+        from unittest.mock import patch
+        from sc2_rl_agent.starcraftenv_test.agent.astra_planner import CodexPlannerClient, TERRAN_PLANNER_INSTRUCTIONS
+        cheat = dataclasses.replace(TERRAN, min_attack_army=90)
+        with tempfile.TemporaryDirectory() as tmp, patch(
+                "sc2_rl_agent.starcraftenv_test.agent.astra_planner.find_codex", return_value=Path("codex")):
+            client = CodexPlannerClient(tmp, contract=cheat)
+        self.assertIs(client.instructions, TERRAN_PLANNER_INSTRUCTIONS)
+
     def test_attack_needs_forty_ready_army_supply(self):
         plan = terran_plan(army_posture="attack", attack_min_army=28, reserve_for_action=None)
         weak = (plan, terran_catalog(), resource(ready_army_supply=30), "defend", 0, 100, False)
@@ -586,6 +613,16 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         orbital.energy = 110
         self.bot._call_down_mules()
         self.assertEqual(orbital.commands[0][0], A.CALLDOWNMULE_CALLDOWNMULE)
+
+    async def test_cheating_ai_floor_hides_attack_from_jev(self):
+        import dataclasses
+        self.bot.contract = dataclasses.replace(TERRAN, min_attack_army=90, maxed_attack_army=60)
+        marines = [FakeTerranUnit(10 + i, U.MARINE, (30, 30)) for i in range(70)]
+        self.set_world([self.scv, *marines], [self.cc])
+        self.bot.supply_used = 150
+        self.assertEqual(self.bot._posture_reason("attack"), "need_army_or_already_attacking")
+        self.bot.supply_used = 195
+        self.assertIsNone(self.bot._posture_reason("attack"))
 
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)

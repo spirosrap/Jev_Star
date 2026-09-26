@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import dataclasses
 import hashlib
 import os
 import sys
@@ -69,7 +70,13 @@ def main():
     output.mkdir(parents=True, exist_ok=False)  # Never silently overwrite another run.
     settings = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
                 if k != "config_file"}
-    settings.update(realtime=True, player_race=args.race, output_dir=str(output), macro_contract=VERSION)
+    contract = CONTRACTS[args.race]
+    if args.race == "Terran" and args.difficulty.startswith("Cheat"):
+        # A mid-game attack at ~50 supply is a coin flip against the cheating AIs; wait for a big army.
+        contract = dataclasses.replace(contract, min_attack_army=90, maxed_attack_army=60)
+    settings.update(realtime=True, player_race=args.race, output_dir=str(output), macro_contract=VERSION,
+                    attack_floor={"min_ready_army": contract.min_attack_army,
+                                  "at_190_supply": contract.maxed_attack_army or contract.min_attack_army})
     source_dir = Path(__file__).resolve().parent
     sources = [source_dir / name for name in (
         "agent/astra_planner.py", "agent/jev_agent.py", "agent/strategic_policy.py", "agent/macro_contract.py",
@@ -109,7 +116,7 @@ def main():
                     from .agent.astra_planner import CodexPlannerClient
                     planner_client = CodexPlannerClient(output, args.codex_path, args.planner_model,
                                                        args.planner_timeout, args.planner_effort,
-                                                       contract=CONTRACTS[args.race])
+                                                       contract=contract)
                     bot = PlannedBot(client, output, args.decision_interval, args.max_decision_age,
                                                  args.max_requests, planner_client=planner_client, run_log=log,
                                                  planner_interval=args.planner_interval, plan_ttl=args.plan_ttl,
@@ -121,6 +128,7 @@ def main():
                     bot = FlatBot(client, output, args.decision_interval, args.max_decision_age,
                                        args.max_requests, run_log=log)
                 log.phase = "launching"
+                bot.contract = contract
                 result = run_windowed_game(game_map, [Bot(Race[args.race], bot),
                                            Computer(Race[args.opponent_race], Difficulty[args.difficulty])],
                                            realtime=True, game_time_limit=args.game_time_limit,
