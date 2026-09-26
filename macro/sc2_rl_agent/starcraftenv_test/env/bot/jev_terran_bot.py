@@ -39,6 +39,8 @@ DEPOTS = {U.SUPPLYDEPOT, U.SUPPLYDEPOTLOWERED}
 MODE_HOLD = 3
 # Seconds a build spot the engine rejected stays excluded from placement.
 REJECTED_SPOT_SECONDS = 120
+# Placeable spots checked for a walking path from the builder, in one batched query.
+PATH_CHECKS = 16
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
@@ -487,7 +489,20 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if valid and kind in PRODUCTION:
             addons = await self.can_place(U.SUPPLYDEPOT, [p.offset((2.5, -0.5)) for p in valid])
             valid = [p for p, ok in zip(valid, addons) if ok]
-        return valid[0] if valid else None
+        if not valid:
+            return None
+        # A free spot can still be walled in by our own buildings or terrain; the SCV would walk
+        # for ~40 s before the engine answers "couldn't reach target". Check paths in one batch.
+        builder = self._builder(valid[0])
+        if builder is None:
+            return valid[0]
+        checked = valid[:PATH_CHECKS]
+        distances = await self.client.query_pathings([[builder, p] for p in checked])
+        for position, distance in zip(checked, distances):
+            if distance > 0:
+                return position
+            self._action_stats["unreachable_spots_skipped"] += 1
+        return None
 
     # ---- local upkeep ---------------------------------------------------------
 

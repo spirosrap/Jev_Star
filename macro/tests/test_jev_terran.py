@@ -259,6 +259,8 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.abilities = {self.cc.tag: {TRAIN_INFO[U.COMMANDCENTER][U.SCV]["ability"]}}
         self.bot.get_available_abilities = AsyncMock(side_effect=lambda units, **kwargs: [
             list(self.abilities.get(u.tag, ())) for u in units])
+        # Every spot is reachable unless a test says otherwise.
+        self.bot.client = SimpleNamespace(query_pathings=AsyncMock(side_effect=lambda pairs: [10.0] * len(pairs)))
 
     def make_bot(self, client):
         return JevTerranBot(client, Path(self.directory.name))
@@ -347,6 +349,25 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         grid = Mock()
         grid.__getitem__ = Mock(return_value=1)
         self.bot.game_info.placement_grid = grid
+
+    async def test_walled_in_spot_is_skipped_for_a_reachable_one(self):
+        self.use_open_grid()
+        self.bot.can_place = AsyncMock(side_effect=lambda kind, positions: [True] * len(positions))
+        candidates = self.bot._placement_candidates(U.ARMORY)
+        # The first two spots are closed off; the path query returns 0 for them.
+        self.bot.client.query_pathings = AsyncMock(
+            side_effect=lambda pairs: [0.0, 0.0] + [12.0] * (len(pairs) - 2))
+        chosen = await self.bot._placement(U.ARMORY)
+        self.assertEqual(chosen, candidates[2])
+        pairs = self.bot.client.query_pathings.await_args.args[0]
+        self.assertIs(pairs[0][0], self.scv)  # Paths are measured from the SCV that would build.
+        self.assertEqual(self.bot._action_stats["unreachable_spots_skipped"], 2)
+
+    async def test_no_placement_when_every_checked_spot_is_unreachable(self):
+        self.use_open_grid()
+        self.bot.can_place = AsyncMock(side_effect=lambda kind, positions: [True] * len(positions))
+        self.bot.client.query_pathings = AsyncMock(side_effect=lambda pairs: [0.0] * len(pairs))
+        self.assertIsNone(await self.bot._placement(U.ARMORY))
 
     async def test_rejected_spot_is_not_chosen_again(self):
         self.use_open_grid()
