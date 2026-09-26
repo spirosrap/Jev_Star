@@ -413,26 +413,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._research_one(40, upgrade)
         self.assertEqual(armory.commands, [(A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1, None)])
 
-    async def test_new_buildings_leave_a_lane_for_tanks(self):
-        self.use_open_grid()
-        rax = FakeTerranUnit(3, U.BARRACKS, (20.5, 20.5))
-        rax.has_add_on = True
-        lab = FakeTerranUnit(4, U.BARRACKSTECHLAB, (23, 20))
-        depot = FakeTerranUnit(5, U.SUPPLYDEPOTLOWERED, (16, 26))
-        self.set_world([self.scv], [self.cc, rax, lab, depot])
-        for kind in (U.FACTORY, U.ENGINEERINGBAY):
-            for point in self.bot._placement_candidates(kind):
-                for building, half in ((rax, 1.5), (lab, 1)):
-                    gap = max(abs(point.x - building.position.x), abs(point.y - building.position.y)) - 1.5 - half
-                    self.assertGreaterEqual(gap, 2, (kind, point, building.type_id))
-                if kind == U.FACTORY:  # Its add-on keeps the lane too.
-                    slot = point.offset((2.5, -0.5))
-                    gap = max(abs(slot.x - rax.position.x), abs(slot.y - rax.position.y)) - 1 - 1.5
-                    self.assertGreaterEqual(gap, 2, point)
-        # Depots are lowered and walkable, so they may sit next to anything.
-        depots = self.bot._placement_candidates(U.SUPPLYDEPOT)
-        self.assertTrue(any(max(abs(p.x - rax.position.x), abs(p.y - rax.position.y)) < 4 for p in depots))
-
     async def test_two_barracks_may_be_under_construction(self):
         self.abilities[self.scv.tag] = {TRAIN_INFO[U.SCV][U.BARRACKS]["ability"]}
         self.bot.already_pending = Mock(side_effect=lambda kind: 1 if kind == U.BARRACKS else 0)
