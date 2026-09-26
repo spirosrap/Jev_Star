@@ -216,9 +216,7 @@ Keep SCV production continuous but do not take a third base while pressure conti
 Prefer MULTI-DEFEND over retreat while a base with a Bunker or Siege Tanks is under attack;
 retreating abandons that base. Under a defend plan, retreat is refused while a base is attacked
 and ready army supply is at least retreat_below_army. Against Lurkers, keep a Raven with the
-army or leave Orbital energy for scans. Keep the army mixed: about three Marines or Marauders
-per Siege Tank; unsieged Tanks attack poorly and bio carries the attack. During an attack, new
-units gather near home and join in groups of about 8 supply. Attack once Stimpack is done and the army clearly outnumbers
+army or leave Orbital energy for scans. Attack once Stimpack is done and the army clearly outnumbers
 what has been seen. No attack starts below 40 ready army supply, whatever attack_min_army says;
 a small early attack that dies leaves the bases undefended.
 """

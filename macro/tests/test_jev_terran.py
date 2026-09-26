@@ -587,49 +587,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._call_down_mules()
         self.assertEqual(orbital.commands[0][0], A.CALLDOWNMULE_CALLDOWNMULE)
 
-    def attack_world(self, home_marines, front_marines=6):
-        self.bot._initialize_navigation()
-        self.bot._known_enemy_buildings = {1: {"id": "enemy_1", "type": "HATCHERY", "position": [80, 80], "last_seen": 0}}
-        front = [FakeTerranUnit(100 + i, U.MARINE, (70, 70)) for i in range(front_marines)]
-        home = [FakeTerranUnit(200 + i, U.MARINE, (14, 14)) for i in range(home_marines)]
-        self.set_world([self.scv, *front, *home], [self.cc])
-        self.bot.army_intent = "attack"
-        return front, home
-
-    async def test_new_units_gather_instead_of_trickling_into_an_attack(self):
-        front, home = self.attack_world(home_marines=1)
-        (lone,) = home
-        lone.position = Point2((10, 12))  # Near home, a few tiles from the staging point.
-        self.bot._issue_army_intent()
-        self.assertIn(lone.tag, self.bot._staging)
-        self.assertEqual(lone.commands[-1][0], "move")  # To the staging point, not the enemy.
-        self.assertTrue(all(c[0] != "attack" for c in lone.commands))
-        self.assertEqual(front[0].commands[-1], ("attack", Point2((80, 80))))
-
-    async def test_a_full_reinforcement_group_sets_off_together(self):
-        front, home = self.attack_world(home_marines=8)
-        self.bot._issue_army_intent()  # Units are staged; they start near the staging point.
-        staging = self.bot._defense_position().towards(Point2((80, 80)), 8)
-        for unit in home:
-            unit.position = staging
-        self.bot._issue_army_intent()
-        self.assertEqual(self.bot._staging, set())
-        self.assertTrue(all(u.commands[-1] == ("attack", Point2((80, 80))) for u in home))
-        self.assertEqual(self.bot._action_stats["reinforcement_groups"], 1)
-
-    async def test_the_whole_army_leaving_home_is_not_held(self):
-        _, home = self.attack_world(home_marines=6, front_marines=0)
-        self.bot._issue_army_intent()
-        self.assertEqual(self.bot._staging, set())
-        self.assertTrue(all(u.commands[-1][0] == "attack" for u in home))
-
-    async def test_nothing_is_held_outside_an_attack(self):
-        _, home = self.attack_world(home_marines=1)
-        self.bot._issue_army_intent()
-        self.bot.army_intent = "defend"
-        self.bot._issue_army_intent()
-        self.assertEqual(self.bot._staging, set())
-
     async def test_orbital_morph(self):
         self.abilities[self.cc.tag].add(A.UPGRADETOORBITAL_ORBITALCOMMAND)
         choices, _ = await self.bot.available_actions()
