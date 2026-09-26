@@ -69,6 +69,10 @@ DISENGAGE_MAIN_SHARE = 0.4
 DISENGAGE_LOSS = 0.35
 DISENGAGE_MIN_ENEMY = 10
 DISENGAGE_MOVE_SECONDS = 8
+# A retreat gives move orders, so a retreating army does not shoot back. Any retreat (Jev's or the
+# disengage rule's) turns into defense after this long, and retreat is then refused for a while.
+RETREAT_MAX_SECONDS = 8
+RETREAT_BLOCK_SECONDS = 20
 DISENGAGE_ATTACK_BLOCK = 45
 # Units that fight without a weapon of their own.
 ENEMY_CASTERS = {U.INFESTOR, U.INFESTORBURROWED, U.VIPER, U.SWARMHOSTMP}
@@ -150,7 +154,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
-                        "recall_on_raid", "disengage_losing_fights", "bio_waits_for_tanks", "baneling_target_fire", "home_guard_tanks", "late_game_counters",
+                        "recall_on_raid", "disengage_losing_fights", "retreat_time_limit", "bio_waits_for_tanks", "baneling_target_fire", "home_guard_tanks", "late_game_counters",
                         "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
@@ -169,6 +173,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._attack_peak = 0
         self._disengage_until = -1000
         self._disengaging = False
+        self._retreat_started = None
         self._last_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
@@ -395,7 +400,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         army = self._combat_units()
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
-            floor = max(10, attack_floor(self.contract, 0, self.supply_used))
+            floor = max(10, attack_floor(self.contract, 0, self.supply_used, self.time))
             if not army or self._ready_army_supply() < floor or (self.army_intent == "attack" and not retarget):
                 return "need_army_or_already_attacking"
         elif not army or self.army_intent == posture:
@@ -642,6 +647,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._call_down_mules()
         self._resume_construction()
         self._recall_to_defend()
+        self._limit_retreat()
         self._disengage()
         self._deploy_units()
         self._stim()
@@ -806,6 +812,23 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._action_stats["army_recalls"] += 1
         self.log("army_recalled", game_loop=self.state.game_loop, base_tag=base.tag,
                  enemy_supply=supply, army_distance=round(army.center.distance_to(base), 1))
+
+    def _limit_retreat(self):
+        """End a retreat before the army walks away under fire for long; it then defends at home."""
+        if self.army_intent != "retreat":
+            self._retreat_started = None
+            return
+        if self._retreat_started is None:
+            self._retreat_started = self.time
+            return
+        if self.time - self._retreat_started < RETREAT_MAX_SECONDS:
+            return
+        self._retreat_started = None
+        self._disengaging = False
+        self._set_army_intent("defend")
+        self.cooldowns[self.contract.action_for("retreat")] = self.time + RETREAT_BLOCK_SECONDS
+        self._action_stats["retreats_ended"] += 1
+        self.log("retreat_ended", game_loop=self.state.game_loop, after_seconds=RETREAT_MAX_SECONDS)
 
     def _disengage(self):
         """Pull an attacking army out of a fight it is losing, before it is gone."""

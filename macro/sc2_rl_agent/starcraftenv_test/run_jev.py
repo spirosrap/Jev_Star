@@ -73,10 +73,13 @@ def main():
     contract = CONTRACTS[args.race]
     if args.race == "Terran" and args.difficulty.startswith("Cheat"):
         # A mid-game attack at ~50 supply is a coin flip against the cheating AIs; wait for a big army.
-        contract = dataclasses.replace(contract, min_attack_army=90, maxed_attack_army=60)
+        # Before 12:00 a push that is not maxed needs 120 (T28-T30 lost 46-62 supply pushing at ~10:15).
+        contract = dataclasses.replace(contract, min_attack_army=90, maxed_attack_army=60,
+                                       early_attack_army=120, early_attack_seconds=720)
     settings.update(realtime=True, player_race=args.race, output_dir=str(output), macro_contract=VERSION,
                     attack_floor={"min_ready_army": contract.min_attack_army,
-                                  "at_190_supply": contract.maxed_attack_army or contract.min_attack_army})
+                                  "at_190_supply": contract.maxed_attack_army or contract.min_attack_army,
+                                  "before_12_00": contract.early_attack_army or None})
     source_dir = Path(__file__).resolve().parent
     sources = [source_dir / name for name in (
         "agent/astra_planner.py", "agent/jev_agent.py", "agent/strategic_policy.py", "agent/macro_contract.py",

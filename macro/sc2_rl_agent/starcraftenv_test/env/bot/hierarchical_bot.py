@@ -114,6 +114,9 @@ class HierarchicalMixin:
             state["attack_rule"] = {
                 "min_ready_army_supply": self.contract.min_attack_army,
                 "min_ready_army_supply_at_190_supply": self.contract.maxed_attack_army or self.contract.min_attack_army,
+                **({"min_ready_army_supply_before_game_seconds": {
+                    "seconds": self.contract.early_attack_seconds, "supply": self.contract.early_attack_army}}
+                   if self.contract.early_attack_army else {}),
                 "note": "No attack starts below this, whatever attack_min_army says; set attack_min_army at or above it."}
         score = self.state.score
         state["strategic_metrics"] = {
@@ -191,7 +194,8 @@ class HierarchicalMixin:
                                          acknowledged_actions={key[1] for key in self._acknowledged_priorities},
                                          contract=self.contract, minerals=resource["mineral"],
                                          supply_used=resource["supply_used"],
-                                         tech_due=self._conditional_tech(catalog) + tech_due(self.contract, self.time, catalog))
+                                         tech_due=self._conditional_tech(catalog) + tech_due(self.contract, self.time, catalog),
+                                         game_time=self.time)
         if action is not None:
             key = (plan["plan_id"], action)
             previous = self._execution_directive

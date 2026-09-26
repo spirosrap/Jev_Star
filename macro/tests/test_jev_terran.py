@@ -862,6 +862,38 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._disengage()
         self.assertEqual(self.bot.army_intent, "retreat")
 
+    async def test_a_retreat_turns_into_defense_after_a_few_seconds(self):
+        self.bot._initialize_navigation()
+        army = [FakeTerranUnit(100 + i, U.MARINE, (60, 60)) for i in range(10)]
+        self.set_world([self.scv, *army], [self.cc])
+        self.bot._set_army_intent("retreat")
+        self.bot._limit_retreat()
+        self.assertEqual(self.bot.army_intent, "retreat")
+        self.bot.state.game_loop += 5 * 22.4
+        self.bot._limit_retreat()
+        self.assertEqual(self.bot.army_intent, "retreat")
+        self.bot.state.game_loop += 4 * 22.4
+        self.bot._limit_retreat()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertEqual(army[0].commands[-1][0], "attack")  # Fights back at home.
+        self.assertGreater(self.bot.cooldowns[67], self.bot.time + 10)
+        self.assertEqual(self.bot._action_stats["retreats_ended"], 1)
+
+    async def test_early_unmaxed_attack_needs_a_bigger_army(self):
+        import dataclasses
+        self.bot.contract = dataclasses.replace(TERRAN, min_attack_army=90, maxed_attack_army=60,
+                                                early_attack_army=120, early_attack_seconds=720)
+        marines = [FakeTerranUnit(10 + i, U.MARINE, (30, 30)) for i in range(100)]
+        self.set_world([self.scv, *marines], [self.cc])
+        self.bot.supply_used = 175
+        self.bot.state.game_loop = 600 * 22.4
+        self.assertEqual(self.bot._posture_reason("attack"), "need_army_or_already_attacking")
+        self.bot.supply_used = 195  # Maxed: the maxed floor applies even early.
+        self.assertIsNone(self.bot._posture_reason("attack"))
+        self.bot.supply_used = 175
+        self.bot.state.game_loop = 730 * 22.4
+        self.assertIsNone(self.bot._posture_reason("attack"))
+
     async def test_enemies_at_our_bases_are_left_to_the_recall(self):
         self.bot._initialize_navigation()
         army = [FakeTerranUnit(100 + i, U.MARINE, (16, 10)) for i in range(5)]
