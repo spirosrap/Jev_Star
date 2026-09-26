@@ -56,6 +56,9 @@ FIGHT_RANGE = 12
 FIGHT_ARRIVING = 5
 BASE_AREA = 15
 DISENGAGE_RATIO = 1.4
+# The ratio rule applies only when the units near that enemy are at least this share of the attacking army;
+# a few units at the front meeting a larger group is a skirmish the rest of the army is walking into.
+DISENGAGE_MAIN_SHARE = 0.4
 DISENGAGE_LOSS = 0.35
 DISENGAGE_MIN_ENEMY = 10
 DISENGAGE_MOVE_SECONDS = 8
@@ -788,7 +791,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         ours = sum(self.calculate_supply_cost(u.type_id) for u in army
                    if fighting.closest_distance_to(u) < FIGHT_RANGE + FIGHT_ARRIVING)
         lost = 1 - ready / self._attack_peak if self._attack_peak else 0
-        if enemy < DISENGAGE_RATIO * ours and not (lost >= DISENGAGE_LOSS and enemy >= ours):
+        total = sum(self.calculate_supply_cost(u.type_id) for u in army)
+        outnumbered = enemy >= DISENGAGE_RATIO * ours and ours >= DISENGAGE_MAIN_SHARE * total
+        if not outnumbered and not (lost >= DISENGAGE_LOSS and enemy >= ours):
             return
         self._set_army_intent("retreat")
         self._disengage_until = self.time + DISENGAGE_MOVE_SECONDS

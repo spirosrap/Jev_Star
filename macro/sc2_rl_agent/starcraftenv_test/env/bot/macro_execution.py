@@ -13,6 +13,9 @@ from sc2.action import combine_actions
 from sc2.data import ActionResult
 
 
+# Seconds an action stays blocked after the engine answered NotSupported.
+NOT_SUPPORTED_BLOCK = 120
+
 class MacroExecution:
     def _initialize_execution(self):
         self._production_orders = {}
@@ -40,7 +43,13 @@ class MacroExecution:
                     for order in matches:
                         self._production_event(order, "accepted" if result == ActionResult.Success else "failed",
                                                engine_result=result.name, source="action_response")
-                        if result != ActionResult.Success:
+                        if result == ActionResult.NotSupported:
+                            # The engine will not accept this command from this unit; do not retry it soon.
+                            self.cooldowns[order["action_id"]] = self.time + NOT_SUPPORTED_BLOCK
+                            offered = sorted(getattr(a, "name", str(a)) for a in self._abilities.get(order["producer_tag"], ()))
+                            self.log("engine_not_supported", game_loop=self.state.game_loop, action_id=order["action_id"],
+                                     ability=AbilityId(command.ability_id).name, offered_abilities=offered)
+                        elif result != ActionResult.Success:
                             self.cooldowns[order["action_id"]] = self.time + 5
             else:
                 self.log("engine_action_response_unconfirmed", game_loop=self.state.game_loop,
@@ -99,17 +108,32 @@ class MacroExecution:
         return min(pairs, key=lambda pair: (pair[0].distance_to(pair[1]),
                    pair[0].energy + pair[1].energy), default=None)
 
+    def _research_ability(self, producer, upgrade, table_ability):
+        """The research command the unit offers: the running game's own ability for the upgrade, then the
+        SDK table's, then their generic ids (e.g. Vehicle and Ship Plating is offered under a generic id)."""
+        candidates = []
+        game = self.game_data.upgrades.get(upgrade.value)
+        research = getattr(game, "research_ability", None) if game is not None else None
+        if research is not None:
+            candidates.append(research.exact_id)
+        candidates.append(table_ability)
+        data = self.game_data.abilities.get(table_ability.value)
+        for generic in (research, data):
+            if generic is not None:
+                candidates.append(generic.id)
+        offered = self._abilities.get(producer.tag, set())
+        return next((a for a in candidates if a in offered), table_ability)
+
     def _research_one(self, action, upgrade):
         source = UPGRADE_RESEARCHED_FROM.get(upgrade)
         info = RESEARCH_INFO.get(source, {}).get(upgrade)
         for producer in self._producers:
             if info and producer.type_id == source and producer.is_idle and self._has_ability(producer, info["ability"]):
-                data = self.game_data.abilities.get(info["ability"].value)
-                if info["ability"] not in self._abilities.get(producer.tag, set()) and data is not None:
-                    # Offered only under its generic id (e.g. Vehicle and Ship Plating); the specific id is NotSupported.
-                    producer(data.id, subtract_cost=True)
-                else:
+                ability = self._research_ability(producer, upgrade, info["ability"])
+                if ability == info["ability"]:
                     producer.research(upgrade)
+                else:
+                    producer(ability, subtract_cost=True)
                 return
         self.record_failure(action, "no_ready_researcher_with_available_ability")
 

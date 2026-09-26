@@ -796,6 +796,22 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._disengage()
         self.assertEqual(self.bot.army_intent, "retreat")
 
+    async def test_a_skirmish_at_the_front_does_not_pull_back_the_army(self):
+        self.bot._initialize_navigation()
+        scouts = [FakeTerranUnit(100 + i, U.MARINE, (80, 60)) for i in range(3)]
+        main = [FakeTerranUnit(200 + i, U.MARINE, (40, 60)) for i in range(40)]
+        zerg = [FakeTerranUnit(300 + i, U.ROACH, (86, 60)) for i in range(15)]
+        for z in zerg:
+            z.can_attack = True
+        self.set_world([self.scv, *scouts, *main], [self.cc], zerg)
+        self.bot.army_intent = "attack"
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "attack")
+        # After heavy losses in the attack the same picture does pull back.
+        self.bot._attack_peak = 80
+        self.bot._disengage()
+        self.assertEqual(self.bot.army_intent, "retreat")
+
     async def test_enemies_at_our_bases_are_left_to_the_recall(self):
         self.bot._initialize_navigation()
         army = [FakeTerranUnit(100 + i, U.MARINE, (16, 10)) for i in range(5)]
@@ -957,6 +973,15 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._abilities = {armory.tag: {A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
         self.bot._research_one(40, upgrade)
         self.assertEqual(armory.commands, [(A.RESEARCH_TERRANVEHICLEANDSHIPPLATING, None)])
+        # The running game's own research ability comes first when the unit offers it.
+        armory.commands.clear()
+        own = SimpleNamespace(exact_id=A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
+                              id=A.RESEARCH_TERRANVEHICLEANDSHIPPLATING)
+        self.bot.game_data.upgrades = {upgrade.value: SimpleNamespace(research_ability=own)}
+        self.bot._abilities = {armory.tag: {A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
+                                            A.RESEARCH_TERRANVEHICLEANDSHIPPLATING}}
+        self.bot._research_one(40, upgrade)
+        self.assertEqual(armory.commands, [(A.ARMORYRESEARCHSWARM_TERRANVEHICLEANDSHIPPLATINGLEVEL1, None)])
 
     async def test_stim_only_when_researched_and_in_combat(self):
         marine = FakeTerranUnit(3, U.MARINE, (20, 20))
