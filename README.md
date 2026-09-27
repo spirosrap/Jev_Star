@@ -300,6 +300,8 @@ T47, the first Babylon game with edge clearance, won at 16:23. It had the strong
 
 T48 won on Babylon at 18:10 after a harder start: bases fell at 11:31 and 12:54 and SCVs dropped from 59 at 9:04 to 32 at 12:01, but the army stayed intact (87 ready army supply at 12:01) and the bot recovered to 46 SCVs and 4 bases at 16:01 and was maxed at 18:07 with 129 ready army supply, 50 SCVs and 5 bases. With edge clearance the bot won all four test games (T45–T46 on Ancient Cistern, T47–T48 on Babylon) in 16–18 minutes, with no building failing to place; before it, the same baseline was 2–4 on Babylon. Edge clearance is kept.
 
+The code is now frozen (phase 3l) and played twice on each remaining map. T49, the bot's first game on Dragon Scales LE, won at 17:34: 55 SCVs and 3 bases at 9:02, 63 SCVs, 4 bases, 12 Barracks and 2 Factories at 12:02, and maxed at 16:01 with 106 ready army supply, 64 SCVs and 6 bases, without losing a base; one Bunker spot was rejected by the engine.
+
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
 In T22 the upgrades came on time (Engineering Bay 5:37, Armory 6:45), but the army never reached the attack size: CheatVision brought 19 Banelings before 10:00 on Babylon (17–20 in T20–T21 as well) and destroyed a mostly-Marine defense with one or two Siege Tanks at 9:00 and again at 13:30. The schedule now also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by 6:30, and four Widow Mines by 7:00, and for a Planetary Fortress at the most exposed base once Banelings are seen; sieged Tanks and burrowed Mines now count toward those numbers.
@@ -604,6 +606,8 @@ T46 在 Ancient Cistern 于 18:01 获胜，同样没有失去基地，也没有�
 T47 是加入边缘留空后在 Babylon 的第一局，在 16:23 获胜。这是迄今最强的 Babylon 局面：9:00 时 55 台 SCV、9 座 Barracks、2 座 Factory，12:04 时满人口，100 就绪部队人口、76 台 SCV，16:04 时 68 台 SCV、6 个基地，没有失去基地，也没有建筑选址失败。
 
 T48 在 Babylon 于 18:10 获胜，开局更艰难：11:31 和 12:54 各失去一个基地，SCV 从 9:04 的 59 台降到 12:01 的 32 台，但部队完好（12:01 时 87 就绪部队人口），16:01 时恢复到 46 台 SCV 和 4 个基地，18:07 时满人口，129 就绪部队人口、50 台 SCV、5 个基地。加入边缘留空后，四局测试全部获胜（Ancient Cistern 的 T45–T46，Babylon 的 T47–T48），用时 16–18 分钟，没有建筑选址失败；此前同一基线在 Babylon 为 2 胜 4 负。边缘留空予以保留。
+
+代码现已冻结（第 3l 阶段），在其余每张地图上各打两局。T49 是 Bot 在 Dragon Scales LE 的第一局，在 17:34 获胜：9:02 时 55 台 SCV、3 个基地，12:02 时 63 台 SCV、4 个基地、12 座 Barracks、2 座 Factory，16:01 时满人口，106 就绪部队人口、64 台 SCV、6 个基地，没有失去基地；引擎拒绝了一个 Bunker 位置。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
