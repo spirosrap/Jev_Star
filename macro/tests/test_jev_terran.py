@@ -391,27 +391,6 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         for point in self.bot._placement_candidates(U.SUPPLYDEPOT):
             self.assertFalse(abs(point.x - slot.x) < 2 and abs(point.y - slot.y) < 2, point)
 
-    async def test_siege_tanks_stay_about_a_third_of_the_army(self):
-        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: 3 if kind in {U.SIEGETANK, U.SIEGETANKSIEGED} else 1)
-        factory = FakeTerranUnit(3, U.FACTORY)
-        factory.has_add_on = factory.has_techlab = True
-        self.abilities[factory.tag] = {TRAIN_INFO[U.FACTORY][U.SIEGETANK]["ability"]}
-
-        async def world(tanks, sieged, marines):
-            units = [FakeTerranUnit(100 + i, U.SIEGETANK) for i in range(tanks)]
-            units += [FakeTerranUnit(200 + i, U.SIEGETANKSIEGED) for i in range(sieged)]
-            units += [FakeTerranUnit(300 + i, U.MARINE) for i in range(marines)]
-            self.set_world([self.scv, *units], [self.cc, factory])
-            await self.bot._refresh_abilities()
-
-        await world(tanks=2, sieged=1, marines=0)  # The first four are always allowed.
-        self.assertIsNone(self.bot._train_reason(U.SIEGETANK))
-        await world(tanks=2, sieged=2, marines=20)  # A fifth needs 30 other supply (15 <= 0.5 * other).
-        self.assertEqual(self.bot._train_reason(U.SIEGETANK), "tank_share_limit")
-        await world(tanks=2, sieged=2, marines=30)
-        self.assertIsNone(self.bot._train_reason(U.SIEGETANK))
-        self.assertTrue(self.bot._tank_share_reached(extra=1))  # Batch training stops at the share too.
-
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)
         armory.is_idle = True

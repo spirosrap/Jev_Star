@@ -41,11 +41,6 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
-# Siege Tanks stay about a third of the army: beyond TANK_MIN of them, another is trained only while
-# tank supply is below TANK_TO_OTHER_ARMY times the rest of the army's supply (Marines, Marauders...).
-# A tank-heavy army is slow and cannot chase raids on the bases.
-TANK_MIN = 4
-TANK_TO_OTHER_ARMY = 0.5
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
@@ -99,7 +94,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
-                        "army_intent_execution", "tank_siege", "tank_share_limit",
+                        "army_intent_execution", "tank_siege",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
 
@@ -151,21 +146,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     def _producer_free(self, producer):
         return len(producer.orders) < (2 if producer.has_reactor else 1)
 
-    def _tank_share_reached(self, extra=0):
-        """True when one more Siege Tank would make tanks more than about a third of the army."""
-        tanks = (self.units.of_type({U.SIEGETANK, U.SIEGETANKSIEGED}).amount
-                 + self.already_pending(U.SIEGETANK) + extra)
-        if tanks < TANK_MIN:
-            return False
-        other = sum(self.calculate_supply_cost(u.type_id) for u in self._combat_units()
-                    if u.type_id not in {U.SIEGETANK, U.SIEGETANKSIEGED})
-        return self.calculate_supply_cost(U.SIEGETANK) * (tanks + 1) > TANK_TO_OTHER_ARMY * other
-
     def _train_reason(self, unit_type, ignore_resources=False):
         if not ignore_resources and not self.can_afford(unit_type):
             return "resources_or_supply"
-        if unit_type == U.SIEGETANK and self._tank_share_reached():
-            return "tank_share_limit"
         limit = self.contract.unit_limits.get(unit_type.name)
         if limit is not None and self._count_with_pending(unit_type) >= limit:
             return "unit_policy_limit"
@@ -338,8 +321,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 trained = 0
                 for slot in self._train_slots(unit_type):
                     if not self.can_afford(unit_type) or (limit is not None and count + trained >= limit):
-                        break
-                    if unit_type == U.SIEGETANK and self._tank_share_reached(extra=trained):
                         break
                     slot.train(unit_type)
                     trained += 1
