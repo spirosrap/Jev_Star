@@ -174,6 +174,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T46 | **CheatVision** | **Victory** | 18:01 | 2.95M | None (phase 3k, game 2, **Ancient Cistern LE**; commit `45166bf`) |
 | T47 | **CheatVision** | **Victory** | 16:23 | 2.71M | None (phase 3k, Babylon game 1, **Babylon LE**; commit `a42a540`) |
 | T48 | **CheatVision** | **Victory** | 18:10 | 3.00M | None (phase 3k, Babylon game 2, **Babylon LE**; commit `4f4a10f`) |
+| T49 | **CheatVision** | **Victory** | 17:34 | 3.09M | None (phase 3l, **Dragon Scales LE** game 1; commit `81ce965`) |
 
 One further VeryHard game was stopped by hand after the SC2 window stalled and is not counted. A CheatVision game on Ancient Cistern LE (commit `b361c1b`) was won in 10:01 but is also not counted: the Codex login stopped working mid-game (Astra's requests failed with authentication errors from 6:38), so Jev played mostly without plans; the control panel now shows "Astra unavailable" when this happens. A game on the reverted code (Ancient Cistern LE, commit `a9ef6e2`) was stopped at 12:29 when the Jev provider started refusing requests (HTTP 403, "RBAC: access denied"); it is not counted. A Babylon LE game on commit `1bae3ec` stopped the same way at 6:36 (HTTP 404) and is not counted either. OpenRouter began listing a new `typesafe/jev-router` the evening before; requests for `typesafe/jev-1.13` were still answered by `jev-1.13-20260917`, the version used in every game, but the provider briefly refused access twice. Access errors (401, 403, 404) are now retried for up to 60 seconds before a run stops. For comparison, the Protoss runs on the same machine the day before won three games against MediumHard and lost one against VeryHard.
 
@@ -202,7 +203,7 @@ Before testing other opponent races, confirm the Zerg results. Keep settings and
 | 3i. Baseline restored | The `fbe1a59` code with the three failure-only fixes (`2ca9f89`), proven on Ancient Cistern | Each further change is first played twice on Ancient Cistern LE and kept only if it does not hurt there, then tested on Babylon LE. On `5f1fcb7`: one defeat on Babylon (T43) |
 | 3j. Siege Tank share | Baseline plus one change: Siege Tanks limited to about a third of the army; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | Kept only if Ancient Cistern still wins; on Babylon, a mobile army that defends the bases. On `499fa6c`: one defeat on Ancient Cistern (T44). **Reverted** |
 | 3k. Edge clearance | Baseline plus one change: production and tech buildings keep 2 cells of walkable terrain from cliffs and the map edge; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | No units trapped between buildings and the edge of the base, without losing the Ancient Cistern results. On `709e95d`: one win on Ancient Cistern (T45); on `45166bf` (README only) a second (T46), so edge clearance **passes Ancient Cistern**; Babylon next. On `a42a540`: one win on Babylon (T47); on `4f4a10f` (README only) a second (T48). **Edge clearance passes: 4–0** |
-| 3l. All maps, code frozen | The edge-clearance baseline (`986a3cf`) unchanged: 2 games each on Altitude LE, Dragon Scales LE, Gresvan LE and Neohumanity LE against CheatVision Zerg, 40-minute limit | Shows whether the bot generalizes before any further change |
+| 3l. All maps, code frozen | The edge-clearance baseline (`986a3cf`) unchanged: 2 games each on Altitude LE, Dragon Scales LE, Gresvan LE and Neohumanity LE against CheatVision Zerg, 40-minute limit | Shows whether the bot generalizes before any further change. Dragon Scales: 1–0 (T49) |
 | 4. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
 | 5. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
 
@@ -467,6 +468,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 | T46 | **CheatVision** | **胜** | 18:01 | 295 万 | 无（第 3k 阶段第 2 局，**Ancient Cistern LE**；提交 `45166bf`） |
 | T47 | **CheatVision** | **胜** | 16:23 | 271 万 | 无（第 3k 阶段 Babylon 第 1 局，**Babylon LE**；提交 `a42a540`） |
 | T48 | **CheatVision** | **胜** | 18:10 | 300 万 | 无（第 3k 阶段 Babylon 第 2 局，**Babylon LE**；提交 `4f4a10f`） |
+| T49 | **CheatVision** | **胜** | 17:34 | 309 万 | 无（第 3l 阶段，**Dragon Scales LE** 第 1 局；提交 `81ce965`） |
 
 另有一局 VeryHard 因 SC2 窗口卡顿被手动停止，不计入。另一局 Ancient Cistern LE 上的 CheatVision 对局（提交 `b361c1b`）以 10:01 获胜，但同样不计入：对局中 Codex 登录失效（6:38 起 Astra 请求出现认证错误），Jev 基本在没有计划的情况下作战；控制面板现在会在这种情况下显示“Astra unavailable”。另一局在撤回后的代码上（Ancient Cistern LE，提交 `a9ef6e2`）于 12:29 因 Jev 服务开始拒绝请求（HTTP 403，“RBAC: access denied”）而停止，不计入。提交 `1bae3ec` 上的一局 Babylon LE 于 6:36 以同样方式停止（HTTP 404），同样不计入。OpenRouter 在前一晚开始列出新的 `typesafe/jev-router`；对 `typesafe/jev-1.13` 的请求仍由各局所用的 `jev-1.13-20260917` 应答，但服务两次短暂拒绝访问。现在访问错误（401、403、404）会重试最多 60 秒后才停止运行。作为对照，前一天同一台机器上的 Protoss 对局三胜 MediumHard、一负 VeryHard。
 
@@ -495,7 +497,7 @@ T7 失利：4:00–5:30 前后的 Zergling–Baneling 进攻（至少 25 只 Zer
 | 3i. 恢复基线 | `fbe1a59` 代码加三项仅在失败时起作用的修复（`2ca9f89`），已在 Ancient Cistern 上得到验证 | 之后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留，然后再在 Babylon LE 上测试。`5f1fcb7` 上 Babylon 1 负（T43） |
 | 3j. Siege Tank 比例 | 基线只加一项改动：Siege Tank 限制在部队的约三分之一；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 只有 Ancient Cistern 仍能获胜才保留；在 Babylon 上部队机动、能防守基地。`499fa6c` 上 Ancient Cistern 1 负（T44）。**已撤回** |
 | 3k. 边缘留空 | 基线只加一项改动：生产和科技建筑与悬崖及地图边缘之间保留 2 格可通行地形；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 单位不再被困在建筑与基地边缘之间，同时不损失 Ancient Cistern 的战绩。`709e95d` 上 Ancient Cistern 1 胜（T45）；`45166bf`（仅 README）上再胜一局（T46），边缘留空**通过 Ancient Cistern**；接下来是 Babylon。`a42a540` 上 Babylon 1 胜（T47）；`4f4a10f`（仅 README）上再胜一局（T48）。**边缘留空通过：4 胜 0 负** |
-| 3l. 全部地图，代码冻结 | 边缘留空基线（`986a3cf`）不做改动：在 Altitude LE、Dragon Scales LE、Gresvan LE 和 Neohumanity LE 上各打 2 局 CheatVision Zerg，40 分钟上限 | 在做任何进一步改动之前，确认 Bot 能否泛化 |
+| 3l. 全部地图，代码冻结 | 边缘留空基线（`986a3cf`）不做改动：在 Altitude LE、Dragon Scales LE、Gresvan LE 和 Neohumanity LE 上各打 2 局 CheatVision Zerg，40 分钟上限 | 在做任何进一步改动之前，确认 Bot 能否泛化。Dragon Scales：1 胜（T49） |
 | 4. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
 | 5. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
 
