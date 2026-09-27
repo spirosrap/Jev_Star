@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import httpx
+import numpy as np
 from sc2.data import Race
 from sc2.dicts.unit_research_abilities import RESEARCH_INFO
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
@@ -330,6 +331,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         grid = Mock()
         grid.__getitem__ = Mock(side_effect=lambda pos: 1 if 0 <= pos[0] < 60 and 0 <= pos[1] < 60 else 0)
         self.bot.game_info.placement_grid = grid
+        self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.ones((200, 200), dtype=np.uint8))
         queries = []
 
         async def can_place(kind, positions):
@@ -350,6 +352,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         grid = Mock()
         grid.__getitem__ = Mock(return_value=1)
         self.bot.game_info.placement_grid = grid
+        self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.ones((200, 200), dtype=np.uint8))
 
     async def test_walled_in_spot_is_skipped_for_a_reachable_one(self):
         self.use_open_grid()
@@ -390,6 +393,26 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         slot = rax.position.offset((2.5, -0.5))
         for point in self.bot._placement_candidates(U.SUPPLYDEPOT):
             self.assertFalse(abs(point.x - slot.x) < 2 and abs(point.y - slot.y) < 2, point)
+
+    async def test_buildings_keep_walkable_ground_between_them_and_cliffs(self):
+        self.use_open_grid()
+        terrain = np.ones((200, 200), dtype=np.uint8)
+        terrain[:, 30:] = 0  # A cliff from x = 30.
+        self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=terrain)
+        cliff = Mock()
+        cliff.__getitem__ = Mock(side_effect=lambda pos: 0 if pos[0] >= 30 else 1)
+        self.bot.game_info.placement_grid = cliff
+        for kind in (U.BARRACKS, U.ENGINEERINGBAY):
+            candidates = self.bot._placement_candidates(kind)
+            self.assertTrue(candidates)
+            for point in candidates:
+                right = point.x + 1.5 if kind != U.BARRACKS else point.x + 3.5  # Barracks add-on slot.
+                self.assertLessEqual(right + 2, 30, (kind, point))
+        # Depots may still go right against the cliff: lowered, they are walkable.
+        self.assertTrue(any(p.x + 1 > 28 for p in self.bot._placement_candidates(U.SUPPLYDEPOT)))
+        # Our own buildings do not count as edges: the terrain is taken once, at the first placement.
+        self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.zeros((200, 200), dtype=np.uint8))
+        self.assertTrue(self.bot._placement_candidates(U.ENGINEERINGBAY))
 
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)

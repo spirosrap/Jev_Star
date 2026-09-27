@@ -41,6 +41,11 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
+# Buildings other than Supply Depots, Missile Turrets and Bunkers keep this many cells of walkable
+# terrain (no cliff, map edge or rocks) around their footprint and add-on slot, so units they make
+# are never trapped in a pocket between a building and the edge of the base.
+EDGE_CLEARANCE = 2
+EDGE_EXEMPT = {U.SUPPLYDEPOT, U.MISSILETURRET, U.BUNKER}
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
@@ -94,7 +99,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     local_automation = ["worker_distribution", "mule_calldown", "supply_depot_lowering",
                         "resume_unfinished_construction", "bunker_load_unload", "scv_repair_under_fire",
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
-                        "army_intent_execution", "tank_siege",
+                        "army_intent_execution", "tank_siege", "building_edge_clearance",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
                         "medivac_and_raven_escort"]
 
@@ -106,6 +111,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._rejected_spots = {}
         self._addon_blocked = {}
         self._gas_throttled = False
+        self._terrain = None
         self._lurker_seen = -1000
         self._last_scan = -1000
 
@@ -451,9 +457,28 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             return
         worker.build(kind, position)
 
+    def _clear_of_edges(self, point, kind):
+        """True when the footprint (and add-on slot) has EDGE_CLEARANCE walkable terrain cells around it."""
+        rects = [(point, 1.5)]
+        if kind in PRODUCTION:
+            rects.append((point.offset((2.5, -0.5)), 1))
+        terrain = self._terrain.data_numpy  # Indexed [y, x].
+        height, width = terrain.shape
+        for centre, half in rects:
+            x0, x1 = int(centre.x - half) - EDGE_CLEARANCE, int(centre.x + half) + EDGE_CLEARANCE
+            y0, y1 = int(centre.y - half) - EDGE_CLEARANCE, int(centre.y + half) + EDGE_CLEARANCE
+            if x0 < 0 or y0 < 0 or x1 > width or y1 > height:  # Too close to the map edge.
+                return False
+            if not terrain[y0:y1, x0:x1].all():
+                return False
+        return True
+
     def _placement_candidates(self, kind):
         """Grid-aligned spots near the anchors, nearest anchor first, after local filtering."""
         grid = self.game_info.placement_grid
+        if self._terrain is None:
+            # SDK refreshes pathing every step, marking our own buildings; keep the first one as terrain.
+            self._terrain = self.game_info.pathing_grid
         odd = kind not in {U.SUPPLYDEPOT, U.MISSILETURRET}  # 3x3 footprints centre on half cells.
         half = 1.5 if odd else 1
         reserved = self._reserved_areas()
@@ -476,6 +501,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 if kind in PRODUCTION and self._overlaps(point.offset((2.5, -0.5)), 1, reserved):
                     continue
                 if kind in PRODUCTION and self._blocks_resources(point.offset((2.5, -0.5)), kind):
+                    continue
+                if kind not in EDGE_EXEMPT and not self._clear_of_edges(point, kind):
                     continue
                 candidates.append(point)
         return candidates
