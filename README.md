@@ -177,6 +177,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T49 | **CheatVision** | **Victory** | 17:34 | 3.09M | None (phase 3l, **Dragon Scales LE** game 1; commit `81ce965`) |
 | T50 | **CheatVision** | **Victory** | 23:12 | 4.18M | None (phase 3l, **Dragon Scales LE** game 2; commit `6025dca`, bot code as `81ce965`) |
 | T51 | **CheatVision** | **Victory** | 16:55 | 2.88M | None (phase 3l, **Gresvan LE** game 1; commit `eea3a00`, bot code as `81ce965`) |
+| T52 | CheatVision | Defeat | 17:56 | 2.83M | None (phase 3l, **Gresvan LE** game 2; commit `733f8ff`, bot code as `81ce965`) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -216,7 +217,7 @@ Before testing other opponent races, confirm the Zerg results. Keep settings and
 | 3i. Baseline restored | The `fbe1a59` code with the three failure-only fixes (`2ca9f89`), proven on Ancient Cistern | Each further change is first played twice on Ancient Cistern LE and kept only if it does not hurt there, then tested on Babylon LE. On `5f1fcb7`: one defeat on Babylon (T43) |
 | 3j. Siege Tank share | Baseline plus one change: Siege Tanks limited to about a third of the army; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | Kept only if Ancient Cistern still wins; on Babylon, a mobile army that defends the bases. On `499fa6c`: one defeat on Ancient Cistern (T44). **Reverted** |
 | 3k. Edge clearance | Baseline plus one change: production and tech buildings keep 2 cells of walkable terrain from cliffs and the map edge; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | No units trapped between buildings and the edge of the base, without losing the Ancient Cistern results. On `709e95d`: one win on Ancient Cistern (T45); on `45166bf` (README only) a second (T46), so edge clearance **passes Ancient Cistern**; Babylon next. On `a42a540`: one win on Babylon (T47); on `4f4a10f` (README only) a second (T48). **Edge clearance passes: 4–0** |
-| 3l. All maps, code frozen | The edge-clearance baseline (`986a3cf`) unchanged: 2 games each on Altitude LE, Dragon Scales LE, Gresvan LE and Neohumanity LE against CheatVision Zerg, 40-minute limit | Shows whether the bot generalizes before any further change. Dragon Scales: 2–0 (T49–T50); Gresvan: 1–0 (T51) |
+| 3l. All maps, code frozen | The edge-clearance baseline (`986a3cf`) unchanged: 2 games each on Altitude LE, Dragon Scales LE, Gresvan LE and Neohumanity LE against CheatVision Zerg, 40-minute limit | Shows whether the bot generalizes before any further change. Dragon Scales: 2–0 (T49–T50); Gresvan: 1–1 (T51 won, T52 lost) |
 | 4. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
 | 5. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
 
@@ -307,6 +308,8 @@ The code is now frozen (phase 3l) and played twice on each remaining map. T49, t
 T50 won on Dragon Scales at 23:12 after a harder game: 57 SCVs and 4 bases at 9:00 and 71 SCVs and 5 bases at 12:04, then bases fell at 13:10 and 18:09, SCVs dropped to 45 by 16:04 while the army was maxed at 135 ready army supply, and a big fight cut the army to 47 by 20:02; the economy had recovered to 60 SCVs and 5 bases and the bot still won. One Bunker spot was rejected and one expansion site could not be reached.
 
 T51, the bot's first game on Gresvan LE, won at 16:55: 74 ready army supply and 55 SCVs at 9:03, 66 SCVs and 4 bases at 12:07, and maxed at 16:00 with 114 ready army supply, 67 SCVs, 5 bases and 12 Siege Tanks, with no building failing to place and no base lost.
+
+T52 lost on Gresvan (17:56). At 8:51 about 35 visible supply of Banelings, Roaches, Hydralisks and Ravagers hit a base and cut the army from 60 to 20 ready army supply within seconds (44 Marines to 11), with 1 Siege Tank out; a base fell at 9:16 and SCVs dropped from 52 to 31 by 12:01. The army was rebuilt to 63, but three more bases fell (15:29, 16:00, 16:59) and only 6 SCVs were left at 16:02. The same attack at about 8:50, against clumped Marines with 1–3 Siege Tanks, also hit T34, T44 and T21; it is the clearest remaining weakness.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -490,6 +493,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 | T49 | **CheatVision** | **胜** | 17:34 | 309 万 | 无（第 3l 阶段，**Dragon Scales LE** 第 1 局；提交 `81ce965`） |
 | T50 | **CheatVision** | **胜** | 23:12 | 418 万 | 无（第 3l 阶段，**Dragon Scales LE** 第 2 局；提交 `6025dca`，Bot 代码同 `81ce965`） |
 | T51 | **CheatVision** | **胜** | 16:55 | 288 万 | 无（第 3l 阶段，**Gresvan LE** 第 1 局；提交 `eea3a00`，Bot 代码同 `81ce965`） |
+| T52 | CheatVision | 负 | 17:56 | 283 万 | 无（第 3l 阶段，**Gresvan LE** 第 2 局；提交 `733f8ff`，Bot 代码同 `81ce965`） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -529,7 +533,7 @@ T7 失利：4:00–5:30 前后的 Zergling–Baneling 进攻（至少 25 只 Zer
 | 3i. 恢复基线 | `fbe1a59` 代码加三项仅在失败时起作用的修复（`2ca9f89`），已在 Ancient Cistern 上得到验证 | 之后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留，然后再在 Babylon LE 上测试。`5f1fcb7` 上 Babylon 1 负（T43） |
 | 3j. Siege Tank 比例 | 基线只加一项改动：Siege Tank 限制在部队的约三分之一；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 只有 Ancient Cistern 仍能获胜才保留；在 Babylon 上部队机动、能防守基地。`499fa6c` 上 Ancient Cistern 1 负（T44）。**已撤回** |
 | 3k. 边缘留空 | 基线只加一项改动：生产和科技建筑与悬崖及地图边缘之间保留 2 格可通行地形；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 单位不再被困在建筑与基地边缘之间，同时不损失 Ancient Cistern 的战绩。`709e95d` 上 Ancient Cistern 1 胜（T45）；`45166bf`（仅 README）上再胜一局（T46），边缘留空**通过 Ancient Cistern**；接下来是 Babylon。`a42a540` 上 Babylon 1 胜（T47）；`4f4a10f`（仅 README）上再胜一局（T48）。**边缘留空通过：4 胜 0 负** |
-| 3l. 全部地图，代码冻结 | 边缘留空基线（`986a3cf`）不做改动：在 Altitude LE、Dragon Scales LE、Gresvan LE 和 Neohumanity LE 上各打 2 局 CheatVision Zerg，40 分钟上限 | 在做任何进一步改动之前，确认 Bot 能否泛化。Dragon Scales：2 胜（T49–T50）；Gresvan：1 胜（T51） |
+| 3l. 全部地图，代码冻结 | 边缘留空基线（`986a3cf`）不做改动：在 Altitude LE、Dragon Scales LE、Gresvan LE 和 Neohumanity LE 上各打 2 局 CheatVision Zerg，40 分钟上限 | 在做任何进一步改动之前，确认 Bot 能否泛化。Dragon Scales：2 胜（T49–T50）；Gresvan：1 胜 1 负（T51 胜，T52 负） |
 | 4. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
 | 5. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
 
@@ -620,6 +624,8 @@ T48 在 Babylon 于 18:10 获胜，开局更艰难：11:31 和 12:54 各失去�
 T50 在 Dragon Scales 于 23:12 获胜，过程更艰难：9:00 时 57 台 SCV、4 个基地，12:04 时 71 台 SCV、5 个基地，随后 13:10 和 18:09 各失去一个基地，16:04 时 SCV 降到 45 台而部队满员（135 就绪部队人口），一场大战在 20:02 前把部队打到 47；经济已恢复到 60 台 SCV 和 5 个基地，最终仍然获胜。引擎拒绝了一个 Bunker 位置，一个分矿点无法到达。
 
 T51 是 Bot 在 Gresvan LE 的第一局，在 16:55 获胜：9:03 时 74 就绪部队人口、55 台 SCV，12:07 时 66 台 SCV、4 个基地，16:00 时满人口，114 就绪部队人口、67 台 SCV、5 个基地和 12 辆 Siege Tank，没有建筑选址失败，没有失去基地。
+
+T52 在 Gresvan 失利（17:56）。8:51 时可见约 35 人口的 Baneling、Roach、Hydralisk 和 Ravager 进攻一个基地，数秒内把部队从 60 打到 20 就绪部队人口（Marine 从 44 个降到 11 个），当时只有 1 辆 Siege Tank；9:16 失去一个基地，到 12:01 SCV 从 52 台降到 31 台。部队重建到 63，但又失去三个基地（15:29、16:00、16:59），16:02 时只剩 6 台 SCV。约 8:50 针对扎堆 Marine（只有 1–3 辆 Siege Tank）的同一波进攻也打击了 T34、T44 和 T21，是目前最明显的弱点。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
