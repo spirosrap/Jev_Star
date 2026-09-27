@@ -195,6 +195,7 @@ Before testing other opponent races, confirm the Zerg results. Keep settings and
 | 3g. SCV evacuation on the baseline | Baseline plus one change: SCVs leave a raided, undefended base; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | SCVs survive raids on Babylon without losing the Ancient Cistern results. On `c0af324`: one win on Babylon (T40); then one defeat (T41) |
 | 3h. Lanes around Factories | Baseline with SCV evacuation plus 2-cell lanes around Factories only; 2 games on Babylon LE and at least 2 consecutive wins on Ancient Cistern LE, 40-minute limit | No Siege Tanks stuck in the main, without losing the Ancient Cistern results. On `92856e2`: one defeat on Babylon (T42). **Reverted** with the evacuation: with lanes the bot went 1–2 (T33, T34, T42), without them 4–2 (T35–T38, T40–T41) |
 | 3i. Baseline restored | The `fbe1a59` code with the three failure-only fixes (`2ca9f89`), proven on Ancient Cistern | Each further change is first played twice on Ancient Cistern LE and kept only if it does not hurt there, then tested on Babylon LE. On `5f1fcb7`: one defeat on Babylon (T43) |
+| 3j. Siege Tank share | Baseline plus one change: Siege Tanks limited to about a third of the army; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | Kept only if Ancient Cistern still wins; on Babylon, a mobile army that defends the bases |
 | 4. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
 | 5. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
 
@@ -263,6 +264,8 @@ T42, the first game with Factory lanes, lost on Babylon (stopped at 25:17). It w
 The Factory lanes and the SCV evacuation were both removed, returning the bot code to the proven baseline `2ca9f89` (202 offline tests). Since T37 every change was aimed at Babylon and none was played on Ancient Cistern, so none showed that it keeps the Ancient Cistern results. From now on each change is first played twice on Ancient Cistern LE and kept only if it does not hurt there.
 
 T43, the first extra Babylon game on the restored baseline, lost (stopped at 28:08). It was on the winning path through 16:03 (maxed with 101 ready army supply, 67 SCVs, 6 bases and 17 Siege Tanks, no base lost), then lost bases at 16:29, 17:49, 19:54, 22:35 and 25:15 while its army kept growing: 152 ready army supply and 34 Siege Tanks at 25:05, with 30 SCVs and 3 bases. At the end the army was 23 Siege Tanks, 11 Marines, 6 Marauders and 8 Medivacs. Production drifted to Siege Tanks, which are slow, hard to get out of the packed main, and weak against raids without bio, so the large army did not protect the bases.
+
+The next single change limits Siege Tanks to about a third of the army: after the first four, another Siege Tank (sieged ones included) is trained only while tank supply stays at most half of the rest of the army's supply, and batch training stops at the same limit (logged as the blocked reason `tank_share_limit`; 204 offline tests). Nothing else changes; Jev then picks Marines, Marauders or other units instead. It is played twice on Ancient Cistern LE first.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -464,6 +467,7 @@ T7 失利：4:00–5:30 前后的 Zergling–Baneling 进攻（至少 25 只 Zer
 | 3g. 基线加 SCV 撤离 | 基线只加一项改动：SCV 撤离遭袭且无防守的基地；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 在 Babylon 上 SCV 能躲过袭击，同时不损失 Ancient Cistern 的战绩。`c0af324` 上 Babylon 1 胜（T40）；随后 1 负（T41） |
 | 3h. Factory 周围通道 | 基线加 SCV 撤离，再加仅围绕 Factory 的 2 格通道；Babylon LE 2 局，Ancient Cistern LE 至少连胜 2 局，40 分钟上限 | 主基地不再有 Siege Tank 被卡住，同时不损失 Ancient Cistern 的战绩。`92856e2` 上 Babylon 1 负（T42）。连同撤离一起**撤回**：有通道时 1 胜 2 负（T33、T34、T42），无通道时 4 胜 2 负（T35–T38、T40–T41） |
 | 3i. 恢复基线 | `fbe1a59` 代码加三项仅在失败时起作用的修复（`2ca9f89`），已在 Ancient Cistern 上得到验证 | 之后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留，然后再在 Babylon LE 上测试。`5f1fcb7` 上 Babylon 1 负（T43） |
+| 3j. Siege Tank 比例 | 基线只加一项改动：Siege Tank 限制在部队的约三分之一；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 只有 Ancient Cistern 仍能获胜才保留；在 Babylon 上部队机动、能防守基地 |
 | 4. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
 | 5. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
 
@@ -532,6 +536,8 @@ T42 是加入 Factory 通道后的第一局，在 Babylon 失利（25:17 手动�
 Factory 通道和 SCV 撤离都已移除，Bot 代码回到已验证的基线 `2ca9f89`（202 项离线测试）。自 T37 以来每项改动都针对 Babylon，却没有一项在 Ancient Cistern 上打过，因此都没有证明能保住 Ancient Cistern 的战绩。今后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留。
 
 T43 是恢复基线后在 Babylon 加打的第一局，失利（28:08 手动停止）。它到 16:03 都在胜局的轨道上（满人口，101 就绪部队人口、67 台 SCV、6 个基地、17 辆 Siege Tank，未失去基地），之后在 16:29、17:49、19:54、22:35 和 25:15 相继失去基地，而部队却越来越大：25:05 时 152 就绪部队人口、34 辆 Siege Tank，只有 30 台 SCV 和 3 个基地。结束时部队为 23 辆 Siege Tank、11 个 Marine、6 个 Marauder 和 8 架 Medivac。生产偏向了 Siege Tank，它们行动慢、难以离开紧密排列的主基地，没有生化部队时也难以应对袭击，因此庞大的部队并没有保护好基地。
+
+下一项单独改动把 Siege Tank 限制在部队的约三分之一：前四辆之后，只有当坦克人口（含已架起的）不超过其余部队人口的一半时才会再生产一辆，批量生产也在同一上限停止（被阻止的原因记为 `tank_share_limit`；204 项离线测试）。其他不变；Jev 会改选 Marine、Marauder 等单位。先在 Ancient Cistern LE 打 2 局。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
