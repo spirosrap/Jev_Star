@@ -82,7 +82,8 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
     def _snapshot(self):
         information = self.get_information()
         information["game_loop"] = self.state.game_loop
-        information["enemy_race"] = self.enemy_race.name
+        # Campaign maps have several computer slots, so the SDK may not know a single enemy race.
+        information["enemy_race"] = self.enemy_race.name if self.enemy_race else "Unknown"
         information["visibility"] = "Enemy counts cover currently visible units only; unseen forces are unknown."
         information["army_intent"] = self.army_intent
         information["navigation"] = self._navigation_snapshot()

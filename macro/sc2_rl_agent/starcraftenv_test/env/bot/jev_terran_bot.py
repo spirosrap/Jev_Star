@@ -6,6 +6,7 @@ from collections import Counter
 from sc2.bot_ai import BotAI
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
 from sc2.dicts.unit_trained_from import UNIT_TRAINED_FROM
+from sc2.game_data import Cost
 from sc2.ids.ability_id import AbilityId as A
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
@@ -116,6 +117,43 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
+
+    async def on_start(self):
+        self._repair_creation_abilities()
+        await super().on_start()
+
+    def _repair_creation_abilities(self):
+        """Campaign data leaves out the build/train ability of some units (Command Center, SCV) although the
+        ability itself exists with its multiplayer id. Fill it in so the SDK can train, build and count them.
+        Melee data is complete, so nothing changes there."""
+        repaired = []
+        for kinds in TRAIN_INFO.values():
+            for kind, info in kinds.items():
+                data = self.game_data.units.get(kind.value)
+                if (data is not None and data.creation_ability is None
+                        and info["ability"].value in self.game_data.abilities):
+                    data._proto.ability_id = info["ability"].value
+                    repaired.append(kind.name)
+        if repaired:
+            self.log("game_data_repaired", units=sorted(set(repaired)))
+
+    def calculate_cost(self, item_id):
+        # Campaign data lacks some multiplayer units entirely (e.g. the Hellbat in Wings of Liberty).
+        try:
+            return super().calculate_cost(item_id)
+        except (AttributeError, KeyError):
+            return Cost(0, 0)
+
+    def calculate_supply_cost(self, unit_type):
+        try:
+            return super().calculate_supply_cost(unit_type)
+        except (AttributeError, KeyError):
+            return 0
+
+    def already_pending(self, unit_type):
+        if isinstance(unit_type, U) and unit_type.value not in self.game_data.units:
+            return 0
+        return super().already_pending(unit_type)
 
     def _count_with_pending(self, kind):
         if kind == U.SCV:

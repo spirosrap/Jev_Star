@@ -414,6 +414,29 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.zeros((200, 200), dtype=np.uint8))
         self.assertTrue(self.bot._placement_candidates(U.ENGINEERINGBAY))
 
+    async def test_campaign_game_data_is_repaired_and_missing_units_count_zero(self):
+        class FakeUnitData:
+            def __init__(self, ability_id, abilities):
+                self._proto = SimpleNamespace(ability_id=ability_id)
+                self._abilities = abilities
+
+            @property
+            def creation_ability(self):
+                return self._abilities.get(self._proto.ability_id)
+
+        scv_ability = TRAIN_INFO[U.COMMANDCENTER][U.SCV]["ability"]
+        marine_ability = TRAIN_INFO[U.BARRACKS][U.MARINE]["ability"]
+        abilities = {scv_ability.value: SimpleNamespace(exact_id=scv_ability, id=scv_ability),
+                     marine_ability.value: SimpleNamespace(exact_id=marine_ability, id=marine_ability)}
+        units = {U.SCV.value: FakeUnitData(0, abilities),  # Wings of Liberty leaves the SCV's ability out.
+                 U.MARINE.value: FakeUnitData(marine_ability.value, abilities)}
+        self.bot.game_data = SimpleNamespace(abilities=abilities, units=units, upgrades={})
+        self.bot._repair_creation_abilities()
+        self.assertEqual(units[U.SCV.value]._proto.ability_id, scv_ability.value)
+        self.assertEqual(units[U.MARINE.value]._proto.ability_id, marine_ability.value)
+        del self.bot.already_pending  # Use the real method, not the test double.
+        self.assertEqual(self.bot.already_pending(U.HELLIONTANK), 0)  # Not in this game's data at all.
+
     async def test_research_offered_only_under_its_generic_id_uses_that_id(self):
         armory = FakeTerranUnit(5, U.ARMORY)
         armory.is_idle = True
