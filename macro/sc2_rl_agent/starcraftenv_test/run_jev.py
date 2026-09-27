@@ -51,6 +51,10 @@ def main():
     parser.add_argument("--plan-ttl", type=positive_float, default=180, help="Game seconds a received plan stays valid")
     parser.add_argument("--max-plan-age", type=positive_float, default=60)
     parser.add_argument("--max-planner-requests", type=int, default=80)
+    parser.add_argument("--mission-objectives", type=Path,
+                        help="Objectives JSON of a campaign mission prepared by scripts/campaign/campaign.py")
+    parser.add_argument("--bank-directory", type=Path,
+                        help="Where SC2 writes banks (Documents/StarCraft II/Banks); needed with --mission-objectives")
     args = parser.parse_args()
     if args.max_requests < 1:
         parser.error("--max-requests must be positive")
@@ -82,7 +86,7 @@ def main():
         "agent/astra_planner.py", "agent/jev_agent.py", "agent/strategic_policy.py", "agent/macro_contract.py",
         "env/bot/Protoss_bot.py", "env/bot/jev_protoss_bot.py", "env/bot/hierarchical_protoss_bot.py",
         "env/bot/jev_macro_bot.py", "env/bot/hierarchical_bot.py", "env/bot/jev_terran_bot.py",
-        "env/bot/hierarchical_terran_bot.py",
+        "env/bot/hierarchical_terran_bot.py", "env/bot/mission_objectives.py",
         "env/bot/macro_execution.py", "env/bot/macro_navigation.py", "run_jev.py", "utils/run_logging.py",
         "utils/sc2_runtime.py", "utils/action_info.py")]
     atomic_json(output / "source-fingerprints.json", {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
@@ -127,6 +131,14 @@ def main():
                 else:
                     bot = FlatBot(client, output, args.decision_interval, args.max_decision_age,
                                        args.max_requests, run_log=log)
+                if args.mission_objectives:
+                    from .env.bot.mission_objectives import MissionObjectives
+                    if not args.bank_directory:
+                        parser.error("--mission-objectives needs --bank-directory")
+                    bot.mission = MissionObjectives(args.mission_objectives, args.bank_directory)
+                    bot.mission.clear_bank()
+                    if planner_client is not None:
+                        planner_client.instructions += "\n\n" + bot.mission.planner_text()
                 log.phase = "launching"
                 bot.contract = contract
                 result = run_windowed_game(game_map, [Bot(Race[args.race], bot),

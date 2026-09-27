@@ -22,6 +22,8 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
 
     contract = None
     local_automation = []
+    # A MissionObjectives when playing a prepared campaign mission; None in normal games.
+    mission = None
 
     def __init__(self, jev_client, output_dir: Path, decision_interval=1.0,
                  max_decision_age=4.0, max_requests=2000, run_log=None):
@@ -72,6 +74,9 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
                  macro_contract=VERSION,
                  initial_workers=self.supply_workers, initial_supply_cap=self.supply_cap,
                  local_automation=list(self.local_automation))
+        if self.mission is not None:
+            self.log("mission_objectives", mission=self.mission.mission.get("title"),
+                     objectives=self.mission.snapshot())
 
     def get_enemy_unity(self):
         return dict(Counter(u.type_id.name for u in self.enemy_units if u.is_visible))
@@ -85,6 +90,12 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
         # Campaign maps have several computer slots, so the SDK may not know a single enemy race.
         information["enemy_race"] = self.enemy_race.name if self.enemy_race else "Unknown"
         information["visibility"] = "Enemy counts cover currently visible units only; unseen forces are unknown."
+        if self.mission is not None:
+            for key, (old, new) in self.mission.refresh(self.time).items():
+                objective = self.mission.by_key.get(key, {})
+                self.log("objective_state", key=key, name=objective.get("name", key),
+                         primary=objective.get("primary"), previous=old, state=new)
+            information["mission_objectives"] = self.mission.snapshot()
         information["army_intent"] = self.army_intent
         information["navigation"] = self._navigation_snapshot()
         information["supply_forecast"] = self._supply_forecast()
@@ -315,6 +326,9 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
             "note": "Submitted commands are not proof of completed production. Check heartbeat observations/replay.",
         }
         summary.update(self._extra_summary())
+        if self.mission is not None:
+            self.mission.refresh(self._last_game_loop / 22.4, force=True)
+            summary["mission"] = self.mission.outcome()
         self.log("end", **summary)
         self.log.write_summary(summary)
         if self._owns_log:

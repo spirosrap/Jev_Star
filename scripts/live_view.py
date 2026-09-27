@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""JEV-Star control panel: start or stop a macro game and watch Astra's plan and Jev's choices."""
+"""JEV-Star control panel: start or stop a macro game or a campaign mission and watch Astra's plan and Jev's choices."""
 
+import glob
 import json
 import os
 import signal
@@ -21,6 +22,9 @@ OPPONENTS = ["Zerg", "Terran", "Protoss", "Random"]
 DIFFICULTIES = ["VeryEasy", "Easy", "Medium", "MediumHard", "Hard", "Harder", "VeryHard",
                 "CheatVision", "CheatMoney", "CheatInsane"]
 EFFORTS = ["none", "low", "medium", "high", "xhigh"]
+sys.path.insert(0, str(ROOT / "scripts" / "campaign"))
+import campaign  # noqa: E402  (mission list and preparation)
+FIT_MARK = {"yes": "✅", "partial": "⚠️", "no": "❌"}
 
 PAGE = """<!doctype html>
 <meta charset="utf-8">
@@ -53,14 +57,21 @@ PAGE = """<!doctype html>
   #stop { background: #ffb4a2; color: #10140f; }
   button:disabled { opacity: .35; cursor: default; }
   .match { color: #c5d4ae; margin: 0 0 4px; }
+  label.wide { grid-column: span 2; }
+  .objectives li.completed { color: #b6e36a; }
+  .objectives li.failed { color: #ffb4a2; }
+  .objectives li.pending { color: #8b977c; }
 </style>
 <main>
   <h1>JEV-Star</h1>
   <form id="launch">
-    <label>Race <select name="race"></select></label>
-    <label>Opponent <select name="opponent_race"></select></label>
-    <label>Difficulty <select name="difficulty"></select></label>
-    <label>Map <select name="map"></select></label>
+    <label>Mode <select name="mode"><option value="ladder">Ladder game</option><option value="campaign">Campaign mission</option></select></label>
+    <label class="ladder">Race <select name="race"></select></label>
+    <label class="ladder">Opponent <select name="opponent_race"></select></label>
+    <label class="ladder">Difficulty <select name="difficulty"></select></label>
+    <label class="ladder">Map <select name="map"></select></label>
+    <label class="campaign">Campaign <select name="campaign"><option>Wings of Liberty</option></select></label>
+    <label class="campaign wide">Mission (✅ fits · ⚠️ special objective · ❌ not playable) <select name="mission"></select></label>
     <label>Astra effort <select name="planner_effort"></select></label>
     <label>Time limit (min) <input name="minutes" type="number" min="1" max="60" value="20"></label>
     <div class="actions">
@@ -74,6 +85,10 @@ PAGE = """<!doctype html>
   <p class="match" id="match"></p>
   <p class="clock" id="clock">waiting</p>
   <p class="stats" id="stats"></p>
+  <div id="mission-box" style="display:none">
+    <h2>Mission objectives</h2>
+    <ul class="objectives" id="objectives"></ul>
+  </div>
   <h2>Astra plan</h2>
   <div class="plan" id="plan">No plan yet. Astra writes one after it has seen the opening.</div>
   <h2>Jev now</h2>
@@ -102,8 +117,22 @@ async function options() {
   fill("difficulty", o.difficulties, saved.difficulty || "Easy");
   fill("map", o.maps, saved.map || "Altitude LE");
   fill("planner_effort", o.efforts, saved.planner_effort || "medium");
+  const missions = form.elements.mission;
+  missions.innerHTML = o.missions.map(m =>
+    `<option value="${m.map}" ${m.fit === "no" ? "disabled" : ""}>${m.order}. ${m.mark} ${m.title} — ${m.note}</option>`).join("");
+  if (saved.mission) missions.value = saved.mission;
   if (saved.minutes) form.elements.minutes.value = saved.minutes;
+  if (saved.mode) form.elements.mode.value = saved.mode;
+  showMode();
 }
+
+function showMode() {
+  const campaignMode = form.elements.mode.value === "campaign";
+  for (const el of form.querySelectorAll(".ladder")) el.style.display = campaignMode ? "none" : "";
+  for (const el of form.querySelectorAll(".campaign")) el.style.display = campaignMode ? "" : "none";
+  document.getElementById("start").textContent = campaignMode ? "Start mission" : "Start game";
+}
+form.elements.mode.addEventListener("change", showMode);
 
 async function post(path, body) {
   const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"},
@@ -116,7 +145,7 @@ form.addEventListener("submit", async e => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(form));
   try { localStorage.setItem("jev-launch", JSON.stringify(body)); } catch (e) {}
-  status.textContent = "Starting StarCraft II…";
+  status.textContent = body.mode === "campaign" ? "Preparing the mission, then starting StarCraft II…" : "Starting StarCraft II…";
   await post("/start", body);
   tick();
 });
@@ -145,6 +174,16 @@ async function tick() {
     const recent = document.getElementById("recent");
     recent.replaceChildren(...(s.recent || []).map(x => Object.assign(document.createElement("li"), {textContent: x})));
     document.getElementById("err").textContent = s.error || "";
+    const box = document.getElementById("mission-box");
+    box.style.display = s.objectives ? "" : "none";
+    if (s.objectives) {
+      document.getElementById("objectives").replaceChildren(...s.objectives.map(o => {
+        const li = document.createElement("li");
+        li.className = o.state === "completed" ? "completed" : o.state === "failed" ? "failed" : "pending";
+        li.textContent = `${o.type === "primary" ? "Primary" : "Secondary"}: ${o.name} — ${o.state}`;
+        return li;
+      }));
+    }
   } catch (e) {
     document.getElementById("err").textContent = "Live feed disconnected.";
   }
@@ -200,9 +239,51 @@ def launch_environment():
     return environment
 
 
+def bank_directory():
+    """Where the Windows client under Wine saves banks: <prefix>/drive_c/users/<user>/Documents/StarCraft II/Banks."""
+    prefix = Path(os.environ.get("WINEPREFIX", Path.home() / "Games" / "battlenet"))
+    found = sorted(glob.glob(str(prefix / "drive_c" / "users" / "*" / "Documents" / "StarCraft II")))
+    base = Path(found[0]) if found else prefix / "drive_c" / "users" / "steamuser" / "Documents" / "StarCraft II"
+    return base / "Banks"
+
+
+def start_mission(request):
+    try:
+        map_id, effort, minutes = request["mission"], request["planner_effort"], int(request["minutes"])
+    except (KeyError, TypeError, ValueError):
+        return 400, "Incomplete launch settings."
+    missions = {m["map"]: m for m in campaign.catalog(sc2_path())}
+    mission = missions.get(map_id)
+    if mission is None or mission["fit"] == "no" or effort not in EFFORTS or not 1 <= minutes <= 60:
+        return 400, "Invalid launch settings."
+    try:
+        _, objectives = campaign.prepare(map_id, sc2_path())
+    except (SystemExit, OSError, subprocess.CalledProcessError) as exc:
+        return 500, f"Could not prepare {mission['title']}: {exc}"
+    # The mission's own scripted forces fight us; the computer slot only fills the second player.
+    command = [sys.executable, str(ROOT / "jev_star.py"), "macro", "--race", mission["race"], "--map", map_id,
+               "--opponent-race", "Terran", "--difficulty", "Medium", "--game-time-limit", str(minutes * 60),
+               "--mission-objectives", str(objectives), "--bank-directory", str(bank_directory())]
+    if effort != "none":
+        command += ["--planner", "codex", "--planner-effort", effort]
+    return launch(command, f"Starting {mission['title']} ({mission['campaign']}).")
+
+
+def launch(command, message):
+    RUNS.mkdir(parents=True, exist_ok=True)
+    with LAUNCH_LOG.open("a", encoding="utf-8") as log:
+        log.write(f"\n{datetime.now().isoformat(timespec='seconds')} {' '.join(command)}\n")
+        log.flush()
+        subprocess.Popen(command, cwd=ROOT, env=launch_environment(), stdin=subprocess.DEVNULL,
+                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    return 200, message
+
+
 def start_game(request):
     if game_pids():
         return 409, "A game is already running."
+    if request.get("mode") == "campaign":
+        return start_mission(request)
     try:
         race, opponent = request["race"], request["opponent_race"]
         difficulty, game_map = request["difficulty"], request["map"]
@@ -217,13 +298,7 @@ def start_game(request):
                "--game-time-limit", str(minutes * 60)]
     if effort != "none":
         command += ["--planner", "codex", "--planner-effort", effort]
-    RUNS.mkdir(parents=True, exist_ok=True)
-    with LAUNCH_LOG.open("a", encoding="utf-8") as log:
-        log.write(f"\n{datetime.now().isoformat(timespec='seconds')} {' '.join(command)}\n")
-        log.flush()
-        subprocess.Popen(command, cwd=ROOT, env=launch_environment(), stdin=subprocess.DEVNULL,
-                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-    return 200, f"Starting {race} vs {difficulty} {opponent} on {game_map}."
+    return launch(command, f"Starting {race} vs {difficulty} {opponent} on {game_map}.")
 
 
 def stop_game():
@@ -257,6 +332,7 @@ def load_state():
     result = ""
     planner_failures = 0
     planner_last_error = ""
+    objectives = None
     if events_path.exists():
         for line in events_path.read_text(errors="replace").splitlines():
             try:
@@ -278,16 +354,23 @@ def load_state():
                 recent.append(f"{event.get('game_seconds', 0):.0f}s  {label}")
             elif kind == "plan_accepted":
                 plan_text = event.get("guidance") or event.get("objective") or plan_text
+                planner_failures = 0
+            elif kind in ("planner_response", "planner_discarded"):
+                planner_failures = 0  # Astra answered, even if the plan was then not used
             elif kind == "heartbeat":
                 economy = event.get("economy") or economy
             elif kind == "planner_error":
                 planner_failures += 1
                 planner_last_error = str(event.get("error") or "")
-            elif kind == "plan_accepted":
-                planner_failures = 0
             elif kind == "run_failure":
                 failure = event.get("failure") or {}
                 error = f"Match stopped: {failure.get('type', 'error')} {failure.get('message', '')}"
+            elif kind == "mission_objectives":
+                objectives = {o["name"]: dict(o) for o in event.get("objectives") or []}
+            elif kind == "objective_state" and objectives is not None:
+                entry = objectives.setdefault(event.get("name"), {"name": event.get("name"),
+                                                                 "type": "primary" if event.get("primary") else "secondary"})
+                entry["state"] = event.get("state")
             elif kind == "run_end":
                 result = event.get("result") or result
                 if event.get("economy"):
@@ -300,16 +383,32 @@ def load_state():
         except (OSError, json.JSONDecodeError):
             pass
     summary_path = run / "summary.json"
-    if not result and summary_path.exists():
+    mission_outcome = None
+    if summary_path.exists():
         try:
-            result = json.loads(summary_path.read_text()).get("result") or ""
+            summary = json.loads(summary_path.read_text())
+            result = result or summary.get("result") or ""
+            mission_outcome = summary.get("mission")
         except (OSError, json.JSONDecodeError):
             pass
+    if mission_outcome:
+        objectives = {o["name"]: o for o in mission_outcome.get("objectives") or []}
+        # A campaign mission counts as complete only when every objective, primary and secondary, is completed.
+        if mission_outcome.get("all_objectives_completed"):
+            result = "Mission complete"
+        elif result == "Victory":
+            result = "Victory, objectives missed"
     match = ""
     try:
         settings = json.loads((run / "run.json").read_text())
         match = (f"{settings.get('player_race', 'Protoss')} vs {settings.get('difficulty')} "
                  f"{settings.get('opponent_race')} · {settings.get('map')}")
+        if settings.get("mission_objectives"):
+            try:
+                title = json.loads(Path(settings["mission_objectives"]).read_text()).get("title", settings.get("map"))
+            except (OSError, json.JSONDecodeError):
+                title = settings.get("map")
+            match = f"Campaign mission: {title} · {settings.get('player_race')}"
     except (OSError, json.JSONDecodeError):
         pass
     if not error and ("authentication" in planner_last_error and planner_failures or planner_failures >= 3):
@@ -340,6 +439,7 @@ def load_state():
         "recent": recent[-8:][::-1],
         "result": result,
         "error": error,
+        "objectives": list(objectives.values()) if objectives is not None else None,
     }
 
 
@@ -359,8 +459,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/state"):
             self._json(200, load_state())
         elif self.path.startswith("/options"):
+            missions = [dict(m, mark=FIT_MARK[m["fit"]]) for m in campaign.catalog(sc2_path())]
             self._json(200, {"races": RACES, "opponents": OPPONENTS, "difficulties": DIFFICULTIES,
-                             "efforts": EFFORTS, "maps": maps()})
+                             "efforts": EFFORTS, "maps": maps(), "missions": missions})
         else:
             page = PAGE.encode()
             self.send_response(200)

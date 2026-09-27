@@ -112,6 +112,22 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 
 Use `py -3.10 jev_star.py macro --help` or `micro --help` for all options. Relative paths in forwarded arguments are resolved inside `macro/` or `micro/`.
 
+### Campaign missions
+
+The Terran bot can play Wings of Liberty missions with their real setup: the mission's own units, scripted attacks, triggers and victory conditions. The maps are read from the installed game (read-only), so the campaign must be installed with StarCraft II.
+
+1. Build the two map tools once: `scripts/campaign/build_tools.sh` (CascLib and StormLib go into `.tools/`).
+2. In the control panel, choose **Mode: Campaign mission**. Missions are listed first to last: ✅ base-building missions the bot fits, ⚠️ base-building missions with a special objective, ❌ hero-only, special-mechanic or Protoss missions (these can't be selected).
+3. **Start mission** prepares the map the first time (`python3 scripts/campaign/campaign.py prepare TRaynor02` does the same by hand). This writes `Maps/Campaign/<id>.SC2Map` and `.tools/campaign/<id>.json` with the mission's objectives.
+
+A mission counts as won only when **every objective, primary and secondary, is completed**. Destroying the enemy alone isn't enough. The prepared map carries a small trigger that saves each objective's state to the `JevObjectives` bank once per game second. The bot reads that bank, logs `objective_state` events, and passes the objectives and their states to Astra and Jev. The panel shows them live. The result is "Mission complete" only when every objective is done; otherwise a scripted victory shows as "Victory, objectives missed".
+
+Heart of the Swarm needs a Zerg bot, which doesn't exist yet. Legacy of the Void would use the Protoss bot, which hasn't been tested on campaign maps.
+
+| Mission | Result | Objectives |
+|---|---|---|
+| The Outlaws (TRaynor02) | Victory at 8:08 (first test, before objective tracking) | Destroy the Dominion Base: done · Rescue the Rebels: not tracked yet |
+
 ### Experiment status
 
 Each micro version was evaluated on 35 maps with three episodes per map. JEV alone achieved **3 wins, 2 draws, and 100 losses**; the earlier Astra + JEV version achieved **6 wins, 1 draw, and 98 losses**; P0 Astra + JEV achieved **7 wins and 98 losses**. Excluding the two development maps, the three versions achieved **3/99, 3/99, and 7/99 wins**, respectively.
@@ -182,6 +198,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T54 | **CheatVision** | **Victory** | 19:28 | 3.33M | None (phase 3l, **Neohumanity LE** game 2; commit `9756d4d`, bot code as `81ce965`) |
 | T55 | **CheatVision** | **Victory** | 14:25 | 2.42M | None (phase 3l, **Altitude LE** game 1; commit `b9a2455`, bot code as `81ce965`) |
 | T56 | **CheatVision** | **Victory** | 15:03 | 2.48M | None (phase 3l, **Altitude LE** game 2; commit `a37620f`, bot code as `81ce965`) |
+| T57 | **CheatMoney** | Defeat | 24:45 | 4.03M | None (first game against **CheatMoney** Zerg, **Altitude LE**, Astra effort high; commit `148e88f`, bot code as `81ce965` plus the campaign guards) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -323,6 +340,8 @@ T55 won on Altitude LE at 14:25, the fastest win of the frozen test: 47 SCVs and
 
 T56 won on Altitude at 15:03 (no base lost; 46 SCVs and 3 bases at 9:02, 67 SCVs, 4 bases and 9 Siege Tanks at 12:03). This completes the frozen test: the edge-clearance baseline (bot code of `81ce965`, unchanged since) won 11 of 12 games against CheatVision Zerg across all six maps (Ancient Cistern, Babylon, Dragon Scales, Neohumanity and Altitude 2–0 each; Gresvan 1–1), most in 14–21 minutes. The one loss (T52) came from the Baneling, Roach and Infestor attack at about 8:50 that also hit T21, T34 and T44 on other maps; it is the next thing to address.
 
+T57 was the first game against CheatMoney Zerg (the computer gets extra income as well as full vision), on Altitude LE with Astra at high effort. The bot held the early pressure: a base was lost at 5:20, but it had 60 SCVs and 99 army supply at 13:53 and was nearly maxed at 15:27 (182/200, 122 army supply). Its attack at 14:26 traded badly, army supply fell to 56 by 17:00, and it retreated. Five bases were lost from 19:33 on, SCVs fell from 60 to 37 by 20:02 and to 12 by 23:07, and the last building fell at 24:45 while 1,393 minerals sat unspent at 18:32. Astra's plans were slow at high effort: 13 of 35 were discarded because the battle changed while it planned, and 3 were rejected as invalid, so only 19 were used. The panel's "Astra unavailable: 3 planner requests failed in a row" was wrong: the three failures were at 7:07, 7:44 and 24:06, with accepted plans between them. CheatMoney is a harder level than the frozen test's CheatVision; one game isn't a result yet.
+
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
 In T22 the upgrades came on time (Engineering Bay 5:37, Armory 6:45), but the army never reached the attack size: CheatVision brought 19 Banelings before 10:00 on Babylon (17–20 in T20–T21 as well) and destroyed a mostly-Marine defense with one or two Siege Tanks at 9:00 and again at 13:30. The schedule now also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by 6:30, and four Widow Mines by 7:00, and for a Planetary Fortress at the most exposed base once Banelings are seen; sieged Tanks and burrowed Mines now count toward those numbers.
@@ -440,6 +459,22 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 
 所有参数可通过 `py -3.10 jev_star.py macro --help` 或 `micro --help` 查看。转发参数中的相对路径以 `macro/` 或 `micro/` 为基准。
 
+### 战役任务
+
+人族机器人可以按任务原本的设置游玩《自由之翼》战役：任务自带的单位、脚本进攻、触发器和胜利条件。地图从已安装的游戏中只读读取，因此 StarCraft II 需要安装战役内容。
+
+1. 先构建两个地图工具（只需一次）：`scripts/campaign/build_tools.sh`（CascLib 和 StormLib 安装到 `.tools/`）。
+2. 在控制面板中选择 **Mode: Campaign mission**。任务按顺序从第一关到最后一关列出：✅ 适合机器人的建造基地任务，⚠️ 带特殊目标的建造基地任务，❌ 纯英雄、特殊机制或神族任务（不可选）。
+3. **Start mission** 首次运行时会先准备地图（也可手动运行 `python3 scripts/campaign/campaign.py prepare TRaynor02`），生成 `Maps/Campaign/<id>.SC2Map` 和记录任务目标的 `.tools/campaign/<id>.json`。
+
+只有**所有目标（主要和次要）全部完成**才算任务胜利，仅消灭敌人不够。准备好的地图带有一个小触发器，每游戏秒把每个目标的状态写入 `JevObjectives` 存档。机器人读取该存档，记录 `objective_state` 事件，并把目标及其状态提供给 Astra 和 Jev；控制面板实时显示这些目标。只有全部目标完成时结果才显示为 “Mission complete”；否则脚本判定的胜利显示为 “Victory, objectives missed”。
+
+《虫群之心》需要虫族机器人（尚未实现）。《虚空之遗》将使用神族机器人，但尚未在战役地图上测试。
+
+| 任务 | 结果 | 目标 |
+|---|---|---|
+| The Outlaws (TRaynor02) | 8:08 胜利（首次测试，尚未跟踪目标） | 摧毁自治领基地：完成 · 营救叛军：尚未跟踪 |
+
 ### 实验状态
 
 微观每版 35 图 × 3 局：纯 JEV 为 **3 胜、2 平、100 负**，旧 Astra＋JEV 为 **6 胜、1 平、98 负**，P0 Astra＋JEV 为 **7 胜、98 负**。排除两张开发地图后，三版分别为 **3/99、3/99、7/99 胜**。
@@ -510,6 +545,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 | T54 | **CheatVision** | **胜** | 19:28 | 333 万 | 无（第 3l 阶段，**Neohumanity LE** 第 2 局；提交 `9756d4d`，Bot 代码同 `81ce965`） |
 | T55 | **CheatVision** | **胜** | 14:25 | 242 万 | 无（第 3l 阶段，**Altitude LE** 第 1 局；提交 `b9a2455`，Bot 代码同 `81ce965`） |
 | T56 | **CheatVision** | **胜** | 15:03 | 248 万 | 无（第 3l 阶段，**Altitude LE** 第 2 局；提交 `a37620f`，Bot 代码同 `81ce965`） |
+| T57 | **CheatMoney** | 负 | 24:45 | 403 万 | 无（首局对 **CheatMoney** Zerg，**Altitude LE**，Astra 强度 high；提交 `148e88f`，Bot 代码同 `81ce965` 加战役防护） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -650,6 +686,8 @@ T54 在 Neohumanity 于 19:28 获胜：9:00 时 47 就绪部队人口、53 台 S
 T55 在 Altitude LE 于 14:25 获胜，是冻结测试中最快的胜利：9:02 时 47 台 SCV、3 个基地，12:02 时 67 台 SCV、4 个基地，结束时满人口，124 就绪部队人口、66 台 SCV、5 个基地，没有失去基地；引擎拒绝了两个补给站位置。
 
 T56 在 Altitude 于 15:03 获胜（没有失去基地；9:02 时 46 台 SCV、3 个基地，12:03 时 67 台 SCV、4 个基地、9 辆 Siege Tank）。冻结测试至此完成：边缘留空基线（`81ce965` 的 Bot 代码，此后未改动）在全部六张地图上对 CheatVision Zerg 十二局十一胜（Ancient Cistern、Babylon、Dragon Scales、Neohumanity、Altitude 各 2 胜，Gresvan 1 胜 1 负），多数在 14–21 分钟内获胜。唯一的失利（T52）来自约 8:50 的 Baneling、Roach 和 Infestor 进攻，这波进攻也在其他地图上打击了 T21、T34 和 T44；这是下一步要解决的问题。
+
+T57 是首局对 CheatMoney Zerg（电脑除全图视野外还有额外收入），地图 Altitude LE，Astra 强度 high。Bot 顶住了早期压力：5:20 失去一个基地，但 13:53 时有 60 台 SCV、99 部队人口，15:27 接近满人口（182/200，122 部队人口）。14:26 的进攻交换不利，17:00 部队人口降到 56 并撤退。19:33 起先后失去五个基地，SCV 从 60 台降到 20:02 的 37 台、23:07 的 12 台，24:45 最后一个建筑被摧毁；18:32 时还有 1393 矿未花出。high 强度下 Astra 规划较慢：35 个计划中 13 个因规划期间战局变化被丢弃，3 个被判无效，只采用了 19 个。控制面板显示的 “Astra unavailable: 3 planner requests failed in a row” 有误：三次失败分别在 7:07、7:44 和 24:06，中间都有被采用的计划。CheatMoney 比冻结测试所用的 CheatVision 更难，一局还不能说明结果。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
