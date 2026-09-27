@@ -202,6 +202,7 @@ Before testing other opponent races, confirm the Zerg results. Keep settings and
 | 3i. Baseline restored | The `fbe1a59` code with the three failure-only fixes (`2ca9f89`), proven on Ancient Cistern | Each further change is first played twice on Ancient Cistern LE and kept only if it does not hurt there, then tested on Babylon LE. On `5f1fcb7`: one defeat on Babylon (T43) |
 | 3j. Siege Tank share | Baseline plus one change: Siege Tanks limited to about a third of the army; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | Kept only if Ancient Cistern still wins; on Babylon, a mobile army that defends the bases. On `499fa6c`: one defeat on Ancient Cistern (T44). **Reverted** |
 | 3k. Edge clearance | Baseline plus one change: production and tech buildings keep 2 cells of walkable terrain from cliffs and the map edge; first 2 games on Ancient Cistern LE, then 2 on Babylon LE, 40-minute limit | No units trapped between buildings and the edge of the base, without losing the Ancient Cistern results. On `709e95d`: one win on Ancient Cistern (T45); on `45166bf` (README only) a second (T46), so edge clearance **passes Ancient Cistern**; Babylon next. On `a42a540`: one win on Babylon (T47); on `4f4a10f` (README only) a second (T48). **Edge clearance passes: 4–0** |
+| 3l. All maps, code frozen | The edge-clearance baseline (`986a3cf`) unchanged: 2 games each on Altitude LE, Dragon Scales LE, Gresvan LE and Neohumanity LE against CheatVision Zerg, 40-minute limit | Shows whether the bot generalizes before any further change |
 | 4. CheatMoney | 3 against CheatMoney Zerg on Altitude LE | Extra enemy income; expect larger armies earlier |
 | 5. CheatInsane | 3 against CheatInsane Zerg on Altitude LE | Extra income and full vision; the hardest built-in AI |
 
@@ -494,6 +495,7 @@ T7 失利：4:00–5:30 前后的 Zergling–Baneling 进攻（至少 25 只 Zer
 | 3i. 恢复基线 | `fbe1a59` 代码加三项仅在失败时起作用的修复（`2ca9f89`），已在 Ancient Cistern 上得到验证 | 之后每项改动先在 Ancient Cistern LE 打 2 局，只有不造成损害才保留，然后再在 Babylon LE 上测试。`5f1fcb7` 上 Babylon 1 负（T43） |
 | 3j. Siege Tank 比例 | 基线只加一项改动：Siege Tank 限制在部队的约三分之一；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 只有 Ancient Cistern 仍能获胜才保留；在 Babylon 上部队机动、能防守基地。`499fa6c` 上 Ancient Cistern 1 负（T44）。**已撤回** |
 | 3k. 边缘留空 | 基线只加一项改动：生产和科技建筑与悬崖及地图边缘之间保留 2 格可通行地形；先在 Ancient Cistern LE 打 2 局，再在 Babylon LE 打 2 局，40 分钟上限 | 单位不再被困在建筑与基地边缘之间，同时不损失 Ancient Cistern 的战绩。`709e95d` 上 Ancient Cistern 1 胜（T45）；`45166bf`（仅 README）上再胜一局（T46），边缘留空**通过 Ancient Cistern**；接下来是 Babylon。`a42a540` 上 Babylon 1 胜（T47）；`4f4a10f`（仅 README）上再胜一局（T48）。**边缘留空通过：4 胜 0 负** |
+| 3l. 全部地图，代码冻结 | 边缘留空基线（`986a3cf`）不做改动：在 Altitude LE、Dragon Scales LE、Gresvan LE 和 Neohumanity LE 上各打 2 局 CheatVision Zerg，40 分钟上限 | 在做任何进一步改动之前，确认 Bot 能否泛化 |
 | 4. CheatMoney | 在 Altitude LE 打 3 局 CheatMoney Zerg | 敌方额外收入，预计更早出现更大部队 |
 | 5. CheatInsane | 在 Altitude LE 打 3 局 CheatInsane Zerg | 额外收入加全图视野，最难的内置 AI |
 
