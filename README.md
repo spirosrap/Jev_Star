@@ -217,6 +217,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T59 | **CheatMoney** | Defeat | 34:27 | 5.03M | None (CheatMoney Zerg, **Ancient Cistern LE**; **bank spending** on branch `cheatmoney-bank-spend`, commit `f49f891`) |
 | T60 | **CheatMoney** | Defeat | 17:37 | 2.64M | None (CheatMoney Zerg, **Ancient Cistern LE**; bank spending, bot code as `f49f891`, commit `8ad9940`) |
 | T61 | **CheatMoney** | Defeat | 17:01 | 2.52M | None (CheatMoney Zerg, **Babylon LE** game 1; bank spending, bot code as `f49f891`, commit `98226f9`) |
+| T62 | **CheatMoney** | Defeat | 23:09 | 3.65M | None (CheatMoney Zerg, **Babylon LE** game 2; bank spending, bot code as `f49f891`, commit `ce80f62`) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -368,6 +369,8 @@ T59 tested one change on top of the baseline: once a game second, while minerals
 T60, the second counted Cistern game with bank spending (the game before it was stopped when the OpenRouter key reached its spending limit), held the early game again: 62 army supply at 8:04, no collapse at the ~8:45 attack, and 63 SCVs with 126 army supply (10 Siege Tanks, 52 Marines, 15 Marauders) at 13:15. Astra's plan was to attack at 90 ready supply; the army moved out at 12:59 and at 13:14 met a Hatchery with Spine Crawlers, Vipers and Corruptors, and fell from 126 to 40 army supply in 30 seconds. Mutalisks followed at 14:33, bases fell at 14:39 and 15:55, and SCVs went from 54 to 12 between 15:31 and 16:03; the last building fell at 17:37. Bank spending queued only 57 units, as the bank rarely reached 600. With it, Cistern CheatMoney lasted 34:27 and 17:37 against 12:43 without it; both losses came from fights after the early game.
 
 T61 was the first Babylon game with bank spending. The bot went into the fight with its strongest early army yet, 83 army supply and 63 SCVs at 9:02 with under 400 minerals banked, but the attack at 9:13 brought Banelings, Hydralisks, Lurkers, Ravagers and Roaches together: army supply fell to 32 by 9:36 and a base fell at 9:17. Zerg then destroyed production (Barracks 5 to 3, Factories 2 to 1, Reactors 3 to 1 between 10:01 and 11:44), so with few producers the bank grew to 1,366 minerals at 14:07 while the army stayed at 20–50 supply; bank spending queued only 83 units. Brood Lords came at 15:29, bases fell at 15:25 and 15:55, and the last building fell at 17:01.
+
+T62, the second Babylon game, was the strongest CheatMoney game so far. The attack at 8:55 (Banelings, Lurkers, Ravagers) cost no army and no base; the bot had 119 army supply and 63 SCVs at 10:10 and was maxed at 14:11 with 127 army supply and 73 SCVs, and still had 99 army supply and 76 SCVs at 16:05. Brood Lords came at 16:07 (Vipers from 12:36, Mutalisks from 14:10), and the bot had one Viking: from 16:19 the army fell from 107 to 52 by 17:47 while defending, bases fell from 17:01, Infestors appear to have taken Siege Tanks at 17:54, and SCVs went from 72 at 17:47 to 21 by 19:40; the last building fell at 23:09. Bank spending queued 222 units. Every CheatMoney loss with bank spending came after the early game: attacks into defended bases (T59, T60), the combined 9:13 attack and lost production (T61), and Brood Lords with almost no anti-air (T62).
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -591,6 +594,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T59 | **CheatMoney** | 负 | 34:27 | 503 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；分支 `cheatmoney-bank-spend` 上的**积压资源出兵**，提交 `f49f891`） |
 | T60 | **CheatMoney** | 负 | 17:37 | 264 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；积压资源出兵，Bot 代码同 `f49f891`，提交 `8ad9940`） |
 | T61 | **CheatMoney** | 负 | 17:01 | 252 万 | 无（CheatMoney Zerg，**Babylon LE** 第 1 局；积压资源出兵，Bot 代码同 `f49f891`，提交 `98226f9`） |
+| T62 | **CheatMoney** | 负 | 23:09 | 365 万 | 无（CheatMoney Zerg，**Babylon LE** 第 2 局；积压资源出兵，Bot 代码同 `f49f891`，提交 `ce80f62`） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -742,6 +746,8 @@ T59 在基线之上只测试一个改动：每游戏秒一次，当矿物达到 
 T60 是积压资源出兵的第二局计数 Cistern 对局（之前一局因 OpenRouter 密钥达到消费上限而停止）。早期再次守住：8:04 时 62 部队人口，约 8:45 的进攻未造成崩溃，13:15 时 63 台 SCV、126 部队人口（10 辆 Siege Tank、52 个 Marine、15 个 Marauder）。Astra 的计划是在 90 就绪人口时进攻；部队于 12:59 出发，13:14 遇到带 Spine Crawler、Viper 和 Corruptor 的 Hatchery，30 秒内从 126 降到 40 部队人口。14:33 出现 Mutalisk，14:39 和 15:55 各失去一个基地，15:31 至 16:03 SCV 从 54 台降到 12 台；17:37 最后一个建筑被摧毁。本局积压资源出兵只排入 57 个单位，因为积压很少达到 600。加入该改动后，Cistern 上对 CheatMoney 分别坚持到 34:27 和 17:37，未加入时为 12:43；两局都败于早期之后的战斗。
 
 T61 是积压资源出兵的第一局 Babylon。Bot 带着迄今最强的早期部队迎战：9:02 时 83 部队人口、63 台 SCV，积压不到 400 矿；但 9:13 的进攻同时出现 Baneling、Hydralisk、Lurker、Ravager 和 Roach：部队人口在 9:36 降到 32，9:17 失去一个基地。随后 Zerg 摧毁生产建筑（10:01 至 11:44 间 Barracks 5 降到 3，Factory 2 降到 1，Reactor 3 降到 1），生产建筑太少，积压在 14:07 增至 1366 矿，而部队始终只有 20–50 人口；积压资源出兵只排入 83 个单位。15:29 出现 Brood Lord，15:25 和 15:55 各失去一个基地，17:01 最后一个建筑被摧毁。
+
+T62 是第二局 Babylon，也是迄今最强的一局 CheatMoney。8:55 的进攻（Baneling、Lurker、Ravager）没有造成部队或基地损失；10:10 时 119 部队人口、63 台 SCV，14:11 满人口（127 部队人口、73 台 SCV），16:05 时仍有 99 部队人口、76 台 SCV。16:07 出现 Brood Lord（12:36 起有 Viper，14:10 起有 Mutalisk），而 Bot 只有一架 Viking：16:19 起防守中部队从 107 降到 17:47 的 52，17:01 起基地陆续失守，17:54 似乎有 Infestor 控制了 Siege Tank，SCV 从 17:47 的 72 台降到 19:40 的 21 台；23:09 最后一个建筑被摧毁。积压资源出兵共排入 222 个单位。加入该改动后的每一局 CheatMoney 都败于早期之后：进攻设防基地（T59、T60）、9:13 的混合进攻加上生产建筑被毁（T61），以及几乎没有防空时遇到 Brood Lord（T62）。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
