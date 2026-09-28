@@ -10,6 +10,16 @@ WORKERS = {U.PROBE, U.SCV, U.DRONE}
 # Spore Crawler are not attacked.
 CAUTIOUS_MAIN_RADIUS = 28
 CAUTIOUS_DEFENSE_RADIUS = 12
+# Siege push: while maxed with a bank to re-max and enough Siege Tanks, the Zerg main and crawler cover may be attacked
+# (Tanks siege at 13, Spine Crawlers reach 7). It ends when the army falls below SIEGE_PUSH_KEEP of its size at the
+# start, then waits SIEGE_PUSH_COOLDOWN game seconds. While attacking, a home guard stays behind.
+SIEGE_PUSH_SUPPLY = 190
+SIEGE_PUSH_MINERALS = 3000
+SIEGE_PUSH_GAS = 1000
+SIEGE_PUSH_TANKS = 8
+SIEGE_PUSH_KEEP = 0.6
+SIEGE_PUSH_COOLDOWN = 120
+HOME_GUARD_SHARE = 0.25
 STATIC_DEFENSE = {"SPINECRAWLER", "SPINECRAWLERUPROOTED", "SPORECRAWLER", "SPORECRAWLERUPROOTED",
                   "PHOTONCANNON", "BUNKER", "PLANETARYFORTRESS", "MISSILETURRET"}
 
@@ -31,6 +41,9 @@ class MacroNavigation:
         self._base_damaged_until = {}
         self._last_navigation = -100
         self._redirects_logged = {}
+        self._sticky_target_id = None
+        self._siege_push_start_army = None
+        self._siege_push_blocked_until = -1000
 
     def _set_search_sites(self, locations):
         points = sorted(set(locations), key=lambda p: (p.x, p.y))
@@ -102,6 +115,7 @@ class MacroNavigation:
                 "current_target_id": self._resolved_army_target_id,
                 "army_center": list(army.center) if army else None,
                 "army_destination": list(self._army_destination) if self._army_destination else None,
+                "siege_push": self._siege_push_active(),
                 "targets": [{"id": "home", "position": list(self._defense_position())},
                             {"id": "enemy_start", "position": list(self.enemy_start_locations[0])},
                             *self._mission_markers(),
@@ -125,7 +139,7 @@ class MacroNavigation:
     def _attack_allowed(self, position):
         """Against CheatMoney and stronger, the army does not attack into the Zerg main or bases covered by crawlers:
         every late loss in T60 and T66-T69 began with the whole army attacking there."""
-        if not getattr(self, "cautious_attacks", False):
+        if not getattr(self, "cautious_attacks", False) or self._siege_push_active():
             return True
         position = Point2(position)
         if position.distance_to(self.enemy_start_locations[0]) < CAUTIOUS_MAIN_RADIUS:
@@ -173,11 +187,53 @@ class MacroNavigation:
                 and self._attack_allowed(self.enemy_start_locations[0])):
             return "enemy_start", self.enemy_start_locations[0]
         if candidates:
-            army = self._combat_units()
-            origin = army.center if army else self.start_location
-            target = min(candidates, key=lambda e: Point2(e["position"]).distance_to(origin))
-            return target["id"], Point2(target["position"])
+            # Keep the fallback target while it is still known and allowed: re-picking the nearest one every step
+            # sent the army back and forth across the map (T74, 26:13-26:35).
+            sticky = next((m for m in candidates if m["id"] == self._sticky_target_id), None)
+            if sticky is None:
+                army = self._combat_units()
+                origin = army.center if army else self.start_location
+                sticky = min(candidates, key=lambda e: Point2(e["position"]).distance_to(origin))
+                self._sticky_target_id = sticky["id"]
+            return sticky["id"], Point2(sticky["position"])
         return self._search_target()
+
+    def _army_supply_now(self):
+        return sum(self.calculate_supply_cost(u.type_id) for u in self._combat_units())
+
+    def _siege_push_active(self):
+        """Against CheatMoney: the window in which the Zerg main and crawler cover may be attacked."""
+        if not getattr(self, "cautious_attacks", False):
+            return False
+        if self._siege_push_start_army is not None:
+            if self._army_supply_now() < SIEGE_PUSH_KEEP * self._siege_push_start_army:
+                self.log("siege_push_ended", game_loop=self.state.game_loop, start_army=self._siege_push_start_army,
+                         army=self._army_supply_now())
+                self._siege_push_start_army = None
+                self._siege_push_blocked_until = self.time + SIEGE_PUSH_COOLDOWN
+                return False
+            return True
+        tanks = self.units.of_type({U.SIEGETANK, U.SIEGETANKSIEGED}).amount
+        if (self.time >= self._siege_push_blocked_until and self.supply_used >= SIEGE_PUSH_SUPPLY
+                and self.minerals >= SIEGE_PUSH_MINERALS and self.vespene >= SIEGE_PUSH_GAS
+                and tanks >= SIEGE_PUSH_TANKS):
+            self._siege_push_start_army = self._army_supply_now()
+            self.log("siege_push_started", game_loop=self.state.game_loop, army=self._siege_push_start_army,
+                     tanks=tanks, minerals=self.minerals, gas=self.vespene)
+            return True
+        return False
+
+    def _home_guard(self, army):
+        """While attacking against CheatMoney, a quarter of the bio (nearest home) stays at home, and the Siege Tanks
+        too unless it is a siege push: in T74 the whole army left and a base fell (17:23)."""
+        if self.army_intent != "attack" or not getattr(self, "cautious_attacks", False):
+            return army.subgroup([])
+        home = self._defense_position()
+        bio = army.of_type({U.MARINE, U.MARAUDER}).sorted(lambda u: u.distance_to(home))
+        guard = list(bio[:int(len(bio) * HOME_GUARD_SHARE)])
+        if not self._siege_push_active():
+            guard += list(army.of_type({U.SIEGETANK}))
+        return army.subgroup(guard)
 
     def _set_army_intent(self, intent):
         self.army_intent = intent
@@ -189,6 +245,16 @@ class MacroNavigation:
                                            and u.type_id not in self.stationary_army_types)
         if not army:
             return
+        guard = self._home_guard(army)
+        if guard:
+            home = self._defense_position()
+            for unit in guard:
+                if unit.distance_to(home) > 8:
+                    unit.attack(home)
+            guard_tags = {u.tag for u in guard}
+            army = army.filter(lambda u: u.tag not in guard_tags)
+            if not army:
+                return
         focus = None
         if self.army_intent == "attack":
             target_id, target = self._attack_position()

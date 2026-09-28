@@ -30,7 +30,10 @@ CAUTIOUS_PLANNER_TEXT = (
     "navigation targets are marked attack_blocked and an attack order toward them holds the army at home instead. "
     "Attack only exposed expansions and enemy forces near our bases, and defend with sieged Tanks. Surplus minerals "
     "are spent automatically on new bases (as Planetary Fortresses), Missile Turrets and Refineries, and Orbital "
-    "Commands Scan expansion sites nobody has seen, so exposed enemy bases appear as navigation targets.")
+    "Commands Scan expansion sites nobody has seen, so exposed enemy bases appear as navigation targets. When "
+    "navigation.siege_push is true (maxed, a bank to re-max, enough Siege Tanks), no target is blocked: attack the "
+    "enemy bases and main with Tanks, which siege outside crawler range; the push ends by itself if the army drops "
+    "below 60% of its size. While attacking, a quarter of the bio (and the Tanks outside a push) stays home.")
 
 
 def main():

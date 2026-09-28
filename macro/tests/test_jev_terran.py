@@ -523,6 +523,49 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot._grow_into_map()
         self.bot._build_expansion.assert_not_awaited()
 
+    async def test_fallback_target_sticks_while_the_army_moves(self):
+        self.zerg_bases()
+        self.bot._known_enemy_buildings[5] = {"id": "enemy_5", "type": "HATCHERY", "position": [45.0, 45.0],
+                                              "last_seen": 0}
+        self.bot.cautious_attacks = True
+        self.bot._army_target_id = "enemy_1"  # Blocked: the fallback picks the nearest allowed building...
+        first = self.bot._attack_position()[0]
+        marine = self.bot.units.of_type({U.MARINE}).first
+        marine.position = Point2((62, 32))  # ...and keeps it after the army moves nearer another one.
+        self.assertEqual(self.bot._attack_position()[0], first)
+
+    def push_world(self, tanks=8):
+        self.zerg_bases()
+        army = [FakeTerranUnit(200 + i, U.SIEGETANK, (40, 40)) for i in range(tanks)]
+        army += [FakeTerranUnit(300 + i, U.MARINE, (40 + i, 40)) for i in range(8)]
+        self.set_world([self.scv, *army], [self.cc])
+        self.bot.cautious_attacks = True
+        self.bot.supply_used, self.bot.minerals, self.bot.vespene = 195, 4000, 1500
+        return army
+
+    async def test_siege_push_opens_the_main_and_ends_after_heavy_losses(self):
+        army = self.push_world()
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "enemy_1")  # The main is allowed while pushing.
+        self.bot.units = Units(army[:3], self.bot)  # Most of the army is lost...
+        self.assertFalse(self.bot._siege_push_active())  # ...so the push ends, with a cooldown.
+        self.bot.units = Units(army, self.bot)
+        self.assertFalse(self.bot._siege_push_active())
+
+    async def test_no_siege_push_without_enough_tanks(self):
+        self.push_world(tanks=4)
+        self.bot._army_target_id = "enemy_1"
+        self.assertNotEqual(self.bot._attack_position()[0], "enemy_1")
+
+    async def test_home_guard_stays_behind_when_attacking(self):
+        army = self.push_world(tanks=4)  # No push: Tanks stay home, with a quarter of the Marines.
+        self.bot.army_intent = "attack"
+        guard = self.bot._home_guard(self.bot._combat_units())
+        self.assertEqual(sorted(u.type_id.name for u in guard).count("SIEGETANK"), 4)
+        self.assertEqual(sum(1 for u in guard if u.type_id == U.MARINE), 2)
+        self.bot.army_intent = "defend"
+        self.assertEqual(len(self.bot._home_guard(self.bot._combat_units())), 0)
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []
