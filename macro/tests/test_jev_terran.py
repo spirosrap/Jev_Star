@@ -647,6 +647,25 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         busy.train.assert_not_called()
         self.assertEqual(self.bot._action_stats["batch_trained_units"], 3)
 
+    async def test_bank_spends_on_army_from_idle_production_without_a_jev_choice(self):
+        plain, reactor, busy = self.barracks_world()
+        await self.bot._refresh_abilities()
+        self.bot.minerals = 700
+        self.bot._spend_bank()
+        self.assertEqual((plain.train.call_count, reactor.train.call_count), (1, 2))  # Reactor trains two.
+        busy.train.assert_not_called()
+        self.assertEqual(self.bot._action_stats["bank_army_units"], 3)
+        # Once a game second at most.
+        self.bot._spend_bank()
+        self.assertEqual(plain.train.call_count + reactor.train.call_count, 3)
+
+    async def test_no_bank_spending_below_the_threshold(self):
+        plain, reactor, _ = self.barracks_world()
+        await self.bot._refresh_abilities()
+        self.bot.minerals = 500
+        self.bot._spend_bank()
+        self.assertEqual(plain.train.call_count + reactor.train.call_count, 0)
+
     async def test_marine_choice_trains_one_without_a_bank(self):
         plain, reactor, _ = self.barracks_world()
         await self.bot._refresh_abilities()

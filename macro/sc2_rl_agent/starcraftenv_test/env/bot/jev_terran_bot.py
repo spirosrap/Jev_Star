@@ -52,6 +52,10 @@ BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
 # Pull SCVs off gas while this much gas is banked and it is more than twice the minerals;
 # send them back once gas falls below the lower mark.
+# Unspent minerals above the contract's bank threshold go into army from idle production, down to this floor,
+# once a second: Jev gives about one order a second and spent a 1,500-mineral bank on buildings before T58's fight.
+BANK_SPEND_FLOOR = 200
+BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines from what is left
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -102,7 +106,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege", "building_edge_clearance",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
-                        "medivac_and_raven_escort"]
+                        "medivac_and_raven_escort", "bank_army_spend"]
 
     def _initialize_race(self):
         super()._initialize_race()
@@ -115,6 +119,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._terrain = None
         self._lurker_seen = -1000
         self._last_scan = -1000
+        self._last_bank_spend = -1000
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -590,6 +595,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         self._call_down_mules()
+        self._spend_bank()
         self._resume_construction()
         self._deploy_units()
         self._stim()
@@ -599,6 +605,32 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    def _spend_bank(self):
+        """Queue army in every idle production slot while unspent minerals pile up."""
+        if self.minerals < self.contract.bank_minerals or self.time - self._last_bank_spend < 1:
+            return
+        self._last_bank_spend = self.time
+        used = Counter()
+        trained = Counter()
+        for unit_type in BANK_ARMY:
+            limit = self.contract.unit_limits.get(unit_type.name)
+            count = self._count_with_pending(unit_type)
+            cost = self.calculate_cost(unit_type)
+            for producer in self._train_slots(unit_type):
+                free = (2 if producer.has_reactor else 1) - len(producer.orders)
+                if (producer.tag in self.unit_tags_received_action or used[producer.tag] >= free
+                        or limit is not None and count + trained[unit_type] >= limit):
+                    continue
+                if not self.can_afford(unit_type) or self.minerals - cost.minerals < BANK_SPEND_FLOOR:
+                    break
+                producer.train(unit_type)
+                used[producer.tag] += 1
+                trained[unit_type] += 1
+        if trained:
+            self._action_stats["bank_army_units"] += sum(trained.values())
+            self.log("bank_army_spend", game_loop=self.state.game_loop, minerals=self.minerals,
+                     units={k.name: v for k, v in trained.items()})
 
     def _balance_gas(self):
         """Move SCVs from gas to minerals while unspent gas piles up far beyond minerals."""
