@@ -56,6 +56,11 @@ BANELING_DODGE_STEP = 3
 # once a second: Jev gives about one order a second and spent a 1,500-mineral bank on buildings before T58's fight.
 BANK_SPEND_FLOOR = 200
 BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines from what is left
+# Once Brood Lord tech is seen, keep Vikings coming (T62 met Brood Lords with a single Viking): 2 per Brood Lord seen,
+# at least 6 and at most 16, from at least two Starports with Reactors.
+AIR_TECH = {U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
+VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
+AIR_STARPORTS = 2
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -106,7 +111,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege", "building_edge_clearance",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
-                        "medivac_and_raven_escort", "bank_army_spend"]
+                        "medivac_and_raven_escort", "anti_air_response", "bank_army_spend"]
 
     def _initialize_race(self):
         super()._initialize_race()
@@ -120,6 +125,10 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._lurker_seen = -1000
         self._last_scan = -1000
         self._last_bank_spend = -1000
+        self._action_ids = {name: action for action, name in self.contract.actions.items()}
+        self._air_threat_since = None
+        self._broodlords_seen = 0
+        self._last_air_response = -1000
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -595,6 +604,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         self._call_down_mules()
+        await self._answer_air_threat()
         self._spend_bank()
         self._resume_construction()
         self._deploy_units()
@@ -605,6 +615,41 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    async def _answer_air_threat(self):
+        """Once Brood Lord tech is seen, keep Vikings coming, with a second Starport and Reactors to make them."""
+        seen = [e for e in list(self.enemy_units) + list(self.enemy_structures) if e.type_id in AIR_TECH]
+        if seen and self._air_threat_since is None:
+            self._air_threat_since = self.time
+            self.log("air_threat", game_loop=self.state.game_loop, types=sorted({e.type_id.name for e in seen}))
+        self._broodlords_seen = max(self._broodlords_seen, sum(
+            1 for e in self.enemy_units if e.type_id in {U.BROODLORD, U.BROODLORDCOCOON}))
+        if self._air_threat_since is None or self.time - self._last_air_response < 1:
+            return
+        self._last_air_response = self.time
+        target = min(VIKINGS_MAX, max(VIKINGS_MIN, VIKINGS_PER_BROODLORD * self._broodlords_seen))
+        vikings = self._count_with_pending(U.VIKINGFIGHTER) + self.units(U.VIKINGASSAULT).amount
+        used = Counter()
+        trained = 0
+        for starport in self._train_slots(U.VIKINGFIGHTER):
+            free = (2 if starport.has_reactor else 1) - len(starport.orders)
+            if starport.tag in self.unit_tags_received_action or used[starport.tag] >= free:
+                continue
+            if vikings + trained >= target or not self.can_afford(U.VIKINGFIGHTER):
+                break
+            starport.train(U.VIKINGFIGHTER)
+            used[starport.tag] += 1
+            trained += 1
+        if trained:
+            self._action_stats["anti_air_vikings"] += trained
+            self.log("anti_air_vikings", game_loop=self.state.game_loop, trained=trained,
+                     vikings=vikings + trained, target=target)
+        starports = self.structures(U.STARPORT).amount + self.already_pending(U.STARPORT)
+        if (starports < AIR_STARPORTS and self.tech_requirement_progress(U.STARPORT) == 1
+                and self.can_afford(U.STARPORT)):
+            await self._build_one(self._action_ids["BUILD STARPORT"], U.STARPORT)
+        elif self.can_afford(U.STARPORTREACTOR) and self._addon_hosts(U.STARPORTREACTOR):
+            await self._build_addon(self._action_ids["ADDON STARPORTREACTOR"], U.STARPORTREACTOR)
 
     def _spend_bank(self):
         """Queue army in every idle production slot while unspent minerals pile up."""

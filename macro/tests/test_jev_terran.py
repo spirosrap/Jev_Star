@@ -659,6 +659,41 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._spend_bank()
         self.assertEqual(plain.train.call_count + reactor.train.call_count, 3)
 
+    def starport_world(self, enemies=(), enemy_structures=()):
+        starport = FakeTerranUnit(6, U.STARPORT)
+        starport.has_add_on = starport.has_reactor = True
+        self.set_world([self.scv], [self.cc, starport], enemies)
+        self.bot.enemy_structures = Units(list(enemy_structures), self.bot)
+        self.abilities[starport.tag] = {TRAIN_INFO[U.STARPORT][U.VIKINGFIGHTER]["ability"]}
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._build_one = AsyncMock()
+        self.bot._build_addon = AsyncMock()
+        return starport
+
+    async def test_vikings_come_once_brood_lord_tech_is_seen(self):
+        starport = self.starport_world(enemy_structures=[FakeTerranUnit(90, U.GREATERSPIRE)])
+        await self.bot._refresh_abilities()
+        await self.bot._answer_air_threat()
+        self.assertEqual(starport.train.call_count, 2)  # Both Reactor slots.
+        self.assertEqual(self.bot._action_stats["anti_air_vikings"], 2)
+        # A second Starport is started to make them faster.
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD STARPORT"], U.STARPORT)
+
+    async def test_no_vikings_without_brood_lord_tech(self):
+        starport = self.starport_world(enemies=[FakeTerranUnit(91, U.MUTALISK)])
+        await self.bot._refresh_abilities()
+        await self.bot._answer_air_threat()
+        starport.train.assert_not_called()
+        self.bot._build_one.assert_not_awaited()
+
+    async def test_viking_count_follows_the_brood_lords_seen(self):
+        broods = [FakeTerranUnit(100 + i, U.BROODLORD) for i in range(5)]
+        self.starport_world(enemies=broods)
+        await self.bot._refresh_abilities()
+        self.bot._count_with_pending = Mock(return_value=9)
+        await self.bot._answer_air_threat()
+        self.assertEqual(self.bot._action_stats["anti_air_vikings"], 1)  # 2 x 5 = 10 wanted, 9 there.
+
     async def test_no_bank_spending_below_the_threshold(self):
         plain, reactor, _ = self.barracks_world()
         await self.bot._refresh_abilities()
