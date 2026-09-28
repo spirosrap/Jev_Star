@@ -24,6 +24,8 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
     local_automation = []
     # A MissionObjectives when playing a prepared campaign mission; None in normal games.
     mission = None
+    # True against CheatMoney and stronger: no attacks into the enemy main or bases covered by static defence.
+    cautious_attacks = False
 
     @property
     def enemy_start_locations(self):

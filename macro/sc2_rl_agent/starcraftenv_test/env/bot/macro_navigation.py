@@ -6,6 +6,13 @@ from sc2.position import Point2
 WORKERS = {U.PROBE, U.SCV, U.DRONE}
 
 
+# Against CheatMoney and stronger (cautious_attacks), attack targets this close to the Zerg start or to a known Spine or
+# Spore Crawler are not attacked.
+CAUTIOUS_MAIN_RADIUS = 28
+CAUTIOUS_DEFENSE_RADIUS = 12
+STATIC_DEFENSE = {"SPINECRAWLER", "SPINECRAWLERUPROOTED", "SPORECRAWLER", "SPORECRAWLERUPROOTED",
+                  "PHOTONCANNON", "BUNKER", "PLANETARYFORTRESS", "MISSILETURRET"}
+
 class MacroNavigation:
     # Deployed units (sieged tanks, burrowed mines) that local code moves, not army orders.
     stationary_army_types = frozenset()
@@ -23,6 +30,7 @@ class MacroNavigation:
         self._base_integrity = {}
         self._base_damaged_until = {}
         self._last_navigation = -100
+        self._last_redirect = None
 
     def _set_search_sites(self, locations):
         points = sorted(set(locations), key=lambda p: (p.x, p.y))
@@ -97,7 +105,9 @@ class MacroNavigation:
                 "targets": [{"id": "home", "position": list(self._defense_position())},
                             {"id": "enemy_start", "position": list(self.enemy_start_locations[0])},
                             *self._mission_markers(),
-                            *self._search_sites, *self._known_enemy_buildings.values()],
+                            *self._search_sites,
+                            *({**m, "attack_blocked": True} if not self._attack_allowed(m["position"]) else m
+                              for m in self._known_enemy_buildings.values())],
                 "scouts": [{"unit_tag": tag, **mission} for tag, mission in self._scouts.items()],
                 "knowledge": "Map expansion sites are public geography; enemy structures are remembered only after sighting. Cleared sites are searched again later."}
 
@@ -112,7 +122,32 @@ class MacroNavigation:
         mission = getattr(self, "mission", None)
         return mission.markers if mission is not None else []
 
+    def _attack_allowed(self, position):
+        """Against CheatMoney and stronger, the army does not attack into the Zerg main or bases covered by crawlers:
+        every late loss in T60 and T66-T69 began with the whole army attacking there."""
+        if not getattr(self, "cautious_attacks", False):
+            return True
+        position = Point2(position)
+        if position.distance_to(self.enemy_start_locations[0]) < CAUTIOUS_MAIN_RADIUS:
+            return False
+        return not any(memory["type"] in STATIC_DEFENSE
+                       and position.distance_to(Point2(memory["position"])) < CAUTIOUS_DEFENSE_RADIUS
+                       for memory in self._known_enemy_buildings.values())
+
+    def _redirect(self, requested, reason):
+        if self._last_redirect != (requested, reason):
+            self._last_redirect = (requested, reason)
+            self.log("attack_redirected", game_loop=self.state.game_loop, requested=requested, reason=reason)
+
     def _attack_position(self):
+        position = self._chosen_attack_position()
+        if position[0] != "home" and not self._attack_allowed(position[1]):
+            # Nothing safe to attack; hold at home, where Tanks and Bunkers stand.
+            self._redirect(position[0], "no_target_outside_the_zerg_main_or_crawler_cover")
+            return "home", self._defense_position()
+        return position
+
+    def _chosen_attack_position(self):
         requested = self._army_target_id
         for marker in self._mission_markers():
             # A campaign objective site (e.g. stranded units to rescue): go there even when it is visible.
@@ -121,14 +156,19 @@ class MacroNavigation:
         if requested and requested.startswith("mission_marker_"):
             # The mission removed that ping (done or failed); come back rather than attack elsewhere.
             return "home", self._defense_position()
-        candidates = list(self._known_enemy_buildings.values())
+        candidates = [m for m in self._known_enemy_buildings.values() if self._attack_allowed(m["position"])]
+        blocked = {m["id"] for m in self._known_enemy_buildings.values()} - {m["id"] for m in candidates}
+        if requested in blocked or (requested == "enemy_start" and not self._attack_allowed(self.enemy_start_locations[0])):
+            self._redirect(requested, "zerg_main_or_crawler_cover")
         for memory in candidates:
             if memory["id"] == requested:
                 return memory["id"], Point2(memory["position"])
         for site in self._search_sites:
-            if site["id"] == requested and not self._area_visible(Point2(site["position"])):
+            if (site["id"] == requested and not self._area_visible(Point2(site["position"]))
+                    and self._attack_allowed(site["position"])):
                 return site["id"], Point2(site["position"])
-        if requested == "enemy_start" and not self._area_visible(self.enemy_start_locations[0]):
+        if (requested == "enemy_start" and not self._area_visible(self.enemy_start_locations[0])
+                and self._attack_allowed(self.enemy_start_locations[0])):
             return "enemy_start", self.enemy_start_locations[0]
         if candidates:
             army = self._combat_units()

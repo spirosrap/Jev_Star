@@ -455,6 +455,36 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._maintain_escorts()
         self.assertEqual(medivac.commands, [])
 
+    def zerg_bases(self):
+        self.set_world([self.scv, FakeTerranUnit(60, U.MARINE, (40, 40))], [self.cc])
+        self.bot._known_enemy_buildings = {
+            1: {"id": "enemy_1", "type": "HATCHERY", "position": [95.0, 95.0], "last_seen": 0},     # In the main.
+            2: {"id": "enemy_2", "type": "HATCHERY", "position": [60.0, 30.0], "last_seen": 0},     # Exposed.
+            3: {"id": "enemy_3", "type": "HATCHERY", "position": [30.0, 70.0], "last_seen": 0},     # Covered:
+            4: {"id": "enemy_4", "type": "SPINECRAWLER", "position": [33.0, 72.0], "last_seen": 0}}  # a crawler.
+
+    async def test_cautious_attacks_skip_the_zerg_main_and_crawler_cover(self):
+        self.zerg_bases()
+        self.bot.cautious_attacks = True
+        for requested in ("enemy_1", "enemy_3", "enemy_4", "enemy_start"):
+            self.bot._army_target_id = requested
+            self.assertEqual(self.bot._attack_position()[0], "enemy_2", requested)
+        blocked = {t["id"] for t in self.bot._navigation_snapshot()["targets"] if t.get("attack_blocked")}
+        self.assertEqual(blocked, {"enemy_1", "enemy_3", "enemy_4"})
+
+    async def test_cautious_army_holds_at_home_with_nothing_exposed(self):
+        self.zerg_bases()
+        del self.bot._known_enemy_buildings[2]
+        self.bot.cautious_attacks = True
+        self.bot._search_sites = []
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "home")
+
+    async def test_the_main_is_attacked_when_not_cautious(self):
+        self.zerg_bases()
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "enemy_1")  # CheatVision and below keep the baseline.
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []

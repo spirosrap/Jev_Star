@@ -22,6 +22,15 @@ def positive_float(value):
     return number
 
 
+# Against these opponents the army does not attack into the enemy main or bases covered by static defence.
+CAUTIOUS_DIFFICULTIES = {"CheatMoney", "CheatInsane"}
+CAUTIOUS_PLANNER_TEXT = (
+    "This opponent gathers extra resources and out-produces us, so we win by trading, not by attacking into it. "
+    "The army will not attack the enemy main (near enemy_start) or bases covered by Spine or Spore Crawlers; such "
+    "navigation targets are marked attack_blocked and an attack order toward them holds the army at home instead. "
+    "Attack only exposed expansions and enemy forces near our bases, and defend with sieged Tanks.")
+
+
 def main():
     repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -133,6 +142,10 @@ def main():
                 else:
                     bot = FlatBot(client, output, args.decision_interval, args.max_decision_age,
                                        args.max_requests, run_log=log)
+                if args.difficulty in CAUTIOUS_DIFFICULTIES and not args.mission_objectives:
+                    bot.cautious_attacks = True
+                    if planner_client is not None:
+                        planner_client.instructions += "\n\n" + CAUTIOUS_PLANNER_TEXT
                 if args.mission_objectives:
                     from .env.bot.mission_objectives import MissionObjectives
                     if not args.bank_directory:
