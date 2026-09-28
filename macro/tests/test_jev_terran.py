@@ -523,6 +523,49 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot._grow_into_map()
         self.bot._build_expansion.assert_not_awaited()
 
+    def early_world(self, time):
+        factory = FakeTerranUnit(90, U.FACTORY, (40, 40))
+        factory.has_add_on = factory.has_techlab = True
+        rax = FakeTerranUnit(91, U.BARRACKS, (44, 40))
+        rax.has_add_on = rax.has_techlab = True
+        tank = FakeTerranUnit(92, U.SIEGETANK, (12, 12))  # At the front: the only base is the defence position.
+        self.set_world([self.scv, tank], [self.cc, factory, rax])
+        self.abilities[factory.tag] = {TRAIN_INFO[U.FACTORY][U.SIEGETANK]["ability"]}
+        self.abilities[rax.tag] = {TRAIN_INFO[U.BARRACKS][U.MARAUDER]["ability"]}
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(time * 22.4)
+        self.bot._build_one = AsyncMock()
+        self.bot._may_switch = Mock(return_value=True)
+        self.bot._switch = Mock()
+        return factory, rax, tank
+
+    async def test_early_defense_before_the_first_zerg_attack(self):
+        factory, rax, tank = self.early_world(400)
+        await self.bot._refresh_abilities()
+        await self.bot._early_defense()
+        factory.train.assert_called_once_with(U.SIEGETANK)
+        rax.train.assert_called_once_with(U.MARAUDER)
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD BUNKER"], U.BUNKER)
+        self.bot._switch.assert_called_once_with(tank, A.SIEGEMODE_SIEGEMODE)
+
+    async def test_no_early_defense_after_the_window_or_outside_cheatmoney(self):
+        factory, rax, _ = self.early_world(600)
+        await self.bot._refresh_abilities()
+        await self.bot._early_defense()
+        factory.train.assert_not_called()
+        factory, rax, _ = self.early_world(400)
+        self.bot.cautious_attacks = False
+        await self.bot._refresh_abilities()
+        await self.bot._early_defense()
+        factory.train.assert_not_called()
+
+    async def test_a_front_tank_stays_sieged_until_the_window_ends(self):
+        self.early_world(400)
+        sieged = FakeTerranUnit(93, U.SIEGETANKSIEGED, (13, 13))
+        self.assertTrue(self.bot._holding_front(sieged))
+        self.bot.state.game_loop = int(600 * 22.4)
+        self.assertFalse(self.bot._holding_front(sieged))
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []

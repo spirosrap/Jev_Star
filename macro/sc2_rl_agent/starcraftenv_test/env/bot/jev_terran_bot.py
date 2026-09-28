@@ -71,6 +71,16 @@ GROW_BANK = 1500
 GROW_INTERVAL = 5
 GROW_ORBITALS = 3  # Command Centers beyond this many Orbitals become Planetary Fortresses
 SCOUT_SCAN_INTERVAL = 45
+# Against CheatMoney and stronger, until 9:30 get ready for the Zerg attack that comes at about 8:45: Siege Tanks
+# (up to 4) and Marauders (up to 6) from idle Tech Lab producers, a second Bunker at the front from 5:00, and Tanks
+# sieged at the front position. The games that went long held that attack; the ones lost met it with 33-47 Marines
+# and one to three unsieged Tanks (T74-T78).
+EARLY_DEFENSE_UNTIL = 570
+EARLY_TANKS = 4
+EARLY_MARAUDERS = 6
+EARLY_BUNKERS = 2
+EARLY_BUNKER_FROM = 300
+EARLY_SIEGE_RADIUS = 6
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -121,7 +131,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege", "building_edge_clearance",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
-                        "medivac_front_healing", "raven_escort", "anti_air_response", "grow_into_map",
+                        "medivac_front_healing", "raven_escort", "anti_air_response", "grow_into_map", "early_defense",
                         "bank_army_spend"]
 
     def _initialize_race(self):
@@ -141,6 +151,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._broodlords_seen = 0
         self._last_air_response = -1000
         self._last_grow = -1000
+        self._last_early_defense = -1000
         self._last_scout_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
@@ -616,6 +627,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self.workers, self.gas_buildings = workers, gas_buildings
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
+        await self._early_defense()
         await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
@@ -629,6 +641,45 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    def _early_defense_window(self):
+        return self.cautious_attacks and self.time <= EARLY_DEFENSE_UNTIL
+
+    async def _early_defense(self):
+        """Against CheatMoney, until 9:30: Tanks, Marauders, a second Bunker and Tanks sieged at the front."""
+        if not self._early_defense_window() or self.time - self._last_early_defense < 1:
+            return
+        self._last_early_defense = self.time
+        for kind, limit in ((U.SIEGETANK, EARLY_TANKS), (U.MARAUDER, EARLY_MARAUDERS)):
+            if self._count_with_pending(kind) >= limit:
+                continue
+            for producer in self._train_slots(kind):
+                if producer.tag in self.unit_tags_received_action or not self.can_afford(kind):
+                    break
+                producer.train(kind)
+                self._early("train_" + kind.name.lower())
+                break
+        if (self.time >= EARLY_BUNKER_FROM and self.structures(U.BARRACKS).ready
+                and not self.already_pending(U.BUNKER) and self._count_with_pending(U.BUNKER) < EARLY_BUNKERS
+                and self.can_afford(U.BUNKER)):
+            failures = list(self.temp_failure_list)  # Not Jev's order: keep its failures out of Jev's feedback.
+            try:
+                await self._build_one(self._action_ids["BUILD BUNKER"], U.BUNKER)
+            finally:
+                self.temp_failure_list = failures
+            self._early("bunker")
+        front = self._defense_position()
+        for tank in self.units(U.SIEGETANK).ready:
+            if tank.distance_to(front) < EARLY_SIEGE_RADIUS and self._may_switch(tank):
+                self._switch(tank, A.SIEGEMODE_SIEGEMODE)
+
+    def _early(self, what):
+        self._action_stats[f"early_{what}"] += 1
+        self.log("early_defense", game_loop=self.state.game_loop, what=what)
+
+    def _holding_front(self, tank):
+        """A Tank sieged at the front before 9:30 stays sieged while no enemy is near."""
+        return self._early_defense_window() and tank.distance_to(self._defense_position()) < EARLY_SIEGE_RADIUS + 2
 
     async def _grow_into_map(self):
         """Against CheatMoney and stronger: spend a mineral surplus on bases, Planetary Fortresses, turrets and gas,
@@ -912,7 +963,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             if not retreating and nearest(tank, ground) < 13 and self._may_switch(tank):
                 self._switch(tank, A.SIEGEMODE_SIEGEMODE)
         for tank in self.units(U.SIEGETANKSIEGED):
-            if (retreating or nearest(tank, ground) > 15) and self._may_switch(tank):
+            if (retreating or nearest(tank, ground) > 15) and not self._holding_front(tank) and self._may_switch(tank):
                 self._switch(tank, A.UNSIEGE_UNSIEGE)
         for mine in self.units(U.WIDOWMINE).ready:
             if not retreating and nearest(mine, enemies) < 8 and self._may_switch(mine):
