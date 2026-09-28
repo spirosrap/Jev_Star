@@ -221,6 +221,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T63 | **CheatMoney** | Defeat | 20:04 | 3.14M | None (CheatMoney Zerg, **Ancient Cistern LE**; bank spending plus **Vikings against Brood Lord tech**, branch `cheatmoney-anti-air`, commit `39c5840`) |
 | T64 | **CheatMoney** | Defeat | 12:40 | 1.85M | None (CheatMoney Zerg, **Ancient Cistern LE**; Viking response started by Corruptors, branch `cheatmoney-anti-air`, commit `1a8ccbf`; the response never started) |
 | T65 | **CheatMoney** | Defeat | 19:53 | 3.24M | None (CheatMoney Zerg, **Ancient Cistern LE**; Viking response started by Corruptors, bot code as `1a8ccbf`, commit `ad1ff1a`; the response never started) |
+| T66 | **CheatMoney** | Defeat | 20:42 | 3.45M | None (CheatMoney Zerg, **Ancient Cistern LE**; **Medivacs over the front of the bio**, with the Viking response, branch `cheatmoney-medivacs`, commit `d3143b4`) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -380,6 +381,8 @@ T63 added the next change: once a Greater Spire, Brood Lord cocoon or Brood Lord
 T64 was the first game with the amended response (Corruptors also start it, and the second Starport and its Reactor come before the Vikings); the two-game count restarted with it. It says nothing about anti-air: the game ended before any Corruptor or Brood Lord appeared. At 8:27 the army was 42 Marines, 4 Marauders and one Siege Tank (5 Barracks, one Factory), and Banelings and Hydralisks at 8:35–8:50 took it from 75 to 28 army supply by 9:01; a base fell at 9:42, and the last building fell at 12:40. In the games that held this attack the bot had four or more Siege Tanks by then.
 
 T65, the second game with the amended response, again never met Brood Lord tech (Mutalisks and Vipers at 14:09, no Corruptor), so it says nothing about anti-air either. It held the ~8:45 attack and had 119 army supply and 63 SCVs at 10:07 and 144 army supply at 14:15, the largest army yet against CheatMoney. At 16:12 Zerg attacked a base: 37 Marines and 10 Marauders at 16:17 were 13 and 1 by 16:33, while **all 8 Medivacs survived**, and at 16:48 there were still 8 Medivacs next to 8 Marines. Bases fell at 16:19, 16:48 and 18:02, and the game ended at 19:53. The user noticed while watching that Medivacs stay away from the fighting army and outlive it; the logs show the same in T59, T62 and T63. The escort code sends them to the centre of all combat units pulled 3 cells toward home, with plain move orders, and a Medivac on a move order does not heal.
+
+T66 tested the next change: Medivacs attack-move over the centre of the 8 Marines and Marauders nearest the army's heading, and a healing Medivac is not re-ordered. The user, watching, thought the fights went better. With a Marine-heavy army (42 Marines, one or two Siege Tanks, like T64) the ~8:45 attack cost 21 army supply (77 to 56) against 47 in T64 (75 to 28), and two of four Medivacs died in it, where before they survived every fight untouched. The bot reached 111 army supply and attacked toward the Zerg start at 11:04, walked into Lurkers and a drop at 11:11, and lost 61 Marines to 12 by 11:40 (Medivacs, which Lurkers cannot hit, survived); Infestors and Vipers followed at 11:50. The ground war wore the army down to 54 by 16:15. Corruptors at 16:17 started the Viking response for the first time: a second Starport by 16:46 and two Vikings, with too little money left for more. Bases fell at 16:45, 17:31 and 18:05, and the game ended at 20:42. The Zerg army was, in the user's words, surprisingly strong: CheatMoney gathers extra resources, so the bot has to win trades rather than out-produce it.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -607,6 +610,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T63 | **CheatMoney** | 负 | 20:04 | 314 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；积压资源出兵加上**针对 Brood Lord 科技的 Viking**，分支 `cheatmoney-anti-air`，提交 `39c5840`） |
 | T64 | **CheatMoney** | 负 | 12:40 | 185 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；由 Corruptor 触发的 Viking 响应，分支 `cheatmoney-anti-air`，提交 `1a8ccbf`；响应从未触发） |
 | T65 | **CheatMoney** | 负 | 19:53 | 324 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；由 Corruptor 触发的 Viking 响应，Bot 代码同 `1a8ccbf`，提交 `ad1ff1a`；响应从未触发） |
+| T66 | **CheatMoney** | 负 | 20:42 | 345 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；**Medivac 跟随生物部队前线**，并保留 Viking 响应，分支 `cheatmoney-medivacs`，提交 `d3143b4`） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -766,6 +770,8 @@ T63 加入了下一个改动：一旦看到 Greater Spire、Brood Lord 茧或 Br
 T64 是修改后响应（Corruptor 也会触发，第二个 Starport 和 Reactor 先于 Viking）的第一局，两局计数随之重新开始。本局与防空无关：游戏在出现任何 Corruptor 或 Brood Lord 之前就结束了。8:27 时部队为 42 个 Marine、4 个 Marauder 和 1 辆 Siege Tank（5 个 Barracks、1 个 Factory），8:35–8:50 的 Baneling 和 Hydralisk 在 9:01 前把部队人口从 75 打到 28；9:42 失去一个基地，12:40 最后一个建筑被摧毁。在守住这波进攻的对局中，此时 Bot 都有四辆以上 Siege Tank。
 
 T65 是修改后响应的第二局，同样没有遇到 Brood Lord 科技（14:09 出现 Mutalisk 和 Viper，没有 Corruptor），因此也不能说明防空的效果。它守住了约 8:45 的进攻，10:07 时 119 部队人口、63 台 SCV，14:15 时 144 部队人口，是对 CheatMoney 迄今最大的部队。16:12 Zerg 进攻一个基地：16:17 时的 37 个 Marine 和 10 个 Marauder 到 16:33 只剩 13 和 1，而 **8 架 Medivac 全部存活**，16:48 时仍有 8 架 Medivac 和 8 个 Marine。16:19、16:48 和 18:02 各失去一个基地，游戏在 19:53 结束。用户观战时注意到 Medivac 远离正在战斗的部队并且比部队活得更久；日志显示 T59、T62 和 T63 也是如此。护航代码把它们送到所有作战单位的中心并向基地方向后撤 3 格，使用的是普通移动命令，而处于移动命令下的 Medivac 不会治疗。
+
+T66 测试下一个改动：Medivac 以攻击移动跟随离部队目标最近的 8 个 Marine 和 Marauder 的中心，正在治疗的 Medivac 不会被重新下令。用户观战时认为战斗打得更好。在以 Marine 为主的部队下（42 个 Marine、一两辆 Siege Tank，与 T64 相同），约 8:45 的进攻只损失 21 部队人口（77 降到 56），T64 损失 47（75 降到 28）；四架 Medivac 中有两架在战斗中阵亡，而此前它们在每场战斗中都毫发无损。Bot 达到 111 部队人口，11:04 向 Zerg 出生点进攻，11:11 撞上 Lurker 和空投，到 11:40 Marine 从 61 个降到 12 个（Lurker 打不到的 Medivac 存活）；11:50 又出现 Infestor 和 Viper。地面消耗战在 16:15 把部队磨到 54。16:17 的 Corruptor 首次触发了 Viking 响应：16:46 建好第二个 Starport，造了两架 Viking，剩下的钱不够更多。16:45、17:31 和 18:05 各失去一个基地，游戏在 20:42 结束。用户说 Zerg 部队出奇地强：CheatMoney 会获得额外资源，因此 Bot 必须赢下交换，而不是靠产量取胜。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
