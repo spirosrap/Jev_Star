@@ -226,6 +226,7 @@ Uncounted runs (stopped or excluded, not part of any result):
 | 2026-09-26 09:21 | Ancient Cistern LE | CheatVision | Stopped at 12:29 | `a9ef6e2` | The Jev provider refused requests (HTTP 403) |
 | 2026-09-26 11:25 | Babylon LE | CheatVision | Stopped at 6:35 | `1bae3ec` | The Jev provider refused requests (HTTP 404) |
 | 2026-09-26 17:01 | Ancient Cistern LE | CheatVision | Stopped at 4:15 | `4d5828d` | Stopped to switch to the `fbe1a59` comparison (T31–T32) |
+| 2026-09-28 10:20 | Ancient Cistern LE | CheatMoney | Stopped at 12:29 | `61775af` | The Jev provider refused requests (HTTP 403) from 11:34; it had held the 8:46 attack (army 73 to 63, no base lost) and had 91 army supply and 66 SCVs at 10:11 |
 
 One further VeryHard game was stopped by hand after the SC2 window stalled and is not counted. A CheatVision game on Ancient Cistern LE (commit `b361c1b`) was won in 10:01 but is also not counted: the Codex login stopped working mid-game (Astra's requests failed with authentication errors from 6:38), so Jev played mostly without plans; the control panel now shows "Astra unavailable" when this happens. A game on the reverted code (Ancient Cistern LE, commit `a9ef6e2`) was stopped at 12:29 when the Jev provider started refusing requests (HTTP 403, "RBAC: access denied"); it is not counted. A Babylon LE game on commit `1bae3ec` stopped the same way at 6:36 (HTTP 404) and is not counted either. OpenRouter began listing a new `typesafe/jev-router` the evening before; requests for `typesafe/jev-1.13` were still answered by `jev-1.13-20260917`, the version used in every game, but the provider briefly refused access twice. Access errors (401, 403, 404) are now retried for up to 60 seconds before a run stops. For comparison, the Protoss runs on the same machine the day before won three games against MediumHard and lost one against VeryHard.
 
@@ -593,6 +594,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | 2026-09-26 09:21 | Ancient Cistern LE | CheatVision | 12:29 停止 | `a9ef6e2` | Jev 服务拒绝请求（HTTP 403） |
 | 2026-09-26 11:25 | Babylon LE | CheatVision | 6:35 停止 | `1bae3ec` | Jev 服务拒绝请求（HTTP 404） |
 | 2026-09-26 17:01 | Ancient Cistern LE | CheatVision | 4:15 停止 | `4d5828d` | 停止以切换到 `fbe1a59` 对照（T31–T32） |
+| 2026-09-28 10:20 | Ancient Cistern LE | CheatMoney | 12:29 停止 | `61775af` | Jev 服务从 11:34 起拒绝请求（HTTP 403）；此前已挡住 8:46 的进攻（部队 73 降到 63，未失去基地），10:11 时 91 部队人口、66 台 SCV |
 
 另有一局 VeryHard 因 SC2 窗口卡顿被手动停止，不计入。另一局 Ancient Cistern LE 上的 CheatVision 对局（提交 `b361c1b`）以 10:01 获胜，但同样不计入：对局中 Codex 登录失效（6:38 起 Astra 请求出现认证错误），Jev 基本在没有计划的情况下作战；控制面板现在会在这种情况下显示“Astra unavailable”。另一局在撤回后的代码上（Ancient Cistern LE，提交 `a9ef6e2`）于 12:29 因 Jev 服务开始拒绝请求（HTTP 403，“RBAC: access denied”）而停止，不计入。提交 `1bae3ec` 上的一局 Babylon LE 于 6:36 以同样方式停止（HTTP 404），同样不计入。OpenRouter 在前一晚开始列出新的 `typesafe/jev-router`；对 `typesafe/jev-1.13` 的请求仍由各局所用的 `jev-1.13-20260917` 应答，但服务两次短暂拒绝访问。现在访问错误（401、403、404）会重试最多 60 秒后才停止运行。作为对照，前一天同一台机器上的 Protoss 对局三胜 MediumHard、一负 VeryHard。
 
