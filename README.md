@@ -228,6 +228,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T70 | **CheatMoney** | **Tie** | 39:59 (40-minute limit) | 7.80M | None (CheatMoney Zerg, **Ancient Cistern LE**; **no attacks into the Zerg main or crawler cover**, branch `cheatmoney-no-suicide-attacks`, commit `69d3f83`) |
 | T71 | **CheatMoney** | Defeat | 36:18 | 5.16M | None (CheatMoney Zerg, **Ancient Cistern LE** game 2; no attacks into the Zerg main or crawler cover, bot code as `69d3f83`, commit `db26bea`) |
 | T72 | **CheatMoney** | Defeat | ~23:11 | 2.89M | None (CheatMoney Zerg, **Babylon LE** game 1; no attacks into the Zerg main or crawler cover, bot code as `69d3f83`, commit `8bdb1b5`; Jev timed out often between 11:00 and 16:00; stopped by hand when lost) |
+| T73 | **CheatMoney** | Defeat | ~15:52 | 2.20M | None (CheatMoney Zerg, **Babylon LE** game 2; no attacks into the Zerg main or crawler cover, bot code as `69d3f83`, commit `ce15471`; stopped by hand when lost) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -402,6 +403,8 @@ T70 tested the next change: against CheatMoney and CheatInsane only, attack targ
 T71, the second Cistern game with the rule (the attempt before it was stopped at 8:43 while the Jev provider was timing out), held the early attack with 95 army supply and 64 SCVs at 10:05 and was maxed at 12:02 (136 army supply). The rule acted for the first time: from 17:55 attack orders toward a building under crawler cover were redirected and the army held at home (the log repeated two alternating lines, 54 in all). It defended Zerg attacks at 15:04 (Vipers, burrowed Roaches: 112 to 75) and 19:19 (Infestors took control of our Siege Tanks: 128 to 54), rebuilt each time, and was maxed again at 24:10 with 18 Vikings. At about 27 minutes Zerg broke into the mining bases (SCVs 61 to 31, army 139 to 100), minerals ran out at 30:08, and the last building fell at 36:18. Over the two Cistern games the rule met both targets: no attack lost the army against the Zerg main or crawlers, and both games passed 30 minutes with the army fighting (T70 a tie at 40:00, T71 to 36:18).
 
 T72, the first Babylon game with the rule, held the early attack (107 army supply and 60 SCVs at 10:05) and was maxed at 12:08 (138 army supply, 11 Siege Tanks). The army never attacked and no attack was redirected. Zerg attacked our bases at 13:28 with Infestors, Mutalisks and Vipers (130 to 74 army supply in nine seconds), and the bot was maxed again by 16:09 and at 18:03 (144 army supply, 80 Marines), although the Jev provider timed out on a third to half of the requests between 11:00 and 16:00. At 18:08 a full Zerg attack on our bases took the maxed army from 144 to 35 in 40 seconds while it defended; a base fell at 19:34, SCVs fell to 11 by 22:01, and the game was stopped by hand as lost at about 23:11. Holding a maxed army at home was not enough against a full Zerg re-max with nothing else, such as static defence, to tip the fight.
+
+T73, the second Babylon game with the rule, lost Marines to the early attack (39 to 24) but reached 76 SCVs at 12:06 and 124 army supply (78 Marines, 8 Siege Tanks) at 13:30. The army never attacked. At 13:42 Zerg attacked our base with Mutalisks among their army and the army fell from 124 to 33 in about 20 seconds while defending (79 Marines to 1); bases fell at 14:37 and 15:31, and the game was stopped by hand as lost at about 15:52. Over its four games (T70–T73) the rule met its first target every time: the army was never lost attacking into the Zerg main or crawler cover. Two games passed 30 minutes (T70 a tie at 40:00, T71 to 36:18); both Babylon games were lost to a full Zerg attack on our bases around 13–18 minutes, against a maxed, mostly-Marine army defending at home with no static defence.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -636,6 +639,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T70 | **CheatMoney** | **平** | 39:59（40 分钟上限） | 780 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；**不进攻 Zerg 主基地或有地堡覆盖的基地**，分支 `cheatmoney-no-suicide-attacks`，提交 `69d3f83`） |
 | T71 | **CheatMoney** | 负 | 36:18 | 516 万 | 无（CheatMoney Zerg，**Ancient Cistern LE** 第 2 局；不进攻 Zerg 主基地或有地堡覆盖的基地，Bot 代码同 `69d3f83`，提交 `db26bea`） |
 | T72 | **CheatMoney** | 负 | 约 23:11 | 289 万 | 无（CheatMoney Zerg，**Babylon LE** 第 1 局；不进攻 Zerg 主基地或有地堡覆盖的基地，Bot 代码同 `69d3f83`，提交 `8bdb1b5`；11:00 至 16:00 间 Jev 频繁超时；已输时手动停止） |
+| T73 | **CheatMoney** | 负 | 约 15:52 | 220 万 | 无（CheatMoney Zerg，**Babylon LE** 第 2 局；不进攻 Zerg 主基地或有地堡覆盖的基地，Bot 代码同 `69d3f83`，提交 `ce15471`；已输时手动停止） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -810,6 +814,8 @@ T70 测试下一个改动：仅对 CheatMoney 和 CheatInsane，距敌方出生�
 T71 是该规则的第二局 Cistern 对局（之前一次因 Jev 服务超时在 8:43 停止）。它守住了早期进攻，10:05 时 95 部队人口、64 台 SCV，12:02 满人口（136 部队人口）。规则首次生效：17:55 起朝地堡覆盖下建筑的进攻命令被改道，部队留守基地（日志交替重复两行，共 54 条）。它防住了 15:04（Viper、钻地 Roach：112 降到 75）和 19:19（Infestor 控制了我们的 Siege Tank：128 降到 54）的 Zerg 进攻，每次都重建起来，24:10 再次满人口并有 18 架 Viking。约 27 分钟时 Zerg 攻入采矿基地（SCV 从 61 降到 31，部队从 139 降到 100），30:08 矿物耗尽，36:18 最后一个建筑被摧毁。两局 Cistern 中规则达成了两个目标：没有一次进攻 Zerg 主基地或地堡导致部队覆灭，两局都在部队仍在作战时超过了 30 分钟（T70 在 40:00 打平，T71 坚持到 36:18）。
 
 T72 是该规则的第一局 Babylon，守住了早期进攻（10:05 时 107 部队人口、60 台 SCV），12:08 满人口（138 部队人口、11 辆 Siege Tank）。部队从未进攻，也没有进攻被改道。13:28 Zerg 带 Infestor、Mutalisk 和 Viper 进攻我们的基地（九秒内部队从 130 降到 74），Bot 在 16:09 和 18:03 再次满人口（144 部队人口、80 个 Marine），尽管 11:00 至 16:00 间 Jev 服务有三分之一到一半的请求超时。18:08 Zerg 全军进攻我们的基地，满人口部队在防守中 40 秒内从 144 降到 35；19:34 失去一个基地，22:01 时 SCV 降到 11 台，约 23:11 时已输并手动停止。在没有静态防御等其他优势的情况下，仅靠在基地里守着满人口部队，不足以抵挡 Zerg 满人口的全力进攻。
+
+T73 是该规则的第二局 Babylon，早期进攻中损失了 Marine（39 降到 24），但 12:06 时有 76 台 SCV，13:30 时 124 部队人口（78 个 Marine、8 辆 Siege Tank）。部队从未进攻。13:42 Zerg 带着 Mutalisk 进攻我们的基地，部队在防守中约 20 秒内从 124 降到 33（Marine 从 79 个降到 1 个）；14:37 和 15:31 各失去一个基地，约 15:52 时已输并手动停止。在四局（T70–T73）中，该规则每局都达成了第一个目标：部队从未因进攻 Zerg 主基地或地堡覆盖区而覆灭。两局超过 30 分钟（T70 在 40:00 打平，T71 坚持到 36:18）；两局 Babylon 都在 13–18 分钟左右败于 Zerg 对我们基地的全力进攻，当时满人口、以 Marine 为主的部队在没有静态防御的基地里防守。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
