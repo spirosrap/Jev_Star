@@ -216,6 +216,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T58 | **CheatMoney** | Defeat | 12:43 | 1.77M | None (CheatMoney Zerg, **Ancient Cistern LE**, Astra effort medium; commit `f845edb`, ladder behaviour as the certified baseline) |
 | T59 | **CheatMoney** | Defeat | 34:27 | 5.03M | None (CheatMoney Zerg, **Ancient Cistern LE**; **bank spending** on branch `cheatmoney-bank-spend`, commit `f49f891`) |
 | T60 | **CheatMoney** | Defeat | 17:37 | 2.64M | None (CheatMoney Zerg, **Ancient Cistern LE**; bank spending, bot code as `f49f891`, commit `8ad9940`) |
+| T61 | **CheatMoney** | Defeat | 17:01 | 2.52M | None (CheatMoney Zerg, **Babylon LE** game 1; bank spending, bot code as `f49f891`, commit `98226f9`) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -365,6 +366,8 @@ T58 was the second CheatMoney game, on Ancient Cistern, the baseline's strongest
 T59 tested one change on top of the baseline: once a game second, while minerals are at 600 or more, the bot queues Siege Tanks, Marauders and Marines in every idle production slot, down to 200 minerals (320 units over the game). It lasted 34:27 against 12:43 in T58. The same attack came at 8:53 with 72 army supply against 62: army fell to 45 and one base was lost, but the 1,200-mineral bank went straight into replacements, and the bot had 81 army supply and 59 SCVs at 10:05 (T58: 19 and 43), 120 army supply at 12:00 and was maxed at 18:02 with 72 SCVs. It then held for ten more minutes, losing SCVs and two Command Centers to raids around 20–22 minutes and rebuilding. It lost in the late game: attacks at 26:47 and 29:16 traded badly (army 130 to 62, then 136 to 28 by 30:00, Marine-heavy after the Marauders and Tanks were lost), the remaining bases were mined out, and a new Command Center could not be placed safely, so there was no mineral income left to rebuild; the last building fell at 34:27.
 
 T60, the second counted Cistern game with bank spending (the game before it was stopped when the OpenRouter key reached its spending limit), held the early game again: 62 army supply at 8:04, no collapse at the ~8:45 attack, and 63 SCVs with 126 army supply (10 Siege Tanks, 52 Marines, 15 Marauders) at 13:15. Astra's plan was to attack at 90 ready supply; the army moved out at 12:59 and at 13:14 met a Hatchery with Spine Crawlers, Vipers and Corruptors, and fell from 126 to 40 army supply in 30 seconds. Mutalisks followed at 14:33, bases fell at 14:39 and 15:55, and SCVs went from 54 to 12 between 15:31 and 16:03; the last building fell at 17:37. Bank spending queued only 57 units, as the bank rarely reached 600. With it, Cistern CheatMoney lasted 34:27 and 17:37 against 12:43 without it; both losses came from fights after the early game.
+
+T61 was the first Babylon game with bank spending. The bot went into the fight with its strongest early army yet, 83 army supply and 63 SCVs at 9:02 with under 400 minerals banked, but the attack at 9:13 brought Banelings, Hydralisks, Lurkers, Ravagers and Roaches together: army supply fell to 32 by 9:36 and a base fell at 9:17. Zerg then destroyed production (Barracks 5 to 3, Factories 2 to 1, Reactors 3 to 1 between 10:01 and 11:44), so with few producers the bank grew to 1,366 minerals at 14:07 while the army stayed at 20–50 supply; bank spending queued only 83 units. Brood Lords came at 15:29, bases fell at 15:25 and 15:55, and the last building fell at 17:01.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -587,6 +590,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T58 | **CheatMoney** | 负 | 12:43 | 177 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**，Astra 强度 medium；提交 `f845edb`，天梯行为同认证基线） |
 | T59 | **CheatMoney** | 负 | 34:27 | 503 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；分支 `cheatmoney-bank-spend` 上的**积压资源出兵**，提交 `f49f891`） |
 | T60 | **CheatMoney** | 负 | 17:37 | 264 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；积压资源出兵，Bot 代码同 `f49f891`，提交 `8ad9940`） |
+| T61 | **CheatMoney** | 负 | 17:01 | 252 万 | 无（CheatMoney Zerg，**Babylon LE** 第 1 局；积压资源出兵，Bot 代码同 `f49f891`，提交 `98226f9`） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -736,6 +740,8 @@ T58 是第二局 CheatMoney，地图为基线最强的 Ancient Cistern，Astra �
 T59 在基线之上只测试一个改动：每游戏秒一次，当矿物达到 600 以上时，Bot 在所有空闲的生产位排入 Siege Tank、Marauder 和 Marine，直到剩 200 矿（整局共 320 个单位）。本局坚持到 34:27，T58 只到 12:43。同样的进攻在 8:53 到来，部队人口 72（T58 为 62）：部队降到 45，失去一个基地，但积压的 1200 矿立即变成补充兵力；10:05 时 81 部队人口、59 台 SCV（T58 为 19 和 43），12:00 时 120 部队人口，18:02 满人口、72 台 SCV。此后又坚持了十分钟，在 20–22 分钟左右被袭击损失 SCV 和两个 Command Center 后重建。败于后期：26:47 和 29:16 的进攻交换不利（部队从 130 降到 62，再从 136 降到 30:00 的 28；Marauder 和 Tank 损失后以 Marine 为主），剩下的基地矿已采完，新的 Command Center 找不到安全位置，没有矿物收入可重建；34:27 最后一个建筑被摧毁。
 
 T60 是积压资源出兵的第二局计数 Cistern 对局（之前一局因 OpenRouter 密钥达到消费上限而停止）。早期再次守住：8:04 时 62 部队人口，约 8:45 的进攻未造成崩溃，13:15 时 63 台 SCV、126 部队人口（10 辆 Siege Tank、52 个 Marine、15 个 Marauder）。Astra 的计划是在 90 就绪人口时进攻；部队于 12:59 出发，13:14 遇到带 Spine Crawler、Viper 和 Corruptor 的 Hatchery，30 秒内从 126 降到 40 部队人口。14:33 出现 Mutalisk，14:39 和 15:55 各失去一个基地，15:31 至 16:03 SCV 从 54 台降到 12 台；17:37 最后一个建筑被摧毁。本局积压资源出兵只排入 57 个单位，因为积压很少达到 600。加入该改动后，Cistern 上对 CheatMoney 分别坚持到 34:27 和 17:37，未加入时为 12:43；两局都败于早期之后的战斗。
+
+T61 是积压资源出兵的第一局 Babylon。Bot 带着迄今最强的早期部队迎战：9:02 时 83 部队人口、63 台 SCV，积压不到 400 矿；但 9:13 的进攻同时出现 Baneling、Hydralisk、Lurker、Ravager 和 Roach：部队人口在 9:36 降到 32，9:17 失去一个基地。随后 Zerg 摧毁生产建筑（10:01 至 11:44 间 Barracks 5 降到 3，Factory 2 降到 1，Reactor 3 降到 1），生产建筑太少，积压在 14:07 增至 1366 矿，而部队始终只有 20–50 人口；积压资源出兵只排入 83 个单位。15:29 出现 Brood Lord，15:25 和 15:55 各失去一个基地，17:01 最后一个建筑被摧毁。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
