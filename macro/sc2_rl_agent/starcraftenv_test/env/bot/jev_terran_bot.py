@@ -57,8 +57,9 @@ BANELING_DODGE_STEP = 3
 BANK_SPEND_FLOOR = 200
 BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines from what is left
 # Once Brood Lord tech is seen, keep Vikings coming (T62 met Brood Lords with a single Viking): 2 per Brood Lord seen,
-# at least 6 and at most 16, from at least two Starports with Reactors.
-AIR_TECH = {U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
+# at least 6 and at most 16, from at least two Starports with Reactors. Brood Lords morph from Corruptors, which T63
+# saw two minutes before the first Brood Lord, so Corruptors start it too.
+AIR_TECH = {U.CORRUPTOR, U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
 VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
 AIR_STARPORTS = 2
 GAS_THROTTLE_ON = 300
@@ -617,7 +618,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._maintain_scouts_and_detection()
 
     async def _answer_air_threat(self):
-        """Once Brood Lord tech is seen, keep Vikings coming, with a second Starport and Reactors to make them."""
+        """Once Brood Lord tech is seen, add a second Starport and Reactors first, then keep Vikings coming."""
         seen = [e for e in list(self.enemy_units) + list(self.enemy_structures) if e.type_id in AIR_TECH]
         if seen and self._air_threat_since is None:
             self._air_threat_since = self.time
@@ -627,6 +628,12 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if self._air_threat_since is None or self.time - self._last_air_response < 1:
             return
         self._last_air_response = self.time
+        starports = self.structures(U.STARPORT).amount + self.already_pending(U.STARPORT)
+        if (starports < AIR_STARPORTS and self.tech_requirement_progress(U.STARPORT) == 1
+                and self.can_afford(U.STARPORT)):
+            await self._build_one(self._action_ids["BUILD STARPORT"], U.STARPORT)
+        elif self.can_afford(U.STARPORTREACTOR) and self._addon_hosts(U.STARPORTREACTOR):
+            await self._build_addon(self._action_ids["ADDON STARPORTREACTOR"], U.STARPORTREACTOR)
         target = min(VIKINGS_MAX, max(VIKINGS_MIN, VIKINGS_PER_BROODLORD * self._broodlords_seen))
         vikings = self._count_with_pending(U.VIKINGFIGHTER) + self.units(U.VIKINGASSAULT).amount
         used = Counter()
@@ -644,12 +651,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self._action_stats["anti_air_vikings"] += trained
             self.log("anti_air_vikings", game_loop=self.state.game_loop, trained=trained,
                      vikings=vikings + trained, target=target)
-        starports = self.structures(U.STARPORT).amount + self.already_pending(U.STARPORT)
-        if (starports < AIR_STARPORTS and self.tech_requirement_progress(U.STARPORT) == 1
-                and self.can_afford(U.STARPORT)):
-            await self._build_one(self._action_ids["BUILD STARPORT"], U.STARPORT)
-        elif self.can_afford(U.STARPORTREACTOR) and self._addon_hosts(U.STARPORTREACTOR):
-            await self._build_addon(self._action_ids["ADDON STARPORTREACTOR"], U.STARPORTREACTOR)
 
     def _spend_bank(self):
         """Queue army in every idle production slot while unspent minerals pile up."""

@@ -679,6 +679,14 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         # A second Starport is started to make them faster.
         self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD STARPORT"], U.STARPORT)
 
+    async def test_corruptors_start_the_viking_response(self):
+        # Brood Lords morph from Corruptors; T63 saw Corruptors two minutes before the first Brood Lord.
+        starport = self.starport_world(enemies=[FakeTerranUnit(92, U.CORRUPTOR)])
+        await self.bot._refresh_abilities()
+        await self.bot._answer_air_threat()
+        self.assertEqual(starport.train.call_count, 2)
+        self.bot._build_one.assert_awaited_once()
+
     async def test_no_vikings_without_brood_lord_tech(self):
         starport = self.starport_world(enemies=[FakeTerranUnit(91, U.MUTALISK)])
         await self.bot._refresh_abilities()
