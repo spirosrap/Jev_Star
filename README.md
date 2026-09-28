@@ -213,6 +213,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T55 | **CheatVision** | **Victory** | 14:25 | 2.42M | None (phase 3l, **Altitude LE** game 1; commit `b9a2455`, bot code as `81ce965`) |
 | T56 | **CheatVision** | **Victory** | 15:03 | 2.48M | None (phase 3l, **Altitude LE** game 2; commit `a37620f`, bot code as `81ce965`) |
 | T57 | **CheatMoney** | Defeat | 24:45 | 4.03M | None (first game against **CheatMoney** Zerg, **Altitude LE**, Astra effort high; commit `148e88f`, bot code as `81ce965` plus the campaign guards) |
+| T58 | **CheatMoney** | Defeat | 12:43 | 1.77M | None (CheatMoney Zerg, **Ancient Cistern LE**, Astra effort medium; commit `f845edb`, ladder behaviour as the certified baseline) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -355,6 +356,8 @@ T55 won on Altitude LE at 14:25, the fastest win of the frozen test: 47 SCVs and
 T56 won on Altitude at 15:03 (no base lost; 46 SCVs and 3 bases at 9:02, 67 SCVs, 4 bases and 9 Siege Tanks at 12:03). This completes the frozen test: the edge-clearance baseline (bot code of `81ce965`, unchanged since) won 11 of 12 games against CheatVision Zerg across all six maps (Ancient Cistern, Babylon, Dragon Scales, Neohumanity and Altitude 2–0 each; Gresvan 1–1), most in 14–21 minutes. The one loss (T52) came from the Baneling, Roach and Infestor attack at about 8:50 that also hit T21, T34 and T44 on other maps; it is the next thing to address.
 
 T57 was the first game against CheatMoney Zerg (the computer gets extra income as well as full vision), on Altitude LE with Astra at high effort. The bot held the early pressure: a base was lost at 5:20, but it had 60 SCVs and 99 army supply at 13:53 and was nearly maxed at 15:27 (182/200, 122 army supply). Its attack at 14:26 traded badly, army supply fell to 56 by 17:00, and it retreated. Five bases were lost from 19:33 on, SCVs fell from 60 to 37 by 20:02 and to 12 by 23:07, and the last building fell at 24:45 while 1,393 minerals sat unspent at 18:32. Astra's plans were slow at high effort: 13 of 35 were discarded because the battle changed while it planned, and 3 were rejected as invalid, so only 19 were used. The panel's "Astra unavailable: 3 planner requests failed in a row" was wrong: the three failures were at 7:07, 7:44 and 24:06, with accepted plans between them. CheatMoney is a harder level than the frozen test's CheatVision; one game isn't a result yet.
+
+T58 was the second CheatMoney game, on Ancient Cistern, the baseline's strongest map, with Astra back at medium effort. Zerg showed Roaches, Ravagers and Hydralisks at 6:37. At 8:44 the bot had 58 SCVs and 62 army supply (33 Marines, 4 Siege Tanks, 3 Medivacs, 2 Widow Mines) but **1,490 minerals and 522 gas unspent**; from 8:05 it had carried 1,000–1,600 minerals while Jev spent one order at a time on Barracks, an Engineering Bay and SCVs. The attack at 8:44 took army supply from 62 to 25 in 17 seconds and to 13 by 9:21, a base fell at 9:02, and with 1,400–1,600 minerals still banked the army was not rebuilt; Lurkers came at 9:47 and the last building fell at 12:43. The unspent bank before the fight is the clearest difference from the CheatVision wins.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -574,6 +577,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T55 | **CheatVision** | **胜** | 14:25 | 242 万 | 无（第 3l 阶段，**Altitude LE** 第 1 局；提交 `b9a2455`，Bot 代码同 `81ce965`） |
 | T56 | **CheatVision** | **胜** | 15:03 | 248 万 | 无（第 3l 阶段，**Altitude LE** 第 2 局；提交 `a37620f`，Bot 代码同 `81ce965`） |
 | T57 | **CheatMoney** | 负 | 24:45 | 403 万 | 无（首局对 **CheatMoney** Zerg，**Altitude LE**，Astra 强度 high；提交 `148e88f`，Bot 代码同 `81ce965` 加战役防护） |
+| T58 | **CheatMoney** | 负 | 12:43 | 177 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**，Astra 强度 medium；提交 `f845edb`，天梯行为同认证基线） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -716,6 +720,8 @@ T55 在 Altitude LE 于 14:25 获胜，是冻结测试中最快的胜利：9:02 
 T56 在 Altitude 于 15:03 获胜（没有失去基地；9:02 时 46 台 SCV、3 个基地，12:03 时 67 台 SCV、4 个基地、9 辆 Siege Tank）。冻结测试至此完成：边缘留空基线（`81ce965` 的 Bot 代码，此后未改动）在全部六张地图上对 CheatVision Zerg 十二局十一胜（Ancient Cistern、Babylon、Dragon Scales、Neohumanity、Altitude 各 2 胜，Gresvan 1 胜 1 负），多数在 14–21 分钟内获胜。唯一的失利（T52）来自约 8:50 的 Baneling、Roach 和 Infestor 进攻，这波进攻也在其他地图上打击了 T21、T34 和 T44；这是下一步要解决的问题。
 
 T57 是首局对 CheatMoney Zerg（电脑除全图视野外还有额外收入），地图 Altitude LE，Astra 强度 high。Bot 顶住了早期压力：5:20 失去一个基地，但 13:53 时有 60 台 SCV、99 部队人口，15:27 接近满人口（182/200，122 部队人口）。14:26 的进攻交换不利，17:00 部队人口降到 56 并撤退。19:33 起先后失去五个基地，SCV 从 60 台降到 20:02 的 37 台、23:07 的 12 台，24:45 最后一个建筑被摧毁；18:32 时还有 1393 矿未花出。high 强度下 Astra 规划较慢：35 个计划中 13 个因规划期间战局变化被丢弃，3 个被判无效，只采用了 19 个。控制面板显示的 “Astra unavailable: 3 planner requests failed in a row” 有误：三次失败分别在 7:07、7:44 和 24:06，中间都有被采用的计划。CheatMoney 比冻结测试所用的 CheatVision 更难，一局还不能说明结果。
+
+T58 是第二局 CheatMoney，地图为基线最强的 Ancient Cistern，Astra 强度恢复为 medium。Zerg 在 6:37 出现 Roach、Ravager 和 Hydralisk。8:44 时 Bot 有 58 台 SCV、62 部队人口（33 个 Marine、4 辆 Siege Tank、3 架 Medivac、2 个 Widow Mine），但 **1490 矿和 522 气未花出**；从 8:05 起一直积压 1000–1600 矿，而 Jev 一次只下一个命令，花在 Barracks、Engineering Bay 和 SCV 上。8:44 的进攻在 17 秒内把部队人口从 62 打到 25，9:21 降到 13；9:02 失去一个基地，仍积压 1400–1600 矿却没有重建部队；9:47 出现 Lurker，12:43 最后一个建筑被摧毁。战前积压的资源是与 CheatVision 胜局最明显的差别。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
