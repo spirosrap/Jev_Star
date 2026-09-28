@@ -28,7 +28,9 @@ CAUTIOUS_PLANNER_TEXT = (
     "This opponent gathers extra resources and out-produces us, so we win by trading, not by attacking into it. "
     "The army will not attack the enemy main (near enemy_start) or bases covered by Spine or Spore Crawlers; such "
     "navigation targets are marked attack_blocked and an attack order toward them holds the army at home instead. "
-    "Attack only exposed expansions and enemy forces near our bases, and defend with sieged Tanks.")
+    "Attack only exposed expansions and enemy forces near our bases, and defend with sieged Tanks. Surplus minerals "
+    "are spent automatically on new bases (as Planetary Fortresses), Missile Turrets and Refineries, and Orbital "
+    "Commands Scan expansion sites nobody has seen, so exposed enemy bases appear as navigation targets.")
 
 
 def main():

@@ -64,6 +64,13 @@ VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
 AIR_STARPORTS = 2
 MEDIVAC_FRONT = 8  # the bio units nearest the army's heading that Medivacs stay over
 MEDIVAC_SLACK = 6
+# Against CheatMoney and stronger, surplus minerals grow the bot into the map (T70-T73 sat on 3,000-17,000 unused
+# minerals while Zerg held the map): new bases as Planetary Fortresses, a Missile Turret per base, their Refineries,
+# and Scans of expansion sites nobody has looked at, so exposed Zerg bases are found.
+GROW_BANK = 1500
+GROW_INTERVAL = 5
+GROW_ORBITALS = 3  # Command Centers beyond this many Orbitals become Planetary Fortresses
+SCOUT_SCAN_INTERVAL = 45
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -114,7 +121,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege", "building_edge_clearance",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
-                        "medivac_front_healing", "raven_escort", "anti_air_response", "bank_army_spend"]
+                        "medivac_front_healing", "raven_escort", "anti_air_response", "grow_into_map",
+                        "bank_army_spend"]
 
     def _initialize_race(self):
         super()._initialize_race()
@@ -132,6 +140,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._air_threat_since = None
         self._broodlords_seen = 0
         self._last_air_response = -1000
+        self._last_grow = -1000
+        self._last_scout_scan = -1000
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -606,6 +616,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self.workers, self.gas_buildings = workers, gas_buildings
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
+        await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
         self._spend_bank()
@@ -618,6 +629,64 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._clear_changelings()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    async def _grow_into_map(self):
+        """Against CheatMoney and stronger: spend a mineral surplus on bases, Planetary Fortresses, turrets and gas,
+        and Scan unexplored expansion sites."""
+        if not self.cautious_attacks or self.time - self._last_grow < GROW_INTERVAL:
+            return
+        self._last_grow = self.time
+        self._scout_by_scan()
+        if self.structures(U.ORBITALCOMMAND).amount >= GROW_ORBITALS:
+            hosts = self._morph_hosts(U.PLANETARYFORTRESS)
+            if hosts and self.can_afford(U.PLANETARYFORTRESS):
+                hosts[0](MORPHS[U.PLANETARYFORTRESS])
+                self._grown("planetary_fortress")
+        if self.minerals < GROW_BANK:
+            return
+        # These are not Jev's orders: keep their placement failures out of the feedback Jev reads.
+        failures = list(self.temp_failure_list)
+        try:
+            await self._grow_structures()
+        finally:
+            self.temp_failure_list = failures
+
+    async def _grow_structures(self):
+        bases = self.townhalls.amount
+        if (not self.already_pending(U.COMMANDCENTER) and bases < self.contract.building_limits["COMMANDCENTER"]
+                and self.can_afford(U.COMMANDCENTER)):
+            await self._build_expansion(self._action_ids["BUILD COMMANDCENTER"], U.COMMANDCENTER)
+            self._grown("base")
+        if (self.structures(U.ENGINEERINGBAY).ready and not self.already_pending(U.MISSILETURRET)
+                and self._count_with_pending(U.MISSILETURRET) < min(bases, self.contract.building_limits["MISSILETURRET"])
+                and self.can_afford(U.MISSILETURRET)):
+            await self._build_one(self._action_ids["BUILD MISSILETURRET"], U.MISSILETURRET)
+            self._grown("missile_turret")
+        if (not self.already_pending(U.REFINERY) and self._assimilator_candidates()
+                and self.gas_buildings.amount < min(2 * self.townhalls.ready.amount, self.contract.building_limits["REFINERY"])
+                and self.can_afford(U.REFINERY)):
+            await self._build_one(self._action_ids["BUILD REFINERY"], U.REFINERY)
+            self._grown("refinery")
+
+    def _grown(self, what):
+        self._action_stats[f"grow_{what}"] += 1
+        self.log("grow_into_map", game_loop=self.state.game_loop, what=what, minerals=self.minerals)
+
+    def _scout_by_scan(self):
+        """Scan the expansion site checked longest ago (never first) that is away from our bases."""
+        if self.time - self._last_scout_scan < SCOUT_SCAN_INTERVAL:
+            return
+        orbitals = self.structures(U.ORBITALCOMMAND).ready.filter(
+            lambda o: o.energy >= 50 and o.tag not in self.unit_tags_received_action)
+        sites = [s for s in self._search_sites
+                 if not any(b.distance_to(Point2(s["position"])) < 15 for b in self.townhalls)]
+        if not orbitals or not sites:
+            return
+        site = min(sites, key=lambda s: (s["last_checked"] is not None, s["last_checked"] or 0))
+        orbitals.first(A.SCANNERSWEEP_SCAN, Point2(site["position"]))
+        self._last_scout_scan = self.time
+        self._action_stats["scout_scans"] += 1
+        self.log("scout_scan", game_loop=self.state.game_loop, site=site["id"], position=site["position"])
 
     async def _answer_air_threat(self):
         """Once Brood Lord tech is seen, add a second Starport and Reactors first, then keep Vikings coming."""

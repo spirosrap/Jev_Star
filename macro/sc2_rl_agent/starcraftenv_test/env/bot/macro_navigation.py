@@ -30,7 +30,7 @@ class MacroNavigation:
         self._base_integrity = {}
         self._base_damaged_until = {}
         self._last_navigation = -100
-        self._last_redirect = None
+        self._redirects_logged = {}
 
     def _set_search_sites(self, locations):
         points = sorted(set(locations), key=lambda p: (p.x, p.y))
@@ -135,8 +135,10 @@ class MacroNavigation:
                        for memory in self._known_enemy_buildings.values())
 
     def _redirect(self, requested, reason):
-        if self._last_redirect != (requested, reason):
-            self._last_redirect = (requested, reason)
+        # Once per target and reason every 30 game seconds; attack orders are re-checked every step.
+        key = (requested, reason)
+        if self.time - self._redirects_logged.get(key, -1000) >= 30:
+            self._redirects_logged[key] = self.time
             self.log("attack_redirected", game_loop=self.state.game_loop, requested=requested, reason=reason)
 
     def _attack_position(self):

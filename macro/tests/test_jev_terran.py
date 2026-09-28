@@ -485,6 +485,44 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_1")  # CheatVision and below keep the baseline.
 
+    def grow_world(self):
+        orbitals = [FakeTerranUnit(70 + i, U.ORBITALCOMMAND, (20 + 10 * i, 20)) for i in range(3)]
+        for o in orbitals:
+            o.energy = 100
+        bay = FakeTerranUnit(80, U.ENGINEERINGBAY, (30, 30))
+        self.set_world([self.scv], [self.cc, bay, *orbitals])
+        self.bot.townhalls = support.FakeBases([self.cc, *orbitals], self.bot)
+        self.bot.cautious_attacks = True
+        self.bot.minerals, self.bot.vespene = 2000, 500
+        self.bot._build_expansion = AsyncMock()
+        self.bot._build_one = AsyncMock()
+        self.bot._assimilator_candidates = Mock(return_value=[SimpleNamespace()])
+        self.bot._search_sites = [{"id": "expansion_0", "position": [90.0, 90.0], "last_checked": 12.0},
+                                  {"id": "expansion_1", "position": [80.0, 40.0], "last_checked": None},
+                                  {"id": "expansion_2", "position": [21.0, 21.0], "last_checked": None}]  # Ours.
+        return orbitals
+
+    async def test_a_mineral_surplus_grows_into_the_map_against_cheatmoney(self):
+        orbitals = self.grow_world()
+        self.bot.temp_failure_list = ["Action failed: TRAIN SCV, Reason: x"]
+        await self.bot._grow_into_map()
+        self.bot._build_expansion.assert_awaited_once()
+        built = [c.args[1] for c in self.bot._build_one.await_args_list]
+        self.assertEqual(built, [U.MISSILETURRET, U.REFINERY])
+        # The never-seen site away from our bases is scanned.
+        self.assertEqual(orbitals[0].commands[-1], (A.SCANNERSWEEP_SCAN, Point2((80, 40))))
+        self.assertEqual(self.bot.temp_failure_list, ["Action failed: TRAIN SCV, Reason: x"])
+
+    async def test_no_growth_below_the_bank_or_outside_cheatmoney(self):
+        self.grow_world()
+        self.bot.minerals = 1000
+        await self.bot._grow_into_map()
+        self.bot._build_expansion.assert_not_awaited()
+        self.grow_world()
+        self.bot.cautious_attacks = False
+        await self.bot._grow_into_map()
+        self.bot._build_expansion.assert_not_awaited()
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []
