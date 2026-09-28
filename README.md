@@ -133,6 +133,7 @@ Heart of the Swarm needs a Zerg bot, which doesn't exist yet. Legacy of the Void
 | The Outlaws (TRaynor02) | Not a mission win: "Victory" at 6:22 (bot as only player) | Destroy the Dominion Base: active · Rescue the Rebels: completed as the game ended |
 | The Outlaws (TRaynor02) | Not a mission win: "Victory" at 3:54 (bot as only player) | Destroy the Dominion Base: active · Rescue the Rebels: completed as the game ended |
 | The Outlaws (TRaynor02), Normal | **Mission complete** at 6:54 (objective shim) | Rescue the Rebels: completed at 3:10 · Destroy the Dominion Base: completed at 6:38 |
+| The Outlaws (TRaynor02), **Hard** | **Mission complete** at 7:56 (mission reported Hard) | Rescue the Rebels: completed at 6:43 · Destroy the Dominion Base: completed at 7:43 |
 
 Neither "victory" was the mission's. In a game created through the SC2 API, the engine ends the whole game as soon as any objective is set to completed (Victory) or failed (Defeat), even a secondary one: both games ended the moment the bot's Marines reached the rebels and the mission completed "Rescue the Rebels", with the Dominion base untouched. (The 8:08 game also had a built-in Computer in the Dominion's slot; campaign games now start with the bot as the only player.) The prepared maps now route the mission's objective calls through a small shim that keeps the real states for the mission's logic and the reporter but never hands completed or failed to the engine. The game ends only when the mission itself declares victory or defeat; on victory the campaign library would wait on its score screen for a click, so the shim ends the game there instead. Short scripted test games confirmed each step: the rescue completes and play continues, destroying the Dominion base ends in Victory after the mission's victory sequence, and losing every unit ends in Defeat.
 
@@ -488,6 +489,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 | The Outlaws (TRaynor02) | 非任务胜利：6:22 “Victory”（机器人为唯一玩家） | 摧毁自治领基地：进行中 · 营救叛军：在游戏结束时完成 |
 | The Outlaws (TRaynor02) | 非任务胜利：3:54 “Victory”（机器人为唯一玩家） | 摧毁自治领基地：进行中 · 营救叛军：在游戏结束时完成 |
 | The Outlaws (TRaynor02)，Normal | **任务完成**，6:54（目标中间层） | 营救叛军：3:10 完成 · 摧毁自治领基地：6:38 完成 |
+| The Outlaws (TRaynor02)，**Hard** | **任务完成**，7:56（任务报告难度为 Hard） | 营救叛军：6:43 完成 · 摧毁自治领基地：7:43 完成 |
 
 两次 “胜利” 都不是任务本身的胜利。通过 SC2 API 创建的对局中，只要任何目标（即使是次要目标）被设为完成，引擎就会以胜利结束整局；设为失败则以失败结束。两局都在机器人的 Marine 到达叛军、任务完成 “营救叛军” 的那一刻结束，而自治领基地完好无损。（8:08 那局还让内置电脑占用了自治领的位置；现在战役对局只以机器人为唯一玩家启动。）准备好的地图现在把任务的目标调用转到一个小的中间层：它为任务逻辑和报告保留真实状态，但从不把 “完成” 或 “失败” 交给引擎。只有任务自己判定胜负时游戏才结束；胜利时战役库会停在得分界面等待点击，因此由中间层在那里结束游戏。用简短的脚本测试对局逐项确认：营救完成后游戏继续；摧毁自治领基地后在任务的胜利过场之后以胜利结束；失去所有单位则以失败结束。
 
