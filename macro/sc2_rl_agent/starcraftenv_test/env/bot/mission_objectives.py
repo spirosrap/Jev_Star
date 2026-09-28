@@ -39,6 +39,28 @@ def read_applied_difficulty(path):
     return None
 
 
+def read_markers(path):
+    """[{"id", "position", "kind"}] for the lasting pings the mission shows (e.g. a rescue site), from the bank."""
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (OSError, ElementTree.ParseError):
+        return []
+    markers = []
+    for section in root.findall("Section"):
+        if section.get("name") != "ping":
+            continue
+        for key in section.findall("Key"):
+            value = key.find("Value")
+            parts = (value.get("string") if value is not None else "").split()
+            try:
+                x, y = float(parts[0]), float(parts[1])
+            except (IndexError, ValueError):
+                continue
+            markers.append({"id": f"mission_marker_{key.get('name')}", "position": [x, y],
+                            "kind": parts[2] if len(parts) > 2 else "ping"})
+    return markers
+
+
 def _objectives(root):
     sections = {section.get("name"): {key.get("name"): key.find("Value") for key in section.findall("Key")}
                 for section in root.findall("Section")}
@@ -62,6 +84,7 @@ class MissionObjectives:
         self.states = {}  # key -> state name
         self.difficulty = difficulty  # chosen; each difficulty is its own prepared map
         self.applied_difficulty = None  # what the mission reports it is running on
+        self.markers = []  # lasting minimap pings of the mission, as navigation targets
         self._last_refresh = -REFRESH_SECONDS
 
     def clear_bank(self):
@@ -78,6 +101,7 @@ class MissionObjectives:
         self._last_refresh = game_time
         changes = {}
         self.applied_difficulty = read_applied_difficulty(self.bank_path) or self.applied_difficulty
+        self.markers = read_markers(self.bank_path)
         for entry in read_bank(self.bank_path).values():
             new = STATES.get(entry["state"], "unknown")
             old = self.states.get(entry["key"])
@@ -109,7 +133,10 @@ class MissionObjectives:
                  "mission objective below is completed, primary and secondary; destroying the enemy alone is not "
                  "enough. The mission's own script decides victory and may end the game when the primary "
                  "objectives are done, so complete the secondary objectives before or alongside them. Current "
-                 "objective states are in state.mission_objectives. Objectives:"]
+                 "objective states are in state.mission_objectives. The pings the mission puts on the minimap "
+                 "(where to rescue units, reach or destroy something) are navigation.targets with ids "
+                 "mission_marker_N; to get there, choose army_posture attack with that army_target_id, and "
+                 "return home when the base needs defending. Objectives:"]
         for o in self.mission.get("objectives", []):
             lines.append(f"- {'Primary' if o['primary'] else 'Secondary'}: {o['name']} — {o['description']}")
         return "\n".join(lines)

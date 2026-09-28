@@ -429,7 +429,7 @@ class CodexPlannerClient:
 
 
 class StrategicPlanner:
-    URGENT_EVENTS = {"base_attacked", "base_lost", "army_losses", "new_enemy_threat"}
+    URGENT_EVENTS = {"base_attacked", "base_lost", "army_losses", "new_enemy_threat", "mission_update"}
     RECOVERY_EVENTS = {"invalid_plan", "plan_expired", "opening"}
 
     def __init__(self, client, emit, interval=60, ttl=180, max_age=60, max_requests=80, clock=time.monotonic,

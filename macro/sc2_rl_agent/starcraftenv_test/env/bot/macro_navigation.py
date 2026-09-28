@@ -96,6 +96,7 @@ class MacroNavigation:
                 "army_destination": list(self._army_destination) if self._army_destination else None,
                 "targets": [{"id": "home", "position": list(self._defense_position())},
                             {"id": "enemy_start", "position": list(self.enemy_start_locations[0])},
+                            *self._mission_markers(),
                             *self._search_sites, *self._known_enemy_buildings.values()],
                 "scouts": [{"unit_tag": tag, **mission} for tag, mission in self._scouts.items()],
                 "knowledge": "Map expansion sites are public geography; enemy structures are remembered only after sighting. Cleared sites are searched again later."}
@@ -107,8 +108,19 @@ class MacroNavigation:
             return plan.get("army_target_id")
         return None
 
+    def _mission_markers(self):
+        mission = getattr(self, "mission", None)
+        return mission.markers if mission is not None else []
+
     def _attack_position(self):
         requested = self._army_target_id
+        for marker in self._mission_markers():
+            # A campaign objective site (e.g. stranded units to rescue): go there even when it is visible.
+            if marker["id"] == requested:
+                return marker["id"], Point2(marker["position"])
+        if requested and requested.startswith("mission_marker_"):
+            # The mission removed that ping (done or failed); come back rather than attack elsewhere.
+            return "home", self._defense_position()
         candidates = list(self._known_enemy_buildings.values())
         for memory in candidates:
             if memory["id"] == requested:

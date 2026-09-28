@@ -37,6 +37,7 @@ class HierarchicalMixin:
         self._last_ready_bases = None
         self._depleted_bases = set()
         self._last_army_loss = False
+        self._last_mission_view = None
         self._seen_enemy_types = set()
         self._last_legal_blocked = {}
         self._planner_steps_inflight = 0
@@ -317,6 +318,13 @@ class HierarchicalMixin:
             if army_loss and not self._last_army_loss:
                 self.planner.trigger("army_losses", peak_army_30s=peak_army, current_army=current_army)
             self._last_army_loss = army_loss
+            mission = getattr(self, "mission", None)
+            if mission is not None:
+                # A campaign objective changed or the mission marked a new place (e.g. units to rescue).
+                view = (sorted(m["id"] for m in mission.markers), sorted(mission.states.items()))
+                if self._last_mission_view is not None and view != self._last_mission_view:
+                    self.planner.trigger("mission_update", markers=view[0], objectives=dict(view[1]))
+                self._last_mission_view = view
             self._last_threat, self._last_ready_bases = emergency, ready_bases
             self._samples.append({"game_seconds": round(self.time, 1), **state["resource"]})
             self._catalog_cache = self._catalog()

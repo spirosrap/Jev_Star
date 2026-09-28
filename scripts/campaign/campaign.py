@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / ".tools"
 PREPARED = TOOLS / "campaign"
 # Raise when the injected script changes, so maps prepared by an older version are rebuilt.
-PREPARE_VERSION = 4
+PREPARE_VERSION = 5
 DIFFICULTIES = {"Casual": 1, "Normal": 2, "Hard": 3, "Brutal": 4}  # PlayerDifficulty values the missions read
 
 # Wings of Liberty in the usual story order. fit: "yes" base-building and ends by destroying targets or surviving;
@@ -113,6 +113,35 @@ void JevEndMission (int lp_player, int lp_type) {
 }
 // The campaign difficulty the missions read with PlayerDifficulty(1). An API game gives every slot Normal and the
 // game does not read hand-written banks, so each difficulty is its own prepared map.
+// Lasting pings the mission shows (objective and rescue markers), so the bot knows where to go.
+int[33] gv_jevPing;
+string[33] gv_jevPingModel;
+void JevRecordPing (int lp_ping, string lp_model) {
+    int i;
+    for (i = 1; i <= 32; i += 1) {
+        if (gv_jevPing[i] == 0) {
+            gv_jevPing[i] = lp_ping;
+            gv_jevPingModel[i] = lp_model;
+            return;
+        }
+    }
+}
+void JevPingDestroy (int lp_ping) {
+    int i;
+    for (i = 1; i <= 32; i += 1) {
+        if ((gv_jevPing[i] == lp_ping) && (lp_ping != 0)) {
+            gv_jevPing[i] = 0;
+        }
+    }
+    PingDestroy(lp_ping);
+}
+void JevPingDestroyAll () {
+    int i;
+    for (i = 1; i <= 32; i += 1) {
+        gv_jevPing[i] = 0;
+    }
+    PingDestroyAll();
+}
 void JevApplySettings () {
     PlayerSetDifficulty(1, JEV_DIFFICULTY);
 }
@@ -133,6 +162,12 @@ void JevSaveObjectives () {
             }
         }
     }
+    BankSectionRemove(b, "ping");
+    for (i = 1; i <= 32; i += 1) {
+        if ((gv_jevPing[i] != 0) && (gv_jevPing[i] != c_invalidPingId)) {
+            BankValueSetFromString(b, "ping", IntToString(i), FixedToString(PointGetX(PingGetPosition(gv_jevPing[i])), 1) + " " + FixedToString(PointGetY(PingGetPosition(gv_jevPing[i])), 1) + " " + gv_jevPingModel[i]);
+        }
+    }
     BankValueSetFromInt(b, "clock", "seconds", FixedToInt(GameGetMissionTime()));
     BankValueSetFromInt(b, "clock", "difficulty", PlayerDifficulty(1));
     BankSave(b);
@@ -144,13 +179,21 @@ bool gt_JevObjectiveReporter_Func (bool testConds, bool runActions) {
 }
 '''
 OBJECTIVE_START = re.compile(r'\bObjectiveCreate(?:ForPlayers)?\(')
+# Pings the mission puts on the minimap (objective and rescue markers). Only lasting ones (duration 0) are recorded.
+PING_START = re.compile(r'^[ \t]*(?:libNtve_gf_CreatePingFacingAngle|PingCreate)\(', re.M)
+PING_DESTROY = re.compile(r'\b(PingDestroy(?:All)?)\(')
 OBJECTIVE_STATE = re.compile(r'\b(Objective[GS]etState)\(')
 STRING_KEY = re.compile(r'StringExternal\("(Param/Value/[0-9A-F]+)"\)')
 
 
 def objective_calls(script):
     """Every ObjectiveCreate statement as (end offset, [arguments]); names may be built from several strings."""
-    for match in OBJECTIVE_START.finditer(script):
+    return calls(script, OBJECTIVE_START)
+
+
+def calls(script, start_pattern):
+    """Every statement calling start_pattern's function, as (end offset of the statement, [arguments])."""
+    for match in start_pattern.finditer(script):
         depth, start, args, i, quoted = 1, match.end(), [], match.end(), False
         while depth:
             c = script[i]
@@ -279,6 +322,12 @@ def prepare(map_id, game_dir=None, force=False, difficulty="Normal"):
         # The mission's own state calls go through the shim (before the shim itself is added).
         script = OBJECTIVE_STATE.sub(r"Jev\1(", script)
         script = re.sub(r"\blibCamp_gf_EndCampaignMission\(", "JevEndMission(", script)
+        script = PING_DESTROY.sub(r"Jev\1(", script)
+        for end, args in reversed(list(calls(script, PING_START))):
+            duration = args[4] if len(args) > 4 else ""
+            if re.fullmatch(r"0(\.0+)?", duration):
+                model = args[1] if re.fullmatch(r'"[A-Za-z0-9_]*"', args[1]) else '""'
+                script = script[:end] + f" JevRecordPing(PingLastCreated(), {model});" + script[end:]
         includes = list(re.finditer(r'^include "[^"]+"\n', script, re.M))
         reporter = REPORTER.replace("JEV_DIFFICULTY", str(DIFFICULTIES[difficulty]))
         script = script[:includes[-1].end()] + reporter + script[includes[-1].end():]

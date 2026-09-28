@@ -55,6 +55,15 @@ class MissionObjectivesTest(unittest.TestCase):
         self.assertFalse(self.mission.outcome()["all_objectives_completed"])
 
 
+    def test_mission_pings_become_markers(self):
+        (self.folder / "JevObjectives.SC2Bank").write_text(BANK.format(secondary=1).replace(
+            '</Bank>', '<Section name="ping"><Key name="3"><Value string="114.1 72.3 PingObjective"/></Key>'
+                       '</Section></Bank>'))
+        self.mission.refresh(10)
+        self.assertEqual(self.mission.markers, [{"id": "mission_marker_3", "position": [114.1, 72.3],
+                                                 "kind": "PingObjective"}])
+        self.assertIn("mission_marker_N", self.mission.planner_text())
+
     def test_difficulty_chosen_and_applied_are_reported(self):
         mission = MissionObjectives(self.folder / "mission.json", self.folder, "Hard")
         (self.folder / "JevObjectives.SC2Bank").write_text(BANK.format(secondary=1).replace(

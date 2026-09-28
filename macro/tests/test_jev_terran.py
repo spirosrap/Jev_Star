@@ -414,6 +414,17 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.zeros((200, 200), dtype=np.uint8))
         self.assertTrue(self.bot._placement_candidates(U.ENGINEERINGBAY))
 
+    async def test_army_goes_to_a_mission_marker_and_home_when_it_is_gone(self):
+        self.set_world([self.scv], [self.cc])
+        self.bot.mission = SimpleNamespace(markers=[{"id": "mission_marker_1", "position": [114.1, 72.3],
+                                                     "kind": "PingObjective"}])
+        self.bot._army_target_id = "mission_marker_1"
+        self.assertEqual(self.bot._attack_position(), ("mission_marker_1", Point2((114.1, 72.3))))
+        self.assertIn("mission_marker_1", [t["id"] for t in self.bot._navigation_snapshot()["targets"]])
+        self.bot.mission.markers = []
+        self.assertEqual(self.bot._attack_position()[0], "home")
+        self.bot.mission = None
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []
