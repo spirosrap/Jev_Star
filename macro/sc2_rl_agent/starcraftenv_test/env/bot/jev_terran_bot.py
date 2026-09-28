@@ -62,6 +62,8 @@ BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines
 AIR_TECH = {U.CORRUPTOR, U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
 VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
 AIR_STARPORTS = 2
+MEDIVAC_FRONT = 8  # the bio units nearest the army's heading that Medivacs stay over
+MEDIVAC_SLACK = 6
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -112,7 +114,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         "baneling_dodge", "gas_balance", "changeling_targeting", "lurker_scans",
                         "army_intent_execution", "tank_siege", "building_edge_clearance",
                         "widow_mine_burrow", "combat_stimpack", "assigned_scout_missions",
-                        "medivac_and_raven_escort", "anti_air_response", "bank_army_spend"]
+                        "medivac_front_healing", "raven_escort", "anti_air_response", "bank_army_spend"]
 
     def _initialize_race(self):
         super()._initialize_race()
@@ -874,10 +876,18 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         detector = ravens.sorted(lambda u: u.tag).first if ravens and army else None
         if detector is not None and detector.distance_to(destination) > 4:
             detector.move(destination)
-        # Idle Medivacs heal nearby units on their own; keep them with the army.
+        # Medivacs heal only when idle or attack-moving, so attack-move them over the front of the bio (the Marines
+        # and Marauders nearest where the army is going), never interrupting a heal. Sending them to the centre of
+        # all combat units with move orders kept them away from the fights (they outlived the army in T59-T65).
+        bio = army.of_type({U.MARINE, U.MARAUDER})
+        if bio:
+            heading = self._army_destination or self._defense_position()
+            front = bio.closest_n_units(heading, MEDIVAC_FRONT).center
+        else:
+            front = destination
         for unit in self.units(U.MEDIVAC).ready.filter(free):
-            if unit.distance_to(destination) > 5:
-                unit.move(destination)
+            if unit.distance_to(front) > MEDIVAC_SLACK and not unit.is_using_ability(A.MEDIVACHEAL_HEAL):
+                unit.attack(front)
         for unit in ravens:
             if unit is not detector and unit.distance_to(destination) > 5:
                 unit.move(destination)

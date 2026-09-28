@@ -235,6 +235,9 @@ class FakeTerranUnit(support.FakeUnit):
     def __call__(self, ability, target=None, queue=False, **_):
         self.commands.append((ability, target))
 
+    def is_using_ability(self, ability):
+        return ability in getattr(self, "using", ())
+
 
 class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
     bot_class = JevTerranBot
@@ -424,6 +427,33 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.mission.markers = []
         self.assertEqual(self.bot._attack_position()[0], "home")
         self.bot.mission = None
+
+    def medivac_world(self):
+        tank = FakeTerranUnit(40, U.SIEGETANKSIEGED, (12, 12))  # Left at home.
+        marines = [FakeTerranUnit(41 + i, U.MARINE, (60 + i, 60)) for i in range(4)]
+        medivac = FakeTerranUnit(50, U.MEDIVAC, (30, 30))
+        self.set_world([self.scv, tank, medivac, *marines], [self.cc])
+        self.bot._army_destination = Point2((75, 60))
+        return medivac, marines
+
+    async def test_medivacs_attack_move_over_the_front_of_the_bio(self):
+        medivac, marines = self.medivac_world()
+        self.bot._maintain_escorts()
+        kind, target = medivac.commands[-1]
+        self.assertEqual(kind, "attack")  # Attack-move: a Medivac heals on the way and where it stops.
+        self.assertLess(target.distance_to(Point2((61.5, 60))), 1)  # Over the Marines, not the army's centre.
+
+    async def test_a_healing_medivac_is_not_interrupted(self):
+        medivac, _ = self.medivac_world()
+        medivac.using = {A.MEDIVACHEAL_HEAL}
+        self.bot._maintain_escorts()
+        self.assertEqual(medivac.commands, [])
+
+    async def test_a_medivac_over_the_front_gets_no_new_order(self):
+        medivac, _ = self.medivac_world()
+        medivac.position = Point2((62, 61))
+        self.bot._maintain_escorts()
+        self.assertEqual(medivac.commands, [])
 
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
