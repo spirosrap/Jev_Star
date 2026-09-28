@@ -220,6 +220,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T62 | **CheatMoney** | Defeat | 23:09 | 3.65M | None (CheatMoney Zerg, **Babylon LE** game 2; bank spending, bot code as `f49f891`, commit `ce80f62`) |
 | T63 | **CheatMoney** | Defeat | 20:04 | 3.14M | None (CheatMoney Zerg, **Ancient Cistern LE**; bank spending plus **Vikings against Brood Lord tech**, branch `cheatmoney-anti-air`, commit `39c5840`) |
 | T64 | **CheatMoney** | Defeat | 12:40 | 1.85M | None (CheatMoney Zerg, **Ancient Cistern LE**; Viking response started by Corruptors, branch `cheatmoney-anti-air`, commit `1a8ccbf`; the response never started) |
+| T65 | **CheatMoney** | Defeat | 19:53 | 3.24M | None (CheatMoney Zerg, **Ancient Cistern LE**; Viking response started by Corruptors, bot code as `1a8ccbf`, commit `ad1ff1a`; the response never started) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -377,6 +378,8 @@ T62, the second Babylon game, was the strongest CheatMoney game so far. The atta
 T63 added the next change: once a Greater Spire, Brood Lord cocoon or Brood Lord is seen, Starports make Vikings (2 per Brood Lord seen, 6 to 16) ahead of bank spending, and a second Starport and Reactors are added. The early game was the best on Cistern so far: 71 SCVs and 74 army supply at 10:10, 76 SCVs at 12:04, and 110 army supply at 15:01. The Greater Spire was never scouted, so the response started only when Brood Lords arrived together with a large attack at 15:07–15:12. With one Starport (Tech Lab) it made one Viking every ~30 seconds, only 5 in all; a base fell at 15:20 and another at 16:01, SCVs went from 74 to 40 between 15:30 and 16:02, and the last building fell at 20:04. The trigger came too late: Corruptors, which morph into Brood Lords, were seen at 13:12, two minutes earlier.
 
 T64 was the first game with the amended response (Corruptors also start it, and the second Starport and its Reactor come before the Vikings); the two-game count restarted with it. It says nothing about anti-air: the game ended before any Corruptor or Brood Lord appeared. At 8:27 the army was 42 Marines, 4 Marauders and one Siege Tank (5 Barracks, one Factory), and Banelings and Hydralisks at 8:35–8:50 took it from 75 to 28 army supply by 9:01; a base fell at 9:42, and the last building fell at 12:40. In the games that held this attack the bot had four or more Siege Tanks by then.
+
+T65, the second game with the amended response, again never met Brood Lord tech (Mutalisks and Vipers at 14:09, no Corruptor), so it says nothing about anti-air either. It held the ~8:45 attack and had 119 army supply and 63 SCVs at 10:07 and 144 army supply at 14:15, the largest army yet against CheatMoney. At 16:12 Zerg attacked a base: 37 Marines and 10 Marauders at 16:17 were 13 and 1 by 16:33, while **all 8 Medivacs survived**, and at 16:48 there were still 8 Medivacs next to 8 Marines. Bases fell at 16:19, 16:48 and 18:02, and the game ended at 19:53. The user noticed while watching that Medivacs stay away from the fighting army and outlive it; the logs show the same in T59, T62 and T63. The escort code sends them to the centre of all combat units pulled 3 cells toward home, with plain move orders, and a Medivac on a move order does not heal.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -603,6 +606,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T62 | **CheatMoney** | 负 | 23:09 | 365 万 | 无（CheatMoney Zerg，**Babylon LE** 第 2 局；积压资源出兵，Bot 代码同 `f49f891`，提交 `ce80f62`） |
 | T63 | **CheatMoney** | 负 | 20:04 | 314 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；积压资源出兵加上**针对 Brood Lord 科技的 Viking**，分支 `cheatmoney-anti-air`，提交 `39c5840`） |
 | T64 | **CheatMoney** | 负 | 12:40 | 185 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；由 Corruptor 触发的 Viking 响应，分支 `cheatmoney-anti-air`，提交 `1a8ccbf`；响应从未触发） |
+| T65 | **CheatMoney** | 负 | 19:53 | 324 万 | 无（CheatMoney Zerg，**Ancient Cistern LE**；由 Corruptor 触发的 Viking 响应，Bot 代码同 `1a8ccbf`，提交 `ad1ff1a`；响应从未触发） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -760,6 +764,8 @@ T62 是第二局 Babylon，也是迄今最强的一局 CheatMoney。8:55 的进�
 T63 加入了下一个改动：一旦看到 Greater Spire、Brood Lord 茧或 Brood Lord，Starport 就优先于积压资源出兵生产 Viking（每只 Brood Lord 2 架，6 到 16 架），并加建第二个 Starport 和 Reactor。本局是 Cistern 上迄今最好的早期：10:10 时 71 台 SCV、74 部队人口，12:04 时 76 台 SCV，15:01 时 110 部队人口。Greater Spire 始终没有被侦察到，因此直到 15:07–15:12 Brood Lord 随大规模进攻到来时响应才开始。只有一个带 Tech Lab 的 Starport，约每 30 秒一架 Viking，总共只造了 5 架；15:20 和 16:01 各失去一个基地，15:30 至 16:02 SCV 从 74 台降到 40 台，20:04 最后一个建筑被摧毁。触发太晚：可变形为 Brood Lord 的 Corruptor 早在 13:12 就已出现，提前了两分钟。
 
 T64 是修改后响应（Corruptor 也会触发，第二个 Starport 和 Reactor 先于 Viking）的第一局，两局计数随之重新开始。本局与防空无关：游戏在出现任何 Corruptor 或 Brood Lord 之前就结束了。8:27 时部队为 42 个 Marine、4 个 Marauder 和 1 辆 Siege Tank（5 个 Barracks、1 个 Factory），8:35–8:50 的 Baneling 和 Hydralisk 在 9:01 前把部队人口从 75 打到 28；9:42 失去一个基地，12:40 最后一个建筑被摧毁。在守住这波进攻的对局中，此时 Bot 都有四辆以上 Siege Tank。
+
+T65 是修改后响应的第二局，同样没有遇到 Brood Lord 科技（14:09 出现 Mutalisk 和 Viper，没有 Corruptor），因此也不能说明防空的效果。它守住了约 8:45 的进攻，10:07 时 119 部队人口、63 台 SCV，14:15 时 144 部队人口，是对 CheatMoney 迄今最大的部队。16:12 Zerg 进攻一个基地：16:17 时的 37 个 Marine 和 10 个 Marauder 到 16:33 只剩 13 和 1，而 **8 架 Medivac 全部存活**，16:48 时仍有 8 架 Medivac 和 8 个 Marine。16:19、16:48 和 18:02 各失去一个基地，游戏在 19:53 结束。用户观战时注意到 Medivac 远离正在战斗的部队并且比部队活得更久；日志显示 T59、T62 和 T63 也是如此。护航代码把它们送到所有作战单位的中心并向基地方向后撤 3 格，使用的是普通移动命令，而处于移动命令下的 Medivac 不会治疗。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
