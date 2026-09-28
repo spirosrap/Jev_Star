@@ -135,6 +135,7 @@ Heart of the Swarm needs a Zerg bot, which doesn't exist yet. Legacy of the Void
 | The Outlaws (TRaynor02), Normal | **Mission complete** at 6:54 (objective shim) | Rescue the Rebels: completed at 3:10 · Destroy the Dominion Base: completed at 6:38 |
 | The Outlaws (TRaynor02), **Hard** | **Mission complete** at 7:56 (mission reported Hard) | Rescue the Rebels: completed at 6:43 · Destroy the Dominion Base: completed at 7:43 |
 | Zero Hour (TRaynor03), Hard | Not a mission win: survived to the evacuation, "Victory" at 14:51 | Hold Out For Evacuation: completed at 14:24 · Rescue the Rebels (/3): failed at 9:25 |
+| Zero Hour (TRaynor03), **Hard** | **Mission complete** at 14:51 (mission markers) | Rescue the Rebels (/3): completed at 8:57 (army sent to the pings at 5:30, 6:27 and 8:29) · Hold Out For Evacuation: completed at 14:23 |
 
 In Zero Hour three rebel squads appear outside the base (on Hard at 2:10, 5:50 and 10:55 mission time), each marked by a minimap ping, and the objective fails as soon as one squad is killed. The bot did not know where they were. Prepared maps now also record the mission's lasting minimap pings; the bot lists them as navigation targets (`mission_marker_N`) that Astra can send the army to, a new ping or objective change asks Astra for a new plan at once, and when a marker disappears the army returns home rather than attacking elsewhere.
 
@@ -495,6 +496,7 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 | The Outlaws (TRaynor02)，Normal | **任务完成**，6:54（目标中间层） | 营救叛军：3:10 完成 · 摧毁自治领基地：6:38 完成 |
 | The Outlaws (TRaynor02)，**Hard** | **任务完成**，7:56（任务报告难度为 Hard） | 营救叛军：6:43 完成 · 摧毁自治领基地：7:43 完成 |
 | Zero Hour (TRaynor03)，Hard | 非任务胜利：坚持到撤离，14:51 “Victory” | 坚持到撤离：14:24 完成 · 营救叛军 (/3)：9:25 失败 |
+| Zero Hour (TRaynor03)，**Hard** | **任务完成**，14:51（任务标记） | 营救叛军 (/3)：8:57 完成（部队在 5:30、6:27 和 8:29 前往标记）· 坚持到撤离：14:23 完成 |
 
 Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务时间 2:10、5:50 和 10:55），各有小地图标记；只要有一支小队被消灭，该目标即失败。机器人并不知道他们的位置。现在准备好的地图还会记录任务中持续存在的小地图标记；机器人把它们列为导航目标（`mission_marker_N`），Astra 可以派部队前往；新标记出现或目标状态变化时会立即请求 Astra 重新规划；标记消失后部队返回基地，而不是去攻击别处。
 
