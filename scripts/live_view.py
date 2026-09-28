@@ -24,6 +24,7 @@ DIFFICULTIES = ["VeryEasy", "Easy", "Medium", "MediumHard", "Hard", "Harder", "V
 EFFORTS = ["none", "low", "medium", "high", "xhigh"]
 sys.path.insert(0, str(ROOT / "scripts" / "campaign"))
 import campaign  # noqa: E402  (mission list and preparation)
+MISSION_DIFFICULTIES = list(campaign.DIFFICULTIES)
 FIT_MARK = {"yes": "✅", "partial": "⚠️", "no": "❌"}
 
 PAGE = """<!doctype html>
@@ -71,6 +72,7 @@ PAGE = """<!doctype html>
     <label class="ladder">Difficulty <select name="difficulty"></select></label>
     <label class="ladder">Map <select name="map"></select></label>
     <label class="campaign">Campaign <select name="campaign"><option>Wings of Liberty</option></select></label>
+    <label class="campaign">Mission difficulty <select name="mission_difficulty"></select></label>
     <label class="campaign wide">Mission (✅ fits · ⚠️ special objective · ❌ not playable) <select name="mission"></select></label>
     <label>Astra effort <select name="planner_effort"></select></label>
     <label>Time limit (min) <input name="minutes" type="number" min="1" max="60" value="20"></label>
@@ -117,6 +119,7 @@ async function options() {
   fill("difficulty", o.difficulties, saved.difficulty || "Easy");
   fill("map", o.maps, saved.map || "Altitude LE");
   fill("planner_effort", o.efforts, saved.planner_effort || "medium");
+  fill("mission_difficulty", o.mission_difficulties, saved.mission_difficulty || "Normal");
   const missions = form.elements.mission;
   missions.innerHTML = o.missions.map(m =>
     `<option value="${m.map}" ${m.fit === "no" ? "disabled" : ""}>${m.order}. ${m.mark} ${m.title} — ${m.note}</option>`).join("");
@@ -250,23 +253,27 @@ def bank_directory():
 def start_mission(request):
     try:
         map_id, effort, minutes = request["mission"], request["planner_effort"], int(request["minutes"])
+        difficulty = request.get("mission_difficulty", "Normal")
     except (KeyError, TypeError, ValueError):
         return 400, "Incomplete launch settings."
     missions = {m["map"]: m for m in campaign.catalog(sc2_path())}
     mission = missions.get(map_id)
-    if mission is None or mission["fit"] == "no" or effort not in EFFORTS or not 1 <= minutes <= 60:
+    if (mission is None or mission["fit"] == "no" or effort not in EFFORTS or not 1 <= minutes <= 60
+            or difficulty not in MISSION_DIFFICULTIES):
         return 400, "Invalid launch settings."
     try:
-        _, objectives = campaign.prepare(map_id, sc2_path())
+        _, objectives = campaign.prepare(map_id, sc2_path(), difficulty=difficulty)
     except (SystemExit, OSError, subprocess.CalledProcessError) as exc:
         return 500, f"Could not prepare {mission['title']}: {exc}"
     # The mission's own scripted forces fight us; the computer slot only fills the second player.
-    command = [sys.executable, str(ROOT / "jev_star.py"), "macro", "--race", mission["race"], "--map", map_id,
+    command = [sys.executable, str(ROOT / "jev_star.py"), "macro", "--race", mission["race"],
+               "--map", campaign.map_name(map_id, difficulty),
                "--opponent-race", "Terran", "--difficulty", "Medium", "--game-time-limit", str(minutes * 60),
-               "--mission-objectives", str(objectives), "--bank-directory", str(bank_directory())]
+               "--mission-objectives", str(objectives), "--bank-directory", str(bank_directory()),
+               "--mission-difficulty", difficulty]
     if effort != "none":
         command += ["--planner", "codex", "--planner-effort", effort]
-    return launch(command, f"Starting {mission['title']} ({mission['campaign']}).")
+    return launch(command, f"Starting {mission['title']} ({mission['campaign']}, {difficulty}).")
 
 
 def launch(command, message):
@@ -408,7 +415,7 @@ def load_state():
                 title = json.loads(Path(settings["mission_objectives"]).read_text()).get("title", settings.get("map"))
             except (OSError, json.JSONDecodeError):
                 title = settings.get("map")
-            match = f"Campaign mission: {title} · {settings.get('player_race')}"
+            match = f"Campaign mission: {title} · {settings.get('mission_difficulty') or 'Normal'} · {settings.get('player_race')}"
     except (OSError, json.JSONDecodeError):
         pass
     if not error and ("authentication" in planner_last_error and planner_failures or planner_failures >= 3):
@@ -461,7 +468,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/options"):
             missions = [dict(m, mark=FIT_MARK[m["fit"]]) for m in campaign.catalog(sc2_path())]
             self._json(200, {"races": RACES, "opponents": OPPONENTS, "difficulties": DIFFICULTIES,
-                             "efforts": EFFORTS, "maps": maps(), "missions": missions})
+                             "efforts": EFFORTS, "maps": maps(), "missions": missions,
+                             "mission_difficulties": MISSION_DIFFICULTIES})
         else:
             page = PAGE.encode()
             self.send_response(200)

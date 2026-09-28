@@ -55,5 +55,15 @@ class MissionObjectivesTest(unittest.TestCase):
         self.assertFalse(self.mission.outcome()["all_objectives_completed"])
 
 
+    def test_difficulty_chosen_and_applied_are_reported(self):
+        mission = MissionObjectives(self.folder / "mission.json", self.folder, "Hard")
+        (self.folder / "JevObjectives.SC2Bank").write_text(BANK.format(secondary=1).replace(
+            '</Bank>', '<Section name="clock"><Key name="difficulty"><Value int="3"/></Key></Section></Bank>'))
+        mission.refresh(10)
+        outcome = mission.outcome()
+        self.assertEqual((outcome["difficulty"], outcome["applied_difficulty"]), ("Hard", "Hard"))
+        self.assertIn("Hard difficulty", mission.planner_text())
+
+
 if __name__ == "__main__":
     unittest.main()

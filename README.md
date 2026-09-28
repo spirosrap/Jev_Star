@@ -118,7 +118,9 @@ The Terran bot can play Wings of Liberty missions with their real setup: the mis
 
 1. Build the two map tools once: `scripts/campaign/build_tools.sh` (CascLib and StormLib go into `.tools/`).
 2. In the control panel, choose **Mode: Campaign mission**. Missions are listed first to last: ✅ base-building missions the bot fits, ⚠️ base-building missions with a special objective, ❌ hero-only, special-mechanic or Protoss missions (these can't be selected).
-3. **Start mission** prepares the map the first time (`python3 scripts/campaign/campaign.py prepare TRaynor02` does the same by hand). This writes `Maps/Campaign/<id>.SC2Map` and `.tools/campaign/<id>.json` with the mission's objectives.
+3. **Start mission** prepares the map the first time for the chosen difficulty (`python3 scripts/campaign/campaign.py prepare TRaynor02 --difficulty Hard` does the same by hand). This writes `Maps/Campaign/<id>-<difficulty>.SC2Map` and `.tools/campaign/<id>.json` with the mission's objectives.
+
+**Mission difficulty** (Casual, Normal, Hard or Brutal) is chosen in the panel. Missions read it with `PlayerDifficulty`, which an API game always sets to Normal and which the game won't take from a hand-written bank, so each difficulty is prepared as its own map (`Maps/Campaign/<id>-<difficulty>.SC2Map`, e.g. `TRaynor02-Hard`), and the reporter records the difficulty the mission actually runs on.
 
 A mission counts as won only when **every objective, primary and secondary, is completed**. Destroying the enemy alone isn't enough. The prepared map carries a small trigger that saves each objective's state to the `JevObjectives` bank once per game second. The bot reads that bank, logs `objective_state` events, and passes the objectives and their states to Astra and Jev. The panel shows them live. The result is "Mission complete" only when every objective is done; otherwise a scripted victory shows as "Victory, objectives missed".
 
@@ -126,7 +128,13 @@ Heart of the Swarm needs a Zerg bot, which doesn't exist yet. Legacy of the Void
 
 | Mission | Result | Objectives |
 |---|---|---|
-| The Outlaws (TRaynor02) | Victory at 8:08 (first test, before objective tracking) | Destroy the Dominion Base: done · Rescue the Rebels: not tracked yet |
+| The Outlaws (TRaynor02) | Not a mission win: "Victory" at 8:08 (before objective tracking) | Not tracked |
+| The Outlaws (TRaynor02) | Not a mission win: "Victory" at 6:34, objectives missed | Destroy the Dominion Base: active · Rescue the Rebels: active |
+| The Outlaws (TRaynor02) | Not a mission win: "Victory" at 6:22 (bot as only player) | Destroy the Dominion Base: active · Rescue the Rebels: completed as the game ended |
+| The Outlaws (TRaynor02) | Not a mission win: "Victory" at 3:54 (bot as only player) | Destroy the Dominion Base: active · Rescue the Rebels: completed as the game ended |
+| The Outlaws (TRaynor02), Normal | **Mission complete** at 6:54 (objective shim) | Rescue the Rebels: completed at 3:10 · Destroy the Dominion Base: completed at 6:38 |
+
+Neither "victory" was the mission's. In a game created through the SC2 API, the engine ends the whole game as soon as any objective is set to completed (Victory) or failed (Defeat), even a secondary one: both games ended the moment the bot's Marines reached the rebels and the mission completed "Rescue the Rebels", with the Dominion base untouched. (The 8:08 game also had a built-in Computer in the Dominion's slot; campaign games now start with the bot as the only player.) The prepared maps now route the mission's objective calls through a small shim that keeps the real states for the mission's logic and the reporter but never hands completed or failed to the engine. The game ends only when the mission itself declares victory or defeat; on victory the campaign library would wait on its score screen for a click, so the shim ends the game there instead. Short scripted test games confirmed each step: the rescue completes and play continues, destroying the Dominion base ends in Victory after the mission's victory sequence, and losing every unit ends in Defeat.
 
 ### Experiment status
 
@@ -465,7 +473,9 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 
 1. 先构建两个地图工具（只需一次）：`scripts/campaign/build_tools.sh`（CascLib 和 StormLib 安装到 `.tools/`）。
 2. 在控制面板中选择 **Mode: Campaign mission**。任务按顺序从第一关到最后一关列出：✅ 适合机器人的建造基地任务，⚠️ 带特殊目标的建造基地任务，❌ 纯英雄、特殊机制或神族任务（不可选）。
-3. **Start mission** 首次运行时会先准备地图（也可手动运行 `python3 scripts/campaign/campaign.py prepare TRaynor02`），生成 `Maps/Campaign/<id>.SC2Map` 和记录任务目标的 `.tools/campaign/<id>.json`。
+3. **Start mission** 首次运行时会为所选难度准备地图（也可手动运行 `python3 scripts/campaign/campaign.py prepare TRaynor02 --difficulty Hard`），生成 `Maps/Campaign/<id>-<难度>.SC2Map` 和记录任务目标的 `.tools/campaign/<id>.json`。
+
+**任务难度**（Casual、Normal、Hard 或 Brutal）在控制面板中选择。任务通过 `PlayerDifficulty` 读取难度，而 API 对局总是设为 Normal，游戏也不会读取手写的存档，因此每个难度单独准备一张地图（`Maps/Campaign/<id>-<难度>.SC2Map`，例如 `TRaynor02-Hard`），报告中记录任务实际使用的难度。
 
 只有**所有目标（主要和次要）全部完成**才算任务胜利，仅消灭敌人不够。准备好的地图带有一个小触发器，每游戏秒把每个目标的状态写入 `JevObjectives` 存档。机器人读取该存档，记录 `objective_state` 事件，并把目标及其状态提供给 Astra 和 Jev；控制面板实时显示这些目标。只有全部目标完成时结果才显示为 “Mission complete”；否则脚本判定的胜利显示为 “Victory, objectives missed”。
 
@@ -473,7 +483,13 @@ py -3.10 jev_star.py micro --map 3m --episodes 3 --planner codex --planner-effor
 
 | 任务 | 结果 | 目标 |
 |---|---|---|
-| The Outlaws (TRaynor02) | 8:08 胜利（首次测试，尚未跟踪目标） | 摧毁自治领基地：完成 · 营救叛军：尚未跟踪 |
+| The Outlaws (TRaynor02) | 非任务胜利：8:08 “Victory”（尚未跟踪目标） | 未跟踪 |
+| The Outlaws (TRaynor02) | 非任务胜利：6:34 “Victory”，目标未完成 | 摧毁自治领基地：进行中 · 营救叛军：进行中 |
+| The Outlaws (TRaynor02) | 非任务胜利：6:22 “Victory”（机器人为唯一玩家） | 摧毁自治领基地：进行中 · 营救叛军：在游戏结束时完成 |
+| The Outlaws (TRaynor02) | 非任务胜利：3:54 “Victory”（机器人为唯一玩家） | 摧毁自治领基地：进行中 · 营救叛军：在游戏结束时完成 |
+| The Outlaws (TRaynor02)，Normal | **任务完成**，6:54（目标中间层） | 营救叛军：3:10 完成 · 摧毁自治领基地：6:38 完成 |
+
+两次 “胜利” 都不是任务本身的胜利。通过 SC2 API 创建的对局中，只要任何目标（即使是次要目标）被设为完成，引擎就会以胜利结束整局；设为失败则以失败结束。两局都在机器人的 Marine 到达叛军、任务完成 “营救叛军” 的那一刻结束，而自治领基地完好无损。（8:08 那局还让内置电脑占用了自治领的位置；现在战役对局只以机器人为唯一玩家启动。）准备好的地图现在把任务的目标调用转到一个小的中间层：它为任务逻辑和报告保留真实状态，但从不把 “完成” 或 “失败” 交给引擎。只有任务自己判定胜负时游戏才结束；胜利时战役库会停在得分界面等待点击，因此由中间层在那里结束游戏。用简短的脚本测试对局逐项确认：营救完成后游戏继续；摧毁自治领基地后在任务的胜利过场之后以胜利结束；失去所有单位则以失败结束。
 
 ### 实验状态
 

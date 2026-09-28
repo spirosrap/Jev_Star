@@ -416,9 +416,10 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_campaign_game_data_is_repaired_and_missing_units_count_zero(self):
         class FakeUnitData:
-            def __init__(self, ability_id, abilities):
+            def __init__(self, ability_id, abilities, race=Race.Terran):
                 self._proto = SimpleNamespace(ability_id=ability_id)
                 self._abilities = abilities
+                self.race = race
 
             @property
             def creation_ability(self):
@@ -426,14 +427,21 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         scv_ability = TRAIN_INFO[U.COMMANDCENTER][U.SCV]["ability"]
         marine_ability = TRAIN_INFO[U.BARRACKS][U.MARINE]["ability"]
-        abilities = {scv_ability.value: SimpleNamespace(exact_id=scv_ability, id=scv_ability),
-                     marine_ability.value: SimpleNamespace(exact_id=marine_ability, id=marine_ability)}
+        changeling_ability = TRAIN_INFO[U.OVERSEER][U.CHANGELING]["ability"]
+        abilities = {a.value: SimpleNamespace(exact_id=a, id=a) for a in (scv_ability, marine_ability, changeling_ability)}
         units = {U.SCV.value: FakeUnitData(0, abilities),  # Wings of Liberty leaves the SCV's ability out.
-                 U.MARINE.value: FakeUnitData(marine_ability.value, abilities)}
+                 U.MARINE.value: FakeUnitData(marine_ability.value, abilities),
+                 U.COMMANDCENTER.value: FakeUnitData(0, abilities),
+                 U.BARRACKS.value: FakeUnitData(0, abilities),
+                 # Melee data leaves the Changeling's ability out; another race's units stay untouched.
+                 U.OVERSEER.value: FakeUnitData(0, abilities, Race.Zerg),
+                 U.CHANGELING.value: FakeUnitData(0, abilities, Race.Zerg)}
         self.bot.game_data = SimpleNamespace(abilities=abilities, units=units, upgrades={})
+        self.bot.race = Race.Terran
         self.bot._repair_creation_abilities()
         self.assertEqual(units[U.SCV.value]._proto.ability_id, scv_ability.value)
         self.assertEqual(units[U.MARINE.value]._proto.ability_id, marine_ability.value)
+        self.assertEqual(units[U.CHANGELING.value]._proto.ability_id, 0)
         del self.bot.already_pending  # Use the real method, not the test double.
         self.assertEqual(self.bot.already_pending(U.HELLIONTANK), 0)  # Not in this game's data at all.
 

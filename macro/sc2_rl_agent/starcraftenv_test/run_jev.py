@@ -55,6 +55,8 @@ def main():
                         help="Objectives JSON of a campaign mission prepared by scripts/campaign/campaign.py")
     parser.add_argument("--bank-directory", type=Path,
                         help="Where SC2 writes banks (Documents/StarCraft II/Banks); needed with --mission-objectives")
+    parser.add_argument("--mission-difficulty", choices=["Casual", "Normal", "Hard", "Brutal"], default="Normal",
+                        help="Campaign difficulty the --map was prepared for (recorded with the objectives)")
     args = parser.parse_args()
     if args.max_requests < 1:
         parser.error("--max-requests must be positive")
@@ -135,14 +137,19 @@ def main():
                     from .env.bot.mission_objectives import MissionObjectives
                     if not args.bank_directory:
                         parser.error("--mission-objectives needs --bank-directory")
-                    bot.mission = MissionObjectives(args.mission_objectives, args.bank_directory)
+                    bot.mission = MissionObjectives(args.mission_objectives, args.bank_directory,
+                                                    args.mission_difficulty)
                     bot.mission.clear_bank()
                     if planner_client is not None:
                         planner_client.instructions += "\n\n" + bot.mission.planner_text()
                 log.phase = "launching"
                 bot.contract = contract
-                result = run_windowed_game(game_map, [Bot(Race[args.race], bot),
-                                           Computer(Race[args.opponent_race], Difficulty[args.difficulty])],
+                players = [Bot(Race[args.race], bot)]
+                if not args.mission_objectives:
+                    players.append(Computer(Race[args.opponent_race], Difficulty[args.difficulty]))
+                # A campaign mission's enemies are run by its own scripts. A built-in computer would take over the
+                # enemy's slot, and its quitting would end the game as a Victory with no objective met.
+                result = run_windowed_game(game_map, players,
                                            realtime=True, game_time_limit=args.game_time_limit,
                                            random_seed=args.seed, save_replay_as=str(output / "game.SC2Replay"),
                                            event_sink=log)

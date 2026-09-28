@@ -127,7 +127,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         ability itself exists with its multiplayer id. Fill it in so the SDK can train, build and count them.
         Melee data is complete, so nothing changes there."""
         repaired = []
-        for kinds in TRAIN_INFO.values():
+        for producer, kinds in TRAIN_INFO.items():
+            # Only our own race's units; melee data lacks the Changeling's ability and must stay as it is.
+            producer_data = self.game_data.units.get(producer.value)
+            if producer_data is None or producer_data.race != self.race:
+                continue
             for kind, info in kinds.items():
                 data = self.game_data.units.get(kind.value)
                 if (data is not None and data.creation_ability is None

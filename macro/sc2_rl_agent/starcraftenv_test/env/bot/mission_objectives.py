@@ -12,6 +12,7 @@ from pathlib import Path
 # ObjectiveGetState values (natives.galaxy).
 STATES = {-1: "unknown", 0: "hidden", 1: "active", 2: "completed", 3: "failed"}
 BANK_NAME = "JevObjectives.SC2Bank"
+DIFFICULTIES = {"Casual": 1, "Normal": 2, "Hard": 3, "Brutal": 4}  # PlayerDifficulty values the missions read
 REFRESH_SECONDS = 2
 
 
@@ -21,6 +22,24 @@ def read_bank(path):
         root = ElementTree.parse(path).getroot()
     except (OSError, ElementTree.ParseError):
         return {}
+    return _objectives(root)
+
+
+def read_applied_difficulty(path):
+    """The difficulty the mission itself reports (PlayerDifficulty), or None before its first report."""
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (OSError, ElementTree.ParseError):
+        return None
+    for section in root.findall("Section"):
+        for key in section.findall("Key"):
+            if section.get("name") == "clock" and key.get("name") == "difficulty" and key.find("Value") is not None:
+                value = int(key.find("Value").get("int"))
+                return next((name for name, number in DIFFICULTIES.items() if number == value), str(value))
+    return None
+
+
+def _objectives(root):
     sections = {section.get("name"): {key.get("name"): key.find("Value") for key in section.findall("Key")}
                 for section in root.findall("Section")}
     objectives = {}
@@ -36,11 +55,13 @@ def read_bank(path):
 
 
 class MissionObjectives:
-    def __init__(self, mission_path, bank_directory):
+    def __init__(self, mission_path, bank_directory, difficulty=None):
         self.mission = json.loads(Path(mission_path).read_text(encoding="utf-8"))
         self.bank_path = Path(bank_directory) / BANK_NAME
         self.by_key = {o["key"]: o for o in self.mission.get("objectives", [])}
         self.states = {}  # key -> state name
+        self.difficulty = difficulty  # chosen; each difficulty is its own prepared map
+        self.applied_difficulty = None  # what the mission reports it is running on
         self._last_refresh = -REFRESH_SECONDS
 
     def clear_bank(self):
@@ -56,6 +77,7 @@ class MissionObjectives:
             return {}
         self._last_refresh = game_time
         changes = {}
+        self.applied_difficulty = read_applied_difficulty(self.bank_path) or self.applied_difficulty
         for entry in read_bank(self.bank_path).values():
             new = STATES.get(entry["state"], "unknown")
             old = self.states.get(entry["key"])
@@ -75,13 +97,15 @@ class MissionObjectives:
         objectives = self.snapshot()
         return {
             "mission": self.mission.get("title"), "map": self.mission.get("map"),
+            "difficulty": self.difficulty, "applied_difficulty": self.applied_difficulty,
             "objectives": objectives,
             "all_objectives_completed": bool(objectives) and all(o["state"] == "completed" for o in objectives),
             "primary_objectives_completed": all(o["state"] == "completed" for o in objectives if o["type"] == "primary"),
         }
 
     def planner_text(self):
-        lines = [f"This game is the campaign mission \"{self.mission.get('title')}\". It is won only when every "
+        lines = [f"This game is the campaign mission \"{self.mission.get('title')}\" on "
+                 f"{self.difficulty or 'Normal'} difficulty. It is won only when every "
                  "mission objective below is completed, primary and secondary; destroying the enemy alone is not "
                  "enough. The mission's own script decides victory and may end the game when the primary "
                  "objectives are done, so complete the secondary objectives before or alongside them. Current "
