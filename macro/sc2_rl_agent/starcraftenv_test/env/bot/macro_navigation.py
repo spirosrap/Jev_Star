@@ -31,6 +31,7 @@ class MacroNavigation:
         self._base_damaged_until = {}
         self._last_navigation = -100
         self._redirects_logged = {}
+        self._sticky_target_id = None
 
     def _set_search_sites(self, locations):
         points = sorted(set(locations), key=lambda p: (p.x, p.y))
@@ -173,10 +174,15 @@ class MacroNavigation:
                 and self._attack_allowed(self.enemy_start_locations[0])):
             return "enemy_start", self.enemy_start_locations[0]
         if candidates:
-            army = self._combat_units()
-            origin = army.center if army else self.start_location
-            target = min(candidates, key=lambda e: Point2(e["position"]).distance_to(origin))
-            return target["id"], Point2(target["position"])
+            # Keep the fallback target while it is still known and allowed: re-picking the nearest one every step
+            # sent the army back and forth across the map (T74, 26:13-26:35).
+            sticky = next((m for m in candidates if m["id"] == self._sticky_target_id), None)
+            if sticky is None:
+                army = self._combat_units()
+                origin = army.center if army else self.start_location
+                sticky = min(candidates, key=lambda e: Point2(e["position"]).distance_to(origin))
+                self._sticky_target_id = sticky["id"]
+            return sticky["id"], Point2(sticky["position"])
         return self._search_target()
 
     def _set_army_intent(self, intent):

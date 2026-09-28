@@ -523,6 +523,17 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot._grow_into_map()
         self.bot._build_expansion.assert_not_awaited()
 
+    async def test_fallback_target_sticks_while_the_army_moves(self):
+        self.zerg_bases()
+        self.bot._known_enemy_buildings[5] = {"id": "enemy_5", "type": "HATCHERY", "position": [45.0, 45.0],
+                                              "last_seen": 0}
+        self.bot.cautious_attacks = True
+        self.bot._army_target_id = "enemy_1"  # Blocked: the fallback picks the nearest allowed building...
+        first = self.bot._attack_position()[0]
+        marine = self.bot.units.of_type({U.MARINE}).first
+        marine.position = Point2((62, 32))  # ...and keeps it after the army moves nearer another one.
+        self.assertEqual(self.bot._attack_position()[0], first)
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []
