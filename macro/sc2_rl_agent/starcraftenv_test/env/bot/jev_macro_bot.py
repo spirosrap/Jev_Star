@@ -25,6 +25,11 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
     # A MissionObjectives when playing a prepared campaign mission; None in normal games.
     mission = None
 
+    @property
+    def enemy_start_locations(self):
+        # Some campaign maps list no other start location; aim at the middle of the map instead.
+        return super().enemy_start_locations or [self.game_info.map_center]
+
     def __init__(self, jev_client, output_dir: Path, decision_interval=1.0,
                  max_decision_age=4.0, max_requests=2000, run_log=None):
         self._initialize_race()

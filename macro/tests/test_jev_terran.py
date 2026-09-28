@@ -414,6 +414,13 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.zeros((200, 200), dtype=np.uint8))
         self.assertTrue(self.bot._placement_candidates(U.ENGINEERINGBAY))
 
+    async def test_map_without_enemy_start_aims_at_the_map_centre(self):
+        # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
+        self.bot.game_info.start_locations = []
+        self.assertEqual(self.bot.enemy_start_locations, [self.bot.game_info.map_center])
+        self.bot.game_info.start_locations = [Point2((100, 100))]
+        self.assertEqual(self.bot.enemy_start_locations, [Point2((100, 100))])
+
     async def test_campaign_game_data_is_repaired_and_missing_units_count_zero(self):
         class FakeUnitData:
             def __init__(self, ability_id, abilities, race=Race.Terran):
