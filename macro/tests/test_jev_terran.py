@@ -485,6 +485,119 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_1")  # CheatVision and below keep the baseline.
 
+    def counter_world(self, killed=30, supply_used=150, minerals=500, upgrades=()):
+        self.zerg_bases()
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot.state.upgrades = set(upgrades)
+        self.bot.supply_used, self.bot.minerals = supply_used, minerals
+        self.bot._ready_army_supply = Mock(return_value=110)
+        self.bot._enemy_losses.extend([(890.0, killed)])
+        self.bot._last_threat_seen = 890.0  # A Zerg wave was at our bases 10 s ago.
+
+    async def test_without_push_conditions_a_beaten_wave_starts_no_attack(self):
+        self.counter_world()  # 150 supply, 500 minerals, no +2.
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertIsNone(self.bot._counter_until)
+
+    async def test_no_push_for_small_losses_or_a_small_army_or_outside_cheatmoney(self):
+        maxed = dict(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.counter_world(killed=29, **maxed)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.counter_world(**maxed)
+        self.bot._ready_army_supply = Mock(return_value=99)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.counter_world(**maxed)
+        self.bot.cautious_attacks = False
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+
+    async def test_planner_attacks_are_refused_against_cheatmoney(self):
+        self.counter_world()
+        self.assertEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
+        self.bot.cautious_attacks = False
+        self.assertNotEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
+
+    async def test_maxed_and_quiet_for_a_minute_the_push_goes_without_a_wave(self):
+        maxed = dict(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.counter_world(killed=0, **maxed)
+        self.bot._last_threat_seen = 850.0  # 50 s ago.
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.bot._last_threat_seen = 839.0  # 61 s ago.
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.assertTrue(self.bot._push_active)
+
+    async def test_maxed_with_a_bank_and_plus_two_the_push_may_attack_the_main(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.assertTrue(self.bot._push_active)
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "enemy_1")
+        self.bot.state.game_loop = int(991 * 22.4)  # The 90 s push is over.
+        self.bot._counter_attack()
+        self.assertFalse(self.bot._push_active)
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "enemy_2")
+
+    async def test_each_wave_is_logged_with_what_it_cost_both_sides(self):
+        marine = FakeTerranUnit(60, U.MARINE, (40, 40))
+        ling = FakeTerranUnit(90, U.ZERGLING, (12, 10))
+        ling.can_attack = True
+        self.set_world([self.scv, marine], [self.cc], [ling])
+        self.bot.cautious_attacks = True
+        self.bot.log = Mock()
+        self.bot.state.game_loop = int(600 * 22.4)
+        self.bot._counter_attack()  # The Zerg are at our base: a wave begins.
+        await self.bot.on_unit_destroyed(90)
+        await self.bot.on_unit_destroyed(60)
+        self.set_world([self.scv], [self.cc])
+        self.bot.state.game_loop = int(620 * 22.4)
+        self.bot._counter_attack()
+        events = {c.args[0]: c.kwargs for c in self.bot.log.call_args_list}
+        self.assertIn("wave_start", events)
+        over = events["wave_over"]
+        self.assertEqual((over["seconds"], over["enemy_supply_killed"], over["own_supply_lost"]), (20, 1, 1))
+        self.assertIsNone(self.bot._counter_until)  # Measurement only: no counter-attack from this.
+
+    async def test_enemy_army_deaths_are_counted_as_losses(self):
+        ling = FakeTerranUnit(90, U.ZERGLING, (50, 50))
+        ling.can_attack = True
+        self.set_world([self.scv], [self.cc], [ling])
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(600 * 22.4)
+        self.bot._counter_attack()
+        await self.bot.on_unit_destroyed(90)
+        self.assertEqual(sum(s for _, s in self.bot._enemy_losses), 1)
+
+    async def test_marines_stop_at_the_cap_against_cheatmoney(self):
+        marines = [FakeTerranUnit(100 + i, U.MARINE) for i in range(40)]
+        self.set_world([self.scv, *marines], [self.cc])
+        self.bot._train_producer = Mock(return_value=self.cc)
+        self.assertIsNone(self.bot._train_reason(U.MARINE))
+        self.bot.cautious_attacks = True
+        self.assertEqual(self.bot._train_reason(U.MARINE), "cap_against_banelings")
+
+    async def test_upgrade_buildings_then_one_upgrade_per_check(self):
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(430 * 22.4)
+        self.bot._build_one = AsyncMock()
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._research_reason = Mock(side_effect=lambda u: None if u.name.startswith("TERRANINFANTRY") else "x")
+        self.bot._research_one = Mock()
+        await self.bot._keep_upgrading()
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD ENGINEERINGBAY"], U.ENGINEERINGBAY)
+        self.bot._research_one.assert_called_once_with(
+            self.bot._action_ids["RESEARCH TERRANINFANTRYWEAPONSLEVEL1"], UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
+        self.bot._research_one.reset_mock()
+        await self.bot._keep_upgrading()
+        self.bot._research_one.assert_not_called()  # Checked every 2 s.
+
     def grow_world(self):
         orbitals = [FakeTerranUnit(70 + i, U.ORBITALCOMMAND, (20 + 10 * i, 20)) for i in range(3)]
         for o in orbitals:
@@ -539,6 +652,27 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._switch = Mock()
         return factory, rax, tank
 
+    async def test_tanks_keep_coming_and_factories_are_added_against_cheatmoney(self):
+        factory, _, _ = self.early_world(400)
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._build_addon = AsyncMock()
+        await self.bot._refresh_abilities()
+        await self.bot._keep_tanks_coming()
+        factory.train.assert_called_once_with(U.SIEGETANK)
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD FACTORY"], U.FACTORY)
+        factory.train.reset_mock()
+        self.bot.cautious_attacks = False
+        self.bot._last_tank_check = -1000
+        await self.bot._keep_tanks_coming()
+        factory.train.assert_not_called()  # Only against CheatMoney and stronger.
+
+    async def test_no_extra_factory_before_six_minutes(self):
+        self.early_world(300)
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        await self.bot._refresh_abilities()
+        await self.bot._keep_tanks_coming()
+        self.bot._build_one.assert_not_awaited()
+
     async def test_early_defense_before_the_first_zerg_attack(self):
         factory, rax, tank = self.early_world(400)
         await self.bot._refresh_abilities()
@@ -559,12 +693,31 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot._early_defense()
         factory.train.assert_not_called()
 
-    async def test_a_front_tank_stays_sieged_until_the_window_ends(self):
+    async def test_a_front_tank_stays_sieged_while_defending_and_not_in_an_attack(self):
         self.early_world(400)
         sieged = FakeTerranUnit(93, U.SIEGETANKSIEGED, (13, 13))
         self.assertTrue(self.bot._holding_front(sieged))
         self.bot.state.game_loop = int(600 * 22.4)
+        self.bot.army_intent = "defend"
+        self.assertTrue(self.bot._holding_front(sieged))  # After 9:30 too, while the army defends.
+        self.bot.army_intent = "attack"
         self.assertFalse(self.bot._holding_front(sieged))
+        self.bot.army_intent = "defend"
+        self.bot.cautious_attacks = False
+        self.assertFalse(self.bot._holding_front(sieged))  # Only against CheatMoney and stronger.
+
+    async def test_after_the_early_window_defending_tanks_siege_at_the_rally_base(self):
+        self.early_world(900)
+        near = FakeTerranUnit(94, U.SIEGETANK, (18, 12))  # 8 from the only base: inside 10, outside 6.
+        far = FakeTerranUnit(95, U.SIEGETANK, (40, 40))
+        self.set_world([self.scv, near, far], [self.cc])
+        self.bot.army_intent = "defend"
+        self.bot._siege_at_front()
+        self.bot._switch.assert_called_once_with(near, A.SIEGEMODE_SIEGEMODE)
+        self.bot._switch.reset_mock()
+        self.bot.army_intent = "attack"
+        self.bot._siege_at_front()
+        self.bot._switch.assert_not_called()
 
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
@@ -748,6 +901,22 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._balance_gas()
         self.assertFalse(self.bot._gas_throttled)
         going.gather.assert_not_called()
+
+    async def test_against_cheatmoney_scvs_leave_gas_above_500_whatever_the_minerals(self):
+        _, going, _ = self.gas_world(gas=400, minerals=100)
+        self.bot.cautious_attacks = True
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)  # A modest bank for Tanks and upgrades.
+        going.gather.assert_not_called()
+        self.bot.vespene, self.bot.minerals = 500, 2000  # Minerals no longer matter.
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)
+        self.bot.vespene = 300
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)
+        self.bot.vespene = 249
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)
 
     async def test_attack_not_offered_below_the_floor(self):
         marines = [FakeTerranUnit(10 + i, U.MARINE, (30, 30)) for i in range(35)]
@@ -983,6 +1152,43 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._deploy_units()
         self.assertEqual(sieged.commands, [(A.UNSIEGE_UNSIEGE, None)])
 
+    async def test_defending_tanks_siege_early_against_cheatmoney(self):
+        tank = FakeTerranUnit(3, U.SIEGETANK, (20, 20))
+        roach = FakeTerranUnit(9, U.ROACH, (37, 20))  # 17 away: outside Tank range, inside the defensive range
+        roach.can_attack = True
+        self.set_world([self.scv, tank], [self.cc], [roach])
+        self.bot.army_intent = "defend"
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [])  # Not against weaker difficulties.
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "attack"
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [])  # Not while attacking.
+        drone = FakeTerranUnit(10, U.DRONE, (37, 20))
+        drone.can_attack = True
+        self.set_world([self.scv, tank], [self.cc], [drone])
+        self.bot.army_intent = "defend"
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [])  # Not for workers.
+        self.set_world([self.scv, tank], [self.cc], [roach])
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [(A.SIEGEMODE_SIEGEMODE, None)])
+
+    async def test_defending_tanks_stay_sieged_until_the_zerg_are_beyond_22(self):
+        sieged = FakeTerranUnit(3, U.SIEGETANKSIEGED, (20, 20))
+        roach = FakeTerranUnit(9, U.ROACH, (41, 20))
+        roach.can_attack = True
+        self.set_world([self.scv, sieged], [self.cc], [roach])
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot._mode_changed[sieged.tag] = -100
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._deploy_units()
+        self.assertEqual(sieged.commands, [])
+        roach.position = Point2((43, 20))
+        self.bot._deploy_units()
+        self.assertEqual(sieged.commands, [(A.UNSIEGE_UNSIEGE, None)])
+
     async def test_army_orders_skip_sieged_tanks(self):
         marine = FakeTerranUnit(3, U.MARINE, (30, 30))
         sieged = FakeTerranUnit(4, U.SIEGETANKSIEGED, (30, 31))
@@ -991,6 +1197,46 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._issue_army_intent()
         self.assertEqual(marine.commands, [("move", self.cc.position)])
         self.assertEqual(sieged.commands, [])
+
+    def held_world(self, ling_at):
+        tank = FakeTerranUnit(4, U.SIEGETANKSIEGED, (14, 10))  # Sieged 4 from the only base.
+        marine = FakeTerranUnit(3, U.MARINE, (16, 10))
+        ling = FakeTerranUnit(9, U.ZERGLING, ling_at)
+        ling.can_attack = True
+        self.set_world([self.scv, marine, tank], [self.cc], [ling])
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot.state.game_loop = int(900 * 22.4)
+        return marine, ling
+
+    async def test_defending_bio_stays_with_sieged_tanks_instead_of_chasing(self):
+        marine, ling = self.held_world((30, 10))  # 16 from the Tank: outside its cover.
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(marine.commands, [])  # Already with the Tank: it waits there.
+        self.assertEqual(self.bot._resolved_army_target_id, "home")
+        self.bot.cautious_attacks = False
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(marine.commands, [("attack", ling)])  # Below CheatMoney it still chases.
+
+    async def test_defending_bio_fights_what_comes_under_the_tanks(self):
+        marine, ling = self.held_world((22, 10))  # 8 from the Tank.
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(marine.commands, [("attack", ling)])
+
+    async def test_defending_a_far_base_the_bio_follows_the_tanks(self):
+        far = FakeTerranUnit(30, U.COMMANDCENTER, (60, 10))
+        tank = FakeTerranUnit(4, U.SIEGETANK, (14, 12))
+        marine = FakeTerranUnit(3, U.MARINE, (30, 30))
+        lings = [FakeTerranUnit(200 + i, U.ZERGLING, (62, 12)) for i in range(3)]
+        for ling in lings:
+            ling.can_attack = True
+        self.set_world([self.scv, marine, tank], [self.cc, far], lings)
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(tank.commands, [("attack", far.position)])  # The Tank heads for the attacked base.
+        self.assertEqual(marine.commands, [("attack", tank.position)])  # The bio moves with it, not ahead.
 
     async def test_mule_goes_to_richest_nearby_patch(self):
         orbital = FakeTerranUnit(3, U.ORBITALCOMMAND)

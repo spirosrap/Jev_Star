@@ -31,7 +31,12 @@ CAUTIOUS_PLANNER_TEXT = (
     "navigation targets are marked attack_blocked and an attack order toward them holds the army at home instead. "
     "Attack only exposed expansions and enemy forces near our bases, and defend with sieged Tanks. Surplus minerals "
     "are spent automatically on new bases (as Planetary Fortresses), Missile Turrets and Refineries, and Orbital "
-    "Commands Scan expansion sites nobody has seen, so exposed enemy bases appear as navigation targets.")
+    "Commands Scan expansion sites nobody has seen, so exposed enemy bases appear as navigation targets. "
+    "The army attacks only in the bot's own push, when we are maxed with a mineral bank and +2 weapons right after "
+    "the Zerg lose a wave; an attack posture order is refused, so keep army_posture defend and plan the economy, "
+    "production and upgrades toward that push. Marines stop at 40; the bank "
+    "goes to Siege Tanks, Marauders and Hellbats, and two Engineering Bays and an Armory research upgrades "
+    "automatically.")
 
 
 def main():
