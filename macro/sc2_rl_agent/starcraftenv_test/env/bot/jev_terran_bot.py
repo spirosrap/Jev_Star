@@ -124,6 +124,12 @@ PUSH_WINDOW = 90
 ZERG_BASES = {U.HATCHERY, U.LAIR, U.HIVE}
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
+# Against CheatMoney and stronger the minerals are nearly always spent down to 100-200, so "gas over 300 and twice the
+# minerals" was true most of the game: in T100 the throttle switched on eleven times and each time emptied every
+# Refinery until gas fell to 25-135, and by 19:00 the army had five Tanks and was rebuilt from Marines. Tanks and
+# upgrades need that gas, so here only a real surplus moves SCVs off gas.
+CAUTIOUS_GAS_THROTTLE_ON = 1000
+CAUTIOUS_GAS_THROTTLE_OFF = 500
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
 LURKERS = {U.LURKERMP, U.LURKERMPBURROWED, U.LURKERMPEGG, U.LURKERDENMP}
 LURKER_MEMORY = 90
@@ -994,11 +1000,13 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _balance_gas(self):
         """Move SCVs from gas to minerals while unspent gas piles up far beyond minerals."""
-        if self._gas_throttled and self.vespene < GAS_THROTTLE_OFF:
+        on, off = (CAUTIOUS_GAS_THROTTLE_ON, CAUTIOUS_GAS_THROTTLE_OFF) if self.cautious_attacks else (
+            GAS_THROTTLE_ON, GAS_THROTTLE_OFF)
+        if self._gas_throttled and self.vespene < off:
             self._gas_throttled = False
             self.log("gas_throttle", game_loop=self.state.game_loop, active=False,
                      gas=self.vespene, minerals=self.minerals)
-        elif not self._gas_throttled and self.vespene >= GAS_THROTTLE_ON and self.vespene > 2 * self.minerals:
+        elif not self._gas_throttled and self.vespene >= on and self.vespene > 2 * self.minerals:
             self._gas_throttled = True
             self.log("gas_throttle", game_loop=self.state.game_loop, active=True,
                      gas=self.vespene, minerals=self.minerals)

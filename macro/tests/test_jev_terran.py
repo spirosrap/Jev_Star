@@ -869,6 +869,22 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.bot._gas_throttled)
         going.gather.assert_not_called()
 
+    async def test_against_cheatmoney_only_a_real_gas_surplus_moves_scvs_off_gas(self):
+        _, going, _ = self.gas_world(gas=400, minerals=100)
+        self.bot.cautious_attacks = True
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)  # 400 gas is needed for Tanks and upgrades.
+        going.gather.assert_not_called()
+        self.bot.vespene = 1000
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)
+        self.bot.vespene = 600
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)
+        self.bot.vespene = 499
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)
+
     async def test_attack_not_offered_below_the_floor(self):
         marines = [FakeTerranUnit(10 + i, U.MARINE, (30, 30)) for i in range(35)]
         self.set_world([self.scv, *marines], [self.cc])
