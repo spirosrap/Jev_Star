@@ -23,6 +23,7 @@ def positive_float(value):
 
 
 # Against these opponents the army does not attack into the enemy main or bases covered by static defence.
+AI_BUILDS = ["RandomBuild", "Rush", "Timing", "Power", "Macro", "Air"]  # sc2.data.AIBuild names
 CAUTIOUS_DIFFICULTIES = {"CheatMoney", "CheatInsane"}
 CAUTIOUS_PLANNER_TEXT = (
     "This opponent gathers extra resources and out-produces us, so we win by trading, not by attacking into it. "
@@ -47,6 +48,8 @@ def main():
     parser.add_argument("--max-requests", type=int, default=2000)
     parser.add_argument("--game-time-limit", type=positive_float, default=1200, help="Stop after this many game seconds; a time limit is a Tie")
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--ai-build", choices=AI_BUILDS, default="RandomBuild",
+                        help="The built-in computer's build; a fixed build makes games comparable")
     parser.add_argument("--sc2-path", type=Path)
     parser.add_argument("--config-file", type=Path, default=repo.parent / "config.md", help="Fallback for api: entry; TYPESAFE_API_KEY takes precedence")
     parser.add_argument("--output-dir", type=Path)
@@ -112,7 +115,7 @@ def main():
             try:
                 # --help, report rebuilding and argument checks need no SC2 installation.
                 from sc2 import maps
-                from sc2.data import Difficulty, Race
+                from sc2.data import AIBuild, Difficulty, Race
                 from .utils.sc2_runtime import run_windowed_game
                 from sc2.player import Bot, Computer
                 if args.race == "Terran":
@@ -161,7 +164,8 @@ def main():
                 bot.contract = contract
                 players = [Bot(Race[args.race], bot)]
                 if not args.mission_objectives:
-                    players.append(Computer(Race[args.opponent_race], Difficulty[args.difficulty]))
+                    players.append(Computer(Race[args.opponent_race], Difficulty[args.difficulty],
+                                            AIBuild[args.ai_build]))
                 # A campaign mission's enemies are run by its own scripts. A built-in computer would take over the
                 # enemy's slot, and its quitting would end the game as a Victory with no objective met.
                 result = run_windowed_game(game_map, players,

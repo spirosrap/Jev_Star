@@ -22,6 +22,7 @@ OPPONENTS = ["Zerg", "Terran", "Protoss", "Random"]
 DIFFICULTIES = ["VeryEasy", "Easy", "Medium", "MediumHard", "Hard", "Harder", "VeryHard",
                 "CheatVision", "CheatMoney", "CheatInsane"]
 EFFORTS = ["none", "low", "medium", "high", "xhigh"]
+BUILDS = ["RandomBuild", "Rush", "Timing", "Power", "Macro", "Air"]  # the built-in AI's build
 sys.path.insert(0, str(ROOT / "scripts" / "campaign"))
 import campaign  # noqa: E402  (mission list and preparation)
 MISSION_DIFFICULTIES = list(campaign.DIFFICULTIES)
@@ -71,6 +72,7 @@ PAGE = """<!doctype html>
     <label class="ladder">Opponent <select name="opponent_race"></select></label>
     <label class="ladder">Difficulty <select name="difficulty"></select></label>
     <label class="ladder">Map <select name="map"></select></label>
+    <label class="ladder">AI build <select name="ai_build"></select></label>
     <label class="campaign">Campaign <select name="campaign"><option>Wings of Liberty</option></select></label>
     <label class="campaign">Mission difficulty <select name="mission_difficulty"></select></label>
     <label class="campaign wide">Mission (✅ fits · ⚠️ special objective · ❌ not playable) <select name="mission"></select></label>
@@ -118,6 +120,7 @@ async function options() {
   fill("opponent_race", o.opponents, saved.opponent_race || "Zerg");
   fill("difficulty", o.difficulties, saved.difficulty || "Easy");
   fill("map", o.maps, saved.map || "Altitude LE");
+  fill("ai_build", o.builds, saved.ai_build || "RandomBuild");
   fill("planner_effort", o.efforts, saved.planner_effort || "medium");
   fill("mission_difficulty", o.mission_difficulties, saved.mission_difficulty || "Normal");
   const missions = form.elements.mission;
@@ -295,17 +298,20 @@ def start_game(request):
         race, opponent = request["race"], request["opponent_race"]
         difficulty, game_map = request["difficulty"], request["map"]
         effort, minutes = request["planner_effort"], int(request["minutes"])
+        build = request.get("ai_build", "RandomBuild")
     except (KeyError, TypeError, ValueError):
         return 400, "Incomplete launch settings."
     if (race not in RACES or opponent not in OPPONENTS or difficulty not in DIFFICULTIES
-            or effort not in EFFORTS or game_map not in maps() or not 1 <= minutes <= 60):
+            or effort not in EFFORTS or game_map not in maps() or not 1 <= minutes <= 60
+            or build not in BUILDS):
         return 400, "Invalid launch settings."
     command = [sys.executable, str(ROOT / "jev_star.py"), "macro", "--race", race, "--map", game_map,
-               "--opponent-race", opponent, "--difficulty", difficulty,
+               "--opponent-race", opponent, "--difficulty", difficulty, "--ai-build", build,
                "--game-time-limit", str(minutes * 60)]
     if effort != "none":
         command += ["--planner", "codex", "--planner-effort", effort]
-    return launch(command, f"Starting {race} vs {difficulty} {opponent} on {game_map}.")
+    opponent_text = f"{difficulty} {opponent}" + ("" if build == "RandomBuild" else f" ({build} build)")
+    return launch(command, f"Starting {race} vs {opponent_text} on {game_map}.")
 
 
 def stop_game():
@@ -408,8 +414,10 @@ def load_state():
     match = ""
     try:
         settings = json.loads((run / "run.json").read_text())
+        build = settings.get("ai_build", "RandomBuild")
         match = (f"{settings.get('player_race', 'Protoss')} vs {settings.get('difficulty')} "
-                 f"{settings.get('opponent_race')} · {settings.get('map')}")
+                 f"{settings.get('opponent_race')}{'' if build == 'RandomBuild' else f' ({build})'} · "
+                 f"{settings.get('map')}")
         if settings.get("mission_objectives"):
             try:
                 title = json.loads(Path(settings["mission_objectives"]).read_text()).get("title", settings.get("map"))
@@ -468,7 +476,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/options"):
             missions = [dict(m, mark=FIT_MARK[m["fit"]]) for m in campaign.catalog(sc2_path())]
             self._json(200, {"races": RACES, "opponents": OPPONENTS, "difficulties": DIFFICULTIES,
-                             "efforts": EFFORTS, "maps": maps(), "missions": missions,
+                             "efforts": EFFORTS, "builds": BUILDS, "maps": maps(), "missions": missions,
                              "mission_difficulties": MISSION_DIFFICULTIES})
         else:
             page = PAGE.encode()
