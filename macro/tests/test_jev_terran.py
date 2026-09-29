@@ -652,6 +652,27 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._switch = Mock()
         return factory, rax, tank
 
+    async def test_tanks_keep_coming_and_factories_are_added_against_cheatmoney(self):
+        factory, _, _ = self.early_world(400)
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._build_addon = AsyncMock()
+        await self.bot._refresh_abilities()
+        await self.bot._keep_tanks_coming()
+        factory.train.assert_called_once_with(U.SIEGETANK)
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD FACTORY"], U.FACTORY)
+        factory.train.reset_mock()
+        self.bot.cautious_attacks = False
+        self.bot._last_tank_check = -1000
+        await self.bot._keep_tanks_coming()
+        factory.train.assert_not_called()  # Only against CheatMoney and stronger.
+
+    async def test_no_extra_factory_before_six_minutes(self):
+        self.early_world(300)
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        await self.bot._refresh_abilities()
+        await self.bot._keep_tanks_coming()
+        self.bot._build_one.assert_not_awaited()
+
     async def test_early_defense_before_the_first_zerg_attack(self):
         factory, rax, tank = self.early_world(400)
         await self.bot._refresh_abilities()

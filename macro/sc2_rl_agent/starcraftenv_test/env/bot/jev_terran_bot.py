@@ -125,6 +125,14 @@ PUSH_WINDOW = 90
 # minerals from 36:14 on, because the push waited for a wave that did not come.
 PUSH_IDLE = 60
 ZERG_BASES = {U.HATCHERY, U.LAIR, U.HIVE}
+# Against CheatMoney and stronger, the bot keeps Siege Tanks coming itself instead of leaving it to Jev's and the
+# planner's orders: four Factories with Tech Labs from 6:00, and every free Tech Lab Factory trains a Tank whenever it
+# can. With the same code and two Factories, T102 had 11 Tanks at 11:00 and held to a 43-minute stalemate; T103 had
+# five and lost every wave by 18:31.
+TANK_FACTORIES = 4
+TANK_FACTORIES_FROM = 360
+TANK_CAP = 20
+TANK_INTERVAL = 1
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Against CheatMoney and stronger the minerals are nearly always spent down to 100-200, so "gas over 300 and twice the
@@ -206,6 +214,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_early_defense = -1000
         self._last_scout_scan = -1000
         self._last_upgrade_check = -1000
+        self._last_tank_check = -1000
         self._enemy_army_supply = {}  # tag -> supply of enemy army units seen, to count what dies
         self._enemy_losses = deque()  # (game seconds, supply)
         self._counter_until = None
@@ -706,6 +715,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if not self._early_defense_window():
             self._siege_at_front()
         await self._keep_upgrading()
+        await self._keep_tanks_coming()
         await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
@@ -822,6 +832,37 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                     break  # One per check: the researcher stays "idle" until the next step.
         finally:
             self.temp_failure_list = failures
+
+    async def _keep_tanks_coming(self):
+        """Against CheatMoney and stronger: four Factories with Tech Labs, and a Tank from every free one."""
+        if not self.cautious_attacks or self.time - self._last_tank_check < TANK_INTERVAL:
+            return
+        self._last_tank_check = self.time
+        # These are not Jev's orders: keep their failures out of the feedback Jev reads.
+        failures = list(self.temp_failure_list)
+        try:
+            if (self.time >= TANK_FACTORIES_FROM and self._count_with_pending(U.FACTORY) < TANK_FACTORIES
+                    and not self.already_pending(U.FACTORY) and self.tech_requirement_progress(U.FACTORY) == 1
+                    and self.can_afford(U.FACTORY)):
+                await self._build_one(self._action_ids["BUILD FACTORY"], U.FACTORY)
+                self._tanks("build_factory")
+            if self._addon_hosts(U.FACTORYTECHLAB) and self.can_afford(U.FACTORYTECHLAB):
+                await self._build_addon(self._action_ids["ADDON FACTORYTECHLAB"], U.FACTORYTECHLAB)
+                self._tanks("factory_techlab")
+            tanks = self._count_with_pending(U.SIEGETANK) + self.units(U.SIEGETANKSIEGED).amount
+            for factory in self._train_slots(U.SIEGETANK):
+                if (tanks >= TANK_CAP or factory.tag in self.unit_tags_received_action
+                        or not self.can_afford(U.SIEGETANK)):
+                    break
+                factory.train(U.SIEGETANK)
+                tanks += 1
+                self._tanks("train_siegetank")
+        finally:
+            self.temp_failure_list = failures
+
+    def _tanks(self, what):
+        self._action_stats[f"tanks_{what}"] += 1
+        self.log("keep_tanks_coming", game_loop=self.state.game_loop, what=what)
 
     def _upgraded(self, what):
         self._action_stats[f"upgrade_{what}"] += 1
