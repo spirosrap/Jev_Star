@@ -69,6 +69,10 @@ MEDIVAC_SLACK = 6
 # minerals while Zerg held the map): new bases as Planetary Fortresses, a Missile Turret per base, their Refineries,
 # and Scans of expansion sites nobody has looked at, so exposed Zerg bases are found.
 GROW_BANK = 1500
+# Against CheatMoney and stronger, both Refineries at every finished base from 4:00, without waiting for a mineral bank.
+# The 29-minute game with the T91 code had 14 Refineries and four Factories; the 14- and 17-minute games with nearly the
+# same code had 5-6 and two, so the upgrades and the Tank and Marauder mix starved for gas (T91, T93, T94).
+TAKE_GAS_FROM = 240
 GROW_INTERVAL = 5
 GROW_ORBITALS = 3  # Command Centers beyond this many Orbitals become Planetary Fortresses
 SCOUT_SCAN_INTERVAL = 45
@@ -847,12 +851,13 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             if hosts and self.can_afford(U.PLANETARYFORTRESS):
                 hosts[0](MORPHS[U.PLANETARYFORTRESS])
                 self._grown("planetary_fortress")
-        if self.minerals < GROW_BANK:
-            return
         # These are not Jev's orders: keep their placement failures out of the feedback Jev reads.
         failures = list(self.temp_failure_list)
         try:
-            await self._grow_structures()
+            if self.time >= TAKE_GAS_FROM:
+                await self._take_gas()
+            if self.minerals >= GROW_BANK:
+                await self._grow_structures()
         finally:
             self.temp_failure_list = failures
 
@@ -867,6 +872,10 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 and self.can_afford(U.MISSILETURRET)):
             await self._build_one(self._action_ids["BUILD MISSILETURRET"], U.MISSILETURRET)
             self._grown("missile_turret")
+        await self._take_gas()
+
+    async def _take_gas(self):
+        """One Refinery at a time until every finished base has both."""
         if (not self.already_pending(U.REFINERY) and self._assimilator_candidates()
                 and self.gas_buildings.amount < min(2 * self.townhalls.ready.amount, self.contract.building_limits["REFINERY"])
                 and self.can_afford(U.REFINERY)):

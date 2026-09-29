@@ -564,6 +564,18 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.on_unit_destroyed(90)
         self.assertEqual(sum(s for _, s in self.bot._enemy_losses), 1)
 
+    async def test_refineries_are_taken_from_four_minutes_without_a_bank(self):
+        self.grow_world()
+        self.bot.minerals = 100  # Far below the 1,500 bank for the rest of growing into the map.
+        self.bot.state.game_loop = int(230 * 22.4)
+        await self.bot._grow_into_map()
+        self.bot._build_one.assert_not_awaited()
+        self.bot._last_grow = -1000
+        self.bot.state.game_loop = int(250 * 22.4)
+        await self.bot._grow_into_map()
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD REFINERY"], U.REFINERY)
+        self.bot._build_expansion.assert_not_awaited()
+
     async def test_marines_stop_at_the_cap_against_cheatmoney(self):
         marines = [FakeTerranUnit(100 + i, U.MARINE) for i in range(40)]
         self.set_world([self.scv, *marines], [self.cc])
