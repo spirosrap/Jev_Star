@@ -485,6 +485,88 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_1")  # CheatVision and below keep the baseline.
 
+    def counter_world(self, killed=30, supply_used=150, minerals=500, upgrades=()):
+        self.zerg_bases()
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot.state.upgrades = set(upgrades)
+        self.bot.supply_used, self.bot.minerals = supply_used, minerals
+        self.bot._ready_army_supply = Mock(return_value=110)
+        self.bot._enemy_losses.extend([(890.0, killed)])
+
+    async def test_a_beaten_wave_starts_a_timed_counter_attack_on_an_exposed_base(self):
+        self.counter_world()
+        self.bot._counter_attack()
+        self.assertEqual((self.bot.army_intent, self.bot._army_target_id), ("attack", "enemy_2"))
+        self.assertFalse(self.bot._push_active)
+        self.assertEqual(self.bot._posture_reason("defend"), "counter_attack_under_way")
+        self.bot.state.game_loop = int(946 * 22.4)  # The 45 s window is over.
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertIsNone(self.bot._counter_until)
+        self.bot._enemy_losses.extend([(945.0, 40)])
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")  # Not again within 120 s.
+
+    async def test_no_counter_attack_for_small_losses_or_a_small_army_or_outside_cheatmoney(self):
+        self.counter_world(killed=29)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.counter_world()
+        self.bot._ready_army_supply = Mock(return_value=99)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.counter_world()
+        self.bot.cautious_attacks = False
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+
+    async def test_maxed_with_a_bank_and_plus_two_the_push_may_attack_the_main(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.assertTrue(self.bot._push_active)
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "enemy_1")
+        self.bot.state.game_loop = int(991 * 22.4)  # The 90 s push is over.
+        self.bot._counter_attack()
+        self.assertFalse(self.bot._push_active)
+        self.bot._army_target_id = "enemy_1"
+        self.assertEqual(self.bot._attack_position()[0], "enemy_2")
+
+    async def test_enemy_army_deaths_are_counted_as_losses(self):
+        ling = FakeTerranUnit(90, U.ZERGLING, (50, 50))
+        ling.can_attack = True
+        self.set_world([self.scv], [self.cc], [ling])
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(600 * 22.4)
+        self.bot._counter_attack()
+        await self.bot.on_unit_destroyed(90)
+        self.assertEqual(sum(s for _, s in self.bot._enemy_losses), 1)
+
+    async def test_marines_stop_at_the_cap_against_cheatmoney(self):
+        marines = [FakeTerranUnit(100 + i, U.MARINE) for i in range(40)]
+        self.set_world([self.scv, *marines], [self.cc])
+        self.bot._train_producer = Mock(return_value=self.cc)
+        self.assertIsNone(self.bot._train_reason(U.MARINE))
+        self.bot.cautious_attacks = True
+        self.assertEqual(self.bot._train_reason(U.MARINE), "cap_against_banelings")
+
+    async def test_upgrade_buildings_then_one_upgrade_per_check(self):
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(430 * 22.4)
+        self.bot._build_one = AsyncMock()
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._research_reason = Mock(side_effect=lambda u: None if u.name.startswith("TERRANINFANTRY") else "x")
+        self.bot._research_one = Mock()
+        await self.bot._keep_upgrading()
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD ENGINEERINGBAY"], U.ENGINEERINGBAY)
+        self.bot._research_one.assert_called_once_with(
+            self.bot._action_ids["RESEARCH TERRANINFANTRYWEAPONSLEVEL1"], UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
+        self.bot._research_one.reset_mock()
+        await self.bot._keep_upgrading()
+        self.bot._research_one.assert_not_called()  # Checked every 2 s.
+
     def grow_world(self):
         orbitals = [FakeTerranUnit(70 + i, U.ORBITALCOMMAND, (20 + 10 * i, 20)) for i in range(3)]
         for o in orbitals:
