@@ -566,6 +566,47 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.state.game_loop = int(600 * 22.4)
         self.assertFalse(self.bot._holding_front(sieged))
 
+    def recall_world(self, lings, army_at=(80, 80)):
+        marines = [FakeTerranUnit(100 + i, U.MARINE, army_at) for i in range(4)]
+        zerglings = [FakeTerranUnit(200 + i, U.ZERGLING, (14, 10)) for i in range(lings)]
+        for ling in zerglings:
+            ling.can_attack = True
+        self.set_world([self.scv, *marines], [self.cc], zerglings)
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "attack"
+        self.bot.state.game_loop = int(900 * 22.4)
+        return marines
+
+    async def test_a_real_base_attack_recalls_an_attacking_army(self):
+        marines = self.recall_world(8)
+        self.bot._recall()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertEqual(self.bot._action_stats["auto_recalls"], 1)
+        self.assertTrue(all(m.commands for m in marines))
+        self.assertEqual(self.bot._posture_reason("attack"), "base_under_attack")
+        # Attacks stay blocked for a while after the bases are clear.
+        self.set_world([self.scv, *marines], [self.cc])
+        self.bot.state.game_loop = int(905 * 22.4)
+        self.bot._recall()
+        self.assertEqual(self.bot._posture_reason("attack"), "base_under_attack")
+        self.bot.state.game_loop = int(911 * 22.4)
+        self.assertNotEqual(self.bot._posture_reason("attack"), "base_under_attack")
+
+    async def test_no_recall_for_a_small_raid_an_army_nearby_or_outside_cheatmoney(self):
+        self.recall_world(7)
+        self.bot._recall()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.recall_world(8, army_at=(20, 20))
+        self.bot._recall()
+        self.assertEqual(self.bot.army_intent, "attack")  # Already there.
+        self.assertEqual(self.bot._posture_reason("attack"), "base_under_attack")
+        self.bot._recall_until = -1000
+        self.recall_world(8)
+        self.bot.cautious_attacks = False
+        self.bot._recall()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.assertNotEqual(self.bot._posture_reason("attack"), "base_under_attack")
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []
