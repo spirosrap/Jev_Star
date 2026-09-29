@@ -125,8 +125,8 @@ class MacroNavigation:
     def _attack_allowed(self, position):
         """Against CheatMoney and stronger, the army does not attack into the Zerg main or bases covered by crawlers:
         every late loss in T60 and T66-T69 began with the whole army attacking there."""
-        if not getattr(self, "cautious_attacks", False):
-            return True
+        if not getattr(self, "cautious_attacks", False) or getattr(self, "_push_active", False):
+            return True  # A push to win (maxed, with a bank and +2 weapons) may go anywhere.
         position = Point2(position)
         if position.distance_to(self.enemy_start_locations[0]) < CAUTIOUS_MAIN_RADIUS:
             return False

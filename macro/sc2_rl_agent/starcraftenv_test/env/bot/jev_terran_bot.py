@@ -1,7 +1,7 @@
 """Jev macro executor for Terran: SC2-checked legality, placement and local unit upkeep."""
 
 import math
-from collections import Counter
+from collections import Counter, deque
 
 from sc2.bot_ai import BotAI
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
@@ -88,6 +88,36 @@ EARLY_SIEGE_RADIUS = 6
 # sieged within 10 s, the Zerg lost more than we did.
 DEFENSE_SIEGE_RANGE = 20
 DEFENSE_UNSIEGE_RANGE = 22
+# Against CheatMoney and stronger, a Marine-heavy army lost to Banelings and to +3/+3 Zerg: Banelings were the top
+# killer in 7 of the 9 biggest replay fights (T67-T83), our army was 50-87 Marines, and the Zerg had +3/+3 by about
+# 15:00 while we mostly had +1/+1. So Marines stop at a cap and the bank goes to Tanks, Marauders and Hellbats, and
+# two Engineering Bays and an Armory keep infantry and vehicle upgrades going.
+MARINE_CAP = 40
+CAUTIOUS_BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.HELLIONTANK, U.MARINE)
+HELLBAT_CAP = 16
+UPGRADE_INTERVAL = 2
+UPGRADE_BUILDINGS = ((U.ENGINEERINGBAY, 1, 300), (U.ENGINEERINGBAY, 2, 420), (U.ARMORY, 1, 480))  # kind, count, from
+UPGRADES = tuple(UpgradeId[n] for n in (
+    "STIMPACK", "SHIELDWALL",
+    "TERRANINFANTRYWEAPONSLEVEL1", "TERRANINFANTRYARMORSLEVEL1",
+    "TERRANINFANTRYWEAPONSLEVEL2", "TERRANINFANTRYARMORSLEVEL2", "TERRANVEHICLEWEAPONSLEVEL1",
+    "TERRANINFANTRYWEAPONSLEVEL3", "TERRANINFANTRYARMORSLEVEL3", "TERRANVEHICLEWEAPONSLEVEL2",
+    "TERRANVEHICLEWEAPONSLEVEL3", "PUNISHERGRENADES"))
+# Against CheatMoney and stronger, holding alone only delays the loss: the Zerg out-produce us, and the best result
+# so far is a stalemate tie. The Zerg army is weakest right after one of its waves dies against our defense, so then
+# the army counter-attacks the nearest known Zerg base for a short window and comes home. When we are maxed with a
+# bank and +2 weapons, that attack may also go into the Zerg main and crawler cover (a push to win).
+COUNTER_ENEMY_LOSS = 30  # enemy army supply killed within COUNTER_LOOKBACK seconds that counts as a beaten wave
+COUNTER_LOOKBACK = 45
+COUNTER_MIN_ARMY = 100
+COUNTER_WINDOW = 45
+COUNTER_COOLDOWN = 120
+COUNTER_RECALL_THREAT = 8  # enemy army supply near a base that ends the window early
+COUNTER_RECALL_DISTANCE = 30
+PUSH_MIN_SUPPLY = 185
+PUSH_MIN_MINERALS = 1500
+PUSH_WINDOW = 90
+ZERG_BASES = {U.HATCHERY, U.LAIR, U.HIVE}
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -160,6 +190,12 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_grow = -1000
         self._last_early_defense = -1000
         self._last_scout_scan = -1000
+        self._last_upgrade_check = -1000
+        self._enemy_army_supply = {}  # tag -> supply of enemy army units seen, to count what dies
+        self._enemy_losses = deque()  # (game seconds, supply)
+        self._counter_until = None
+        self._last_counter = -1000
+        self._push_active = False
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -245,9 +281,15 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         limit = self.contract.unit_limits.get(unit_type.name)
         if limit is not None and self._count_with_pending(unit_type) >= limit:
             return "unit_policy_limit"
+        if self._over_cautious_cap(unit_type):
+            return "cap_against_banelings"
         if self._train_producer(unit_type, ignore_resources) is not None:
             return None
         return "no_ready_producer_with_available_ability"
+
+    def _over_cautious_cap(self, unit_type, extra=0):
+        cap = {U.MARINE: MARINE_CAP, U.HELLIONTANK: HELLBAT_CAP}.get(unit_type)
+        return self.cautious_attacks and cap is not None and self._count_with_pending(unit_type) + extra >= cap
 
     def _train_producer(self, unit_type, ignore_resources=False):
         sources = UNIT_TRAINED_FROM.get(unit_type, set())
@@ -383,6 +425,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         return choices, blocked
 
     def _posture_reason(self, posture):
+        if self._counter_until is not None:
+            return "counter_attack_under_way"
         army = self._combat_units()
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
@@ -413,7 +457,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 count = self._count_with_pending(unit_type)
                 trained = 0
                 for slot in self._train_slots(unit_type):
-                    if not self.can_afford(unit_type) or (limit is not None and count + trained >= limit):
+                    if (not self.can_afford(unit_type) or (limit is not None and count + trained >= limit)
+                            or self._over_cautious_cap(unit_type, trained)):
                         break
                     slot.train(unit_type)
                     trained += 1
@@ -635,6 +680,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         await self._early_defense()
+        await self._keep_upgrading()
         await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
@@ -646,8 +692,84 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._man_bunkers()
         self._repair()
         self._clear_changelings()
+        self._counter_attack()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    async def on_unit_destroyed(self, unit_tag):
+        await super().on_unit_destroyed(unit_tag)
+        supply = self._enemy_army_supply.pop(unit_tag, None)
+        if supply:
+            self._enemy_losses.append((self.time, supply))
+
+    def _counter_attack(self):
+        """Against CheatMoney and stronger: attack right after beating a Zerg wave, for a fixed window."""
+        if not self.cautious_attacks:
+            return
+        for enemy in self.enemy_units:
+            if enemy.is_visible and enemy.can_attack and enemy.type_id not in WORKERS:
+                self._enemy_army_supply[enemy.tag] = self.calculate_supply_cost(enemy.type_id)
+        while self._enemy_losses and self._enemy_losses[0][0] < self.time - COUNTER_LOOKBACK:
+            self._enemy_losses.popleft()
+        army = self._combat_units()
+        if self._counter_until is not None:
+            threats = self._threat_units()
+            threat = sum(self.calculate_supply_cost(e.type_id) for e in threats)
+            far = (army and self.townhalls and threat >= COUNTER_RECALL_THREAT and army.center.distance_to(
+                min(self.townhalls, key=lambda b: threats.closest_distance_to(b))) >= COUNTER_RECALL_DISTANCE)
+            if self.time >= self._counter_until or not army or far:
+                self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
+            return
+        killed = sum(supply for _, supply in self._enemy_losses)
+        if (killed < COUNTER_ENEMY_LOSS or self._emergency() or not army or not self.townhalls
+                or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
+            return
+        self._push_active = (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
+                             and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades)
+        bases = [m for m in self._known_enemy_buildings.values()
+                 if m["type"] in {b.name for b in ZERG_BASES} and self._attack_allowed(m["position"])]
+        target = min(bases, key=lambda m: army.center.distance_to(Point2(m["position"])))["id"] if bases else None
+        self._counter_until = self.time + (PUSH_WINDOW if self._push_active else COUNTER_WINDOW)
+        self._last_counter = self.time
+        self._enemy_losses.clear()
+        self.army_intent = "attack"
+        self._army_target_id = target
+        self._issue_army_intent(include_busy=True)
+        self._action_stats["siege_pushes" if self._push_active else "counter_attacks"] += 1
+        self.log("counter_attack", game_loop=self.state.game_loop, push=self._push_active, enemy_supply_killed=killed,
+                 army_supply=self._ready_army_supply(), target_id=target)
+
+    def _end_counter(self, why):
+        self._counter_until = None
+        self._push_active = False
+        self._set_army_intent("defend")
+        self.log("counter_attack_end", game_loop=self.state.game_loop, reason=why)
+
+    async def _keep_upgrading(self):
+        """Against CheatMoney and stronger: two Engineering Bays and an Armory, and the upgrades in order."""
+        if not self.cautious_attacks or self.time - self._last_upgrade_check < UPGRADE_INTERVAL:
+            return
+        self._last_upgrade_check = self.time
+        # These are not Jev's orders: keep their failures out of the feedback Jev reads.
+        failures = list(self.temp_failure_list)
+        try:
+            for kind, count, start in UPGRADE_BUILDINGS:
+                if (self.time >= start and self._count_with_pending(kind) < count and not self.already_pending(kind)
+                        and self.tech_requirement_progress(kind) == 1 and self.can_afford(kind)):
+                    await self._build_one(self._action_ids[f"BUILD {kind.name}"], kind)
+                    self._upgraded("build_" + kind.name.lower())
+                    break
+            for upgrade in UPGRADES:
+                if self._research_reason(upgrade) is None:
+                    self._research_one(self._action_ids[f"RESEARCH {upgrade.name}"], upgrade)
+                    self._upgraded(upgrade.name.lower())
+                    break  # One per check: the researcher stays "idle" until the next step.
+        finally:
+            self.temp_failure_list = failures
+
+    def _upgraded(self, what):
+        self._action_stats[f"upgrade_{what}"] += 1
+        self.log("keep_upgrading", game_loop=self.state.game_loop, what=what)
 
     def _early_defense_window(self):
         return self.cautious_attacks and self.time <= EARLY_DEFENSE_UNTIL
@@ -788,14 +910,15 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_bank_spend = self.time
         used = Counter()
         trained = Counter()
-        for unit_type in BANK_ARMY:
+        for unit_type in CAUTIOUS_BANK_ARMY if self.cautious_attacks else BANK_ARMY:
             limit = self.contract.unit_limits.get(unit_type.name)
             count = self._count_with_pending(unit_type)
             cost = self.calculate_cost(unit_type)
             for producer in self._train_slots(unit_type):
                 free = (2 if producer.has_reactor else 1) - len(producer.orders)
                 if (producer.tag in self.unit_tags_received_action or used[producer.tag] >= free
-                        or limit is not None and count + trained[unit_type] >= limit):
+                        or limit is not None and count + trained[unit_type] >= limit
+                        or self._over_cautious_cap(unit_type, trained[unit_type])):
                     continue
                 if not self.can_afford(unit_type) or self.minerals - cost.minerals < BANK_SPEND_FLOOR:
                     break
