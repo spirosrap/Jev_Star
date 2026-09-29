@@ -15,6 +15,7 @@ from sc2.position import Point2
 
 from ...agent.macro_contract import TERRAN, SPENDING_KINDS, attack_floor
 from .jev_macro_bot import JevMacroBot
+from .macro_navigation import WORKERS
 
 PRODUCTION = {U.BARRACKS, U.FACTORY, U.STARPORT}
 ADDONS = {
@@ -81,6 +82,12 @@ EARLY_MARAUDERS = 6
 EARLY_BUNKERS = 2
 EARLY_BUNKER_FROM = 300
 EARLY_SIEGE_RADIUS = 6
+# Against CheatMoney and stronger, a defending army's Tanks siege when Zerg army units come within 20, not only once
+# they are inside the Tanks' own range (13): sieging takes about 3 s, in which Banelings cover that distance. In 7 of
+# the 9 biggest fights in the T67-T83 replays no Tank was sieged when the fight began; in the one where most were
+# sieged within 10 s, the Zerg lost more than we did.
+DEFENSE_SIEGE_RANGE = 20
+DEFENSE_UNSIEGE_RANGE = 22
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -955,15 +962,21 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                    if e.is_visible and not e.type_id.name.startswith("CHANGELING")]
         ground = [e for e in enemies if not e.is_flying]
         retreating = self.army_intent == "retreat"
+        # Zerg army units, not buildings or workers, trigger the longer defensive siege range.
+        early = self.cautious_attacks and self.army_intent == "defend"
+        army_ground = [e for e in ground if e.can_attack and e.type_id not in WORKERS
+                       and not getattr(e, "is_structure", False)] if early else []
 
         def nearest(unit, targets):
             return min((unit.distance_to(e) for e in targets), default=math.inf)
 
         for tank in self.units(U.SIEGETANK).ready:
-            if not retreating and nearest(tank, ground) < 13 and self._may_switch(tank):
+            if (not retreating and (nearest(tank, ground) < 13 or nearest(tank, army_ground) < DEFENSE_SIEGE_RANGE)
+                    and self._may_switch(tank)):
                 self._switch(tank, A.SIEGEMODE_SIEGEMODE)
         for tank in self.units(U.SIEGETANKSIEGED):
-            if (retreating or nearest(tank, ground) > 15) and not self._holding_front(tank) and self._may_switch(tank):
+            far = nearest(tank, ground) > 15 and nearest(tank, army_ground) > DEFENSE_UNSIEGE_RANGE
+            if (retreating or far) and not self._holding_front(tank) and self._may_switch(tank):
                 self._switch(tank, A.UNSIEGE_UNSIEGE)
         for mine in self.units(U.WIDOWMINE).ready:
             if not retreating and nearest(mine, enemies) < 8 and self._may_switch(mine):
