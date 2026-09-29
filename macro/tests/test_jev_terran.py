@@ -1024,6 +1024,43 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._deploy_units()
         self.assertEqual(sieged.commands, [(A.UNSIEGE_UNSIEGE, None)])
 
+    async def test_defending_tanks_siege_early_against_cheatmoney(self):
+        tank = FakeTerranUnit(3, U.SIEGETANK, (20, 20))
+        roach = FakeTerranUnit(9, U.ROACH, (37, 20))  # 17 away: outside Tank range, inside the defensive range
+        roach.can_attack = True
+        self.set_world([self.scv, tank], [self.cc], [roach])
+        self.bot.army_intent = "defend"
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [])  # Not against weaker difficulties.
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "attack"
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [])  # Not while attacking.
+        drone = FakeTerranUnit(10, U.DRONE, (37, 20))
+        drone.can_attack = True
+        self.set_world([self.scv, tank], [self.cc], [drone])
+        self.bot.army_intent = "defend"
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [])  # Not for workers.
+        self.set_world([self.scv, tank], [self.cc], [roach])
+        self.bot._deploy_units()
+        self.assertEqual(tank.commands, [(A.SIEGEMODE_SIEGEMODE, None)])
+
+    async def test_defending_tanks_stay_sieged_until_the_zerg_are_beyond_22(self):
+        sieged = FakeTerranUnit(3, U.SIEGETANKSIEGED, (20, 20))
+        roach = FakeTerranUnit(9, U.ROACH, (41, 20))
+        roach.can_attack = True
+        self.set_world([self.scv, sieged], [self.cc], [roach])
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot._mode_changed[sieged.tag] = -100
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._deploy_units()
+        self.assertEqual(sieged.commands, [])
+        roach.position = Point2((43, 20))
+        self.bot._deploy_units()
+        self.assertEqual(sieged.commands, [(A.UNSIEGE_UNSIEGE, None)])
+
     async def test_army_orders_skip_sieged_tanks(self):
         marine = FakeTerranUnit(3, U.MARINE, (30, 30))
         sieged = FakeTerranUnit(4, U.SIEGETANKSIEGED, (30, 31))
