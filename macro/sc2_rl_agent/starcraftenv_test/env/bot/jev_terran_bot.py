@@ -82,6 +82,10 @@ EARLY_MARAUDERS = 6
 EARLY_BUNKERS = 2
 EARLY_BUNKER_FROM = 300
 EARLY_SIEGE_RADIUS = 6
+# After 9:30, against CheatMoney and stronger, a defending army's Tanks near the rally base stay sieged there too, so
+# each Zerg wave meets them set up. In T95 the first wave, with five of six Tanks sieged by the rule above, was won
+# 27 to 17; every later wave began with no Tank sieged and ended close to even (1.04-1.10 in the big ones).
+HOLD_SIEGE_RADIUS = 10
 # Against CheatMoney and stronger, a defending army's Tanks siege when Zerg army units come within 20, not only once
 # they are inside the Tanks' own range (13): sieging takes about 3 s, in which Banelings cover that distance. In 7 of
 # the 9 biggest fights in the T67-T83 replays no Tank was sieged when the fight began; in the one where most were
@@ -682,6 +686,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         for depot in self.structures(U.SUPPLYDEPOT).ready:
             depot(A.MORPH_SUPPLYDEPOT_LOWER)
         await self._early_defense()
+        if not self._early_defense_window():
+            self._siege_at_front()
         await self._keep_upgrading()
         await self._grow_into_map()
         self._call_down_mules()
@@ -822,9 +828,22 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             finally:
                 self.temp_failure_list = failures
             self._early("bunker")
+        self._siege_at_front()
+
+    def _hold_window(self):
+        """Tanks hold the front sieged: before 9:30, and afterwards while the army defends."""
+        return self._early_defense_window() or (
+            self.cautious_attacks and self.army_intent == "defend" and self._counter_until is None)
+
+    def _hold_radius(self):
+        return EARLY_SIEGE_RADIUS if self._early_defense_window() else HOLD_SIEGE_RADIUS
+
+    def _siege_at_front(self):
+        if not self._hold_window():
+            return
         front = self._defense_position()
         for tank in self.units(U.SIEGETANK).ready:
-            if tank.distance_to(front) < EARLY_SIEGE_RADIUS and self._may_switch(tank):
+            if tank.distance_to(front) < self._hold_radius() and self._may_switch(tank):
                 self._switch(tank, A.SIEGEMODE_SIEGEMODE)
 
     def _early(self, what):
@@ -832,8 +851,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self.log("early_defense", game_loop=self.state.game_loop, what=what)
 
     def _holding_front(self, tank):
-        """A Tank sieged at the front before 9:30 stays sieged while no enemy is near."""
-        return self._early_defense_window() and tank.distance_to(self._defense_position()) < EARLY_SIEGE_RADIUS + 2
+        """A Tank sieged at the front stays sieged while no enemy is near (before 9:30, or while defending)."""
+        return self._hold_window() and tank.distance_to(self._defense_position()) < self._hold_radius() + 2
 
     async def _grow_into_map(self):
         """Against CheatMoney and stronger: spend a mineral surplus on bases, Planetary Fortresses, turrets and gas,

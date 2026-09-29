@@ -661,12 +661,31 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot._early_defense()
         factory.train.assert_not_called()
 
-    async def test_a_front_tank_stays_sieged_until_the_window_ends(self):
+    async def test_a_front_tank_stays_sieged_while_defending_and_not_in_an_attack(self):
         self.early_world(400)
         sieged = FakeTerranUnit(93, U.SIEGETANKSIEGED, (13, 13))
         self.assertTrue(self.bot._holding_front(sieged))
         self.bot.state.game_loop = int(600 * 22.4)
+        self.bot.army_intent = "defend"
+        self.assertTrue(self.bot._holding_front(sieged))  # After 9:30 too, while the army defends.
+        self.bot.army_intent = "attack"
         self.assertFalse(self.bot._holding_front(sieged))
+        self.bot.army_intent = "defend"
+        self.bot.cautious_attacks = False
+        self.assertFalse(self.bot._holding_front(sieged))  # Only against CheatMoney and stronger.
+
+    async def test_after_the_early_window_defending_tanks_siege_at_the_rally_base(self):
+        self.early_world(900)
+        near = FakeTerranUnit(94, U.SIEGETANK, (18, 12))  # 8 from the only base: inside 10, outside 6.
+        far = FakeTerranUnit(95, U.SIEGETANK, (40, 40))
+        self.set_world([self.scv, near, far], [self.cc])
+        self.bot.army_intent = "defend"
+        self.bot._siege_at_front()
+        self.bot._switch.assert_called_once_with(near, A.SIEGEMODE_SIEGEMODE)
+        self.bot._switch.reset_mock()
+        self.bot.army_intent = "attack"
+        self.bot._siege_at_front()
+        self.bot._switch.assert_not_called()
 
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
