@@ -81,6 +81,12 @@ EARLY_MARAUDERS = 6
 EARLY_BUNKERS = 2
 EARLY_BUNKER_FROM = 300
 EARLY_SIEGE_RADIUS = 6
+# Against CheatMoney and stronger, a real attack on a base pulls an attacking army home at once instead of on Astra's
+# next plan, and attacks stay blocked until the bases have been clear for a while. On Altitude, Gresvan and Dragon
+# Scales the army came back 8-50 s after the Zerg hit a base, and Altitude and Gresvan were lost that way (T81-T83).
+RECALL_THREAT_SUPPLY = 8  # enemy army supply near our bases that counts as a real attack
+RECALL_DISTANCE = 30  # an army centre this far from the attacked base is away
+RECALL_HOLD = 10  # seconds after the last real attack before the army may attack again
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -153,6 +159,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_grow = -1000
         self._last_early_defense = -1000
         self._last_scout_scan = -1000
+        self._recall_until = -1000
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -377,6 +384,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _posture_reason(self, posture):
         army = self._combat_units()
+        if posture == "attack" and self.time < self._recall_until:
+            return "base_under_attack"
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
             floor = max(10, attack_floor(self.contract, 0, self.supply_used))
@@ -639,8 +648,30 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._man_bunkers()
         self._repair()
         self._clear_changelings()
+        self._recall()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    def _recall(self):
+        """Against CheatMoney and stronger: bring an attacking army home when a base is under real attack."""
+        if not self.cautious_attacks or not self.townhalls:
+            return
+        threats = self._threat_units()
+        threat_supply = sum(self.calculate_supply_cost(e.type_id) for e in threats)
+        if threat_supply < RECALL_THREAT_SUPPLY:
+            return
+        self._recall_until = self.time + RECALL_HOLD
+        army = self._combat_units()
+        if self.army_intent != "attack" or not army:
+            return
+        base = min(self.townhalls, key=lambda b: threats.closest_distance_to(b))
+        distance = army.center.distance_to(base)
+        if distance < RECALL_DISTANCE:
+            return
+        self._set_army_intent("defend")
+        self._action_stats["auto_recalls"] += 1
+        self.log("auto_recall", game_loop=self.state.game_loop, base=list(base.position),
+                 threat_supply=threat_supply, army_distance=round(distance, 1))
 
     def _early_defense_window(self):
         return self.cautious_attacks and self.time <= EARLY_DEFENSE_UNTIL
