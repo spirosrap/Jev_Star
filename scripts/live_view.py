@@ -22,6 +22,9 @@ OPPONENTS = ["Zerg", "Terran", "Protoss", "Random"]
 DIFFICULTIES = ["VeryEasy", "Easy", "Medium", "MediumHard", "Hard", "Harder", "VeryHard",
                 "CheatVision", "CheatMoney", "CheatInsane"]
 EFFORTS = ["none", "low", "medium", "high", "xhigh"]
+# Strategic planners: label -> (CLI, model). Both CLIs use their own saved login.
+PLANNERS = {"Astra (gpt-6-astra)": ("codex", "gpt-6-astra"), "Sol (gpt-6-sol)": ("codex", "gpt-6-sol"),
+            "Fable 5.1": ("claude", "claude-fable-5-1"), "Opus 5.5": ("claude", "claude-opus-5-5")}
 BUILDS = ["RandomBuild", "Rush", "Timing", "Power", "Macro", "Air"]  # the built-in AI's build
 sys.path.insert(0, str(ROOT / "scripts" / "campaign"))
 import campaign  # noqa: E402  (mission list and preparation)
@@ -76,7 +79,8 @@ PAGE = """<!doctype html>
     <label class="campaign">Campaign <select name="campaign"><option>Wings of Liberty</option></select></label>
     <label class="campaign">Mission difficulty <select name="mission_difficulty"></select></label>
     <label class="campaign wide">Mission (✅ fits · ⚠️ special objective · ❌ not playable) <select name="mission"></select></label>
-    <label>Astra effort <select name="planner_effort"></select></label>
+    <label>Planner <select name="planner"></select></label>
+    <label>Planner effort <select name="planner_effort"></select></label>
     <label>Time limit (min) <input name="minutes" type="number" min="1" max="60" value="20"></label>
     <div class="actions">
       <button id="start" type="submit">Start game</button>
@@ -121,6 +125,7 @@ async function options() {
   fill("difficulty", o.difficulties, saved.difficulty || "Easy");
   fill("map", o.maps, saved.map || "Altitude LE");
   fill("ai_build", o.builds, saved.ai_build || "RandomBuild");
+  fill("planner", o.planners, saved.planner || o.planners[0]);
   fill("planner_effort", o.efforts, saved.planner_effort || "medium");
   fill("mission_difficulty", o.mission_difficulties, saved.mission_difficulty || "Normal");
   const missions = form.elements.mission;
@@ -257,12 +262,13 @@ def start_mission(request):
     try:
         map_id, effort, minutes = request["mission"], request["planner_effort"], int(request["minutes"])
         difficulty = request.get("mission_difficulty", "Normal")
+        planner = request.get("planner", next(iter(PLANNERS)))
     except (KeyError, TypeError, ValueError):
         return 400, "Incomplete launch settings."
     missions = {m["map"]: m for m in campaign.catalog(sc2_path())}
     mission = missions.get(map_id)
     if (mission is None or mission["fit"] == "no" or effort not in EFFORTS or not 1 <= minutes <= 60
-            or difficulty not in MISSION_DIFFICULTIES):
+            or difficulty not in MISSION_DIFFICULTIES or planner not in PLANNERS):
         return 400, "Invalid launch settings."
     try:
         _, objectives = campaign.prepare(map_id, sc2_path(), difficulty=difficulty)
@@ -274,9 +280,15 @@ def start_mission(request):
                "--opponent-race", "Terran", "--difficulty", "Medium", "--game-time-limit", str(minutes * 60),
                "--mission-objectives", str(objectives), "--bank-directory", str(bank_directory()),
                "--mission-difficulty", difficulty]
-    if effort != "none":
-        command += ["--planner", "codex", "--planner-effort", effort]
+    command += planner_arguments(planner, effort)
     return launch(command, f"Starting {mission['title']} ({mission['campaign']}, {difficulty}).")
+
+
+def planner_arguments(planner, effort):
+    if effort == "none":
+        return []
+    cli, model = PLANNERS[planner]
+    return ["--planner", cli, "--planner-model", model, "--planner-effort", effort]
 
 
 def launch(command, message):
@@ -299,17 +311,17 @@ def start_game(request):
         difficulty, game_map = request["difficulty"], request["map"]
         effort, minutes = request["planner_effort"], int(request["minutes"])
         build = request.get("ai_build", "RandomBuild")
+        planner = request.get("planner", next(iter(PLANNERS)))
     except (KeyError, TypeError, ValueError):
         return 400, "Incomplete launch settings."
     if (race not in RACES or opponent not in OPPONENTS or difficulty not in DIFFICULTIES
             or effort not in EFFORTS or game_map not in maps() or not 1 <= minutes <= 60
-            or build not in BUILDS):
+            or build not in BUILDS or planner not in PLANNERS):
         return 400, "Invalid launch settings."
     command = [sys.executable, str(ROOT / "jev_star.py"), "macro", "--race", race, "--map", game_map,
                "--opponent-race", opponent, "--difficulty", difficulty, "--ai-build", build,
                "--game-time-limit", str(minutes * 60)]
-    if effort != "none":
-        command += ["--planner", "codex", "--planner-effort", effort]
+    command += planner_arguments(planner, effort)
     opponent_text = f"{difficulty} {opponent}" + ("" if build == "RandomBuild" else f" ({build} build)")
     return launch(command, f"Starting {race} vs {opponent_text} on {game_map}.")
 
@@ -476,7 +488,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/options"):
             missions = [dict(m, mark=FIT_MARK[m["fit"]]) for m in campaign.catalog(sc2_path())]
             self._json(200, {"races": RACES, "opponents": OPPONENTS, "difficulties": DIFFICULTIES,
-                             "efforts": EFFORTS, "builds": BUILDS, "maps": maps(), "missions": missions,
+                             "efforts": EFFORTS, "planners": list(PLANNERS), "builds": BUILDS, "maps": maps(),
+                             "missions": missions,
                              "mission_difficulties": MISSION_DIFFICULTIES})
         else:
             page = PAGE.encode()

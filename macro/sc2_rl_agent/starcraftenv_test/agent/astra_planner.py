@@ -1,4 +1,4 @@
-"""Codex-authenticated strategic planning, independent of the SC2 callback loop."""
+"""Strategic planning through the Codex or Claude Code CLI's saved login, independent of the SC2 callback loop."""
 
 import asyncio
 import copy
@@ -331,7 +331,7 @@ class CodexPlannerClient:
 
     def __init__(self, output_dir, executable=None, model="gpt-6-astra", timeout=60, effort="low",
                  contract=PROTOSS):
-        self.executable = find_codex(executable)
+        self.executable = self._find_executable(executable)
         self.model, self.timeout, self.effort = model, timeout, effort
         self.contract = contract
         self.instructions = TERRAN_PLANNER_INSTRUCTIONS if contract.race == "Terran" else PLANNER_INSTRUCTIONS
@@ -344,6 +344,10 @@ class CodexPlannerClient:
         self._process = None
         self._lock = threading.Lock()
         self._closed = False
+
+    @staticmethod
+    def _find_executable(path):
+        return find_codex(path)
 
     def _command(self, result_path):
         return [str(self.executable), "exec", "--ignore-user-config", "--ephemeral",
@@ -395,27 +399,30 @@ class CodexPlannerClient:
             if not completed or not result_path.is_file():
                 raise PlannerError("missing_codex_result")
             usage = {k: v for k, v in usage.items() if type(v) is int and v >= 0}
-            # A rejected plan still consumed tokens. Return its usage to the scheduler
-            # before reporting validation failure; never activate invalid output.
             try:
                 raw_plan = json.loads(result_path.read_text(encoding="utf-8"))
             except ValueError:
                 return {"plan": {}, "usage": usage, "model": self.model,
                         "validation_error": "invalid_plan_json"}
-            try:
-                targets = payload.get("state", {}).get("navigation", {}).get("targets")
-                plan = validate_plan(raw_plan, payload.get("action_catalog"),
-                                     {t["id"] for t in targets} if targets is not None else None,
-                                     contract=self.contract)
-            except PlannerError as exc:
-                return {"plan": raw_plan if isinstance(raw_plan, dict) else {},
-                        "usage": usage, "model": self.model, "validation_error": str(exc)}
-            return {"plan": plan, "usage": usage, "model": self.model}
+            return self._validated(raw_plan, usage, payload)
         except (OSError, ValueError) as exc:
             raise PlannerError("codex_io_or_json_error") from None
         finally:
             with self._lock:
                 self._process = None
+
+    def _validated(self, raw_plan, usage, payload):
+        # A rejected plan still consumed tokens. Return its usage to the scheduler
+        # before reporting validation failure; never activate invalid output.
+        try:
+            targets = payload.get("state", {}).get("navigation", {}).get("targets")
+            plan = validate_plan(raw_plan, payload.get("action_catalog"),
+                                 {t["id"] for t in targets} if targets is not None else None,
+                                 contract=self.contract)
+        except PlannerError as exc:
+            return {"plan": raw_plan if isinstance(raw_plan, dict) else {},
+                    "usage": usage, "model": self.model, "validation_error": str(exc)}
+        return {"plan": plan, "usage": usage, "model": self.model}
 
     async def plan(self, request_id, payload):
         # BurnySC2/nest_asyncio uses a Windows loop without async subprocess support.
@@ -426,6 +433,79 @@ class CodexPlannerClient:
             self._closed = True
             if self._process is not None and self._process.poll() is None:
                 self._process.kill()
+
+
+def find_claude(path=None):
+    candidate = Path(path) if path else None
+    if candidate is None:
+        found = shutil.which("claude")
+        candidate = Path(found) if found else None
+    if candidate is None or not candidate.is_file():
+        raise ValueError("Claude Code executable not found; pass --claude-path pointing to the claude executable.")
+    return candidate.resolve()
+
+
+class ClaudePlannerClient(CodexPlannerClient):
+    """The same planning through Claude Code's saved login (`claude -p`), with no tools and structured output."""
+
+    def __init__(self, output_dir, executable=None, model="claude-opus-5-5", timeout=60, effort="low",
+                 contract=PROTOSS):
+        super().__init__(output_dir, executable, model, timeout, effort, contract)
+
+    @staticmethod
+    def _find_executable(path):
+        return find_claude(path)
+
+    def _command(self, result_path=None):
+        return [str(self.executable), "-p", "--model", self.model, "--effort", self.effort,
+                "--output-format", "json", "--json-schema", self.schema_path.read_text(encoding="utf-8"),
+                "--tools", "", "--no-session-persistence", "--system-prompt", self.instructions]
+
+    def _run(self, request_id, payload):
+        prompt = "INPUT JSON:\n" + json.dumps(payload, ensure_ascii=False)
+        # A game launched from inside a Claude Code session must still be allowed to run the CLI.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDECODE")}
+        try:
+            with self._lock:
+                if self._closed:
+                    raise PlannerError("planner_closed")
+                process = subprocess.Popen(self._command(), cwd=self.workdir, env=env,
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, encoding="utf-8",
+                                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                self._process = process
+            try:
+                stdout, stderr = process.communicate(prompt, timeout=self.timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                raise PlannerError("claude_timeout") from None
+            if process.returncode != 0:
+                # Do not propagate CLI output, which may include account information.
+                raise PlannerError(f"claude_exit_{process.returncode}:{codex_failure_category(stdout, stderr)}")
+            try:
+                result = json.loads(stdout)
+            except ValueError:
+                raise PlannerError("missing_claude_result") from None
+            if not isinstance(result, dict) or result.get("type") != "result":
+                raise PlannerError("missing_claude_result")
+            if result.get("is_error"):
+                raise PlannerError(f"claude_error:{codex_failure_category(str(result.get('result', '')), '')}")
+            usage = result.get("usage") or {}
+            usage = {k: v for k, v in usage.items() if type(v) is int and v >= 0}
+            # Cached prompt tokens are still input the account pays for; count them with the rest.
+            usage["input_tokens"] = (usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+                                     + usage.get("cache_creation_input_tokens", 0))
+            (self.directory / f"plan-{request_id:04d}.json").write_text(
+                json.dumps(result.get("structured_output")), encoding="utf-8")
+            if "structured_output" not in result:
+                return {"plan": {}, "usage": usage, "model": self.model, "validation_error": "invalid_plan_json"}
+            return self._validated(result["structured_output"], usage, payload)
+        except (OSError, ValueError):
+            raise PlannerError("claude_io_or_json_error") from None
+        finally:
+            with self._lock:
+                self._process = None
 
 
 class StrategicPlanner:

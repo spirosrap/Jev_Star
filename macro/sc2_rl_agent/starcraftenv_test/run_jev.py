@@ -53,9 +53,12 @@ def main():
     parser.add_argument("--sc2-path", type=Path)
     parser.add_argument("--config-file", type=Path, default=repo.parent / "config.md", help="Fallback for api: entry; TYPESAFE_API_KEY takes precedence")
     parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--planner", choices=["none", "codex"], default="none")
-    parser.add_argument("--planner-model", default="gpt-6-astra")
+    parser.add_argument("--planner", choices=["none", "codex", "claude"], default="none",
+                        help="Strategic planner: the Codex CLI (OpenAI models) or the Claude Code CLI, each with its saved login")
+    parser.add_argument("--planner-model", default=None,
+                        help="Planner model; defaults to gpt-6-astra for codex and claude-opus-5-5 for claude")
     parser.add_argument("--codex-path", type=Path, help="Optional native Codex executable; uses saved Codex login")
+    parser.add_argument("--claude-path", type=Path, help="Optional claude executable; uses saved Claude Code login")
     parser.add_argument("--planner-effort", choices=["low", "medium", "high", "xhigh", "max"], default="low")
     parser.add_argument("--planner-interval", type=positive_float, default=60, help="Game seconds between periodic strategic requests")
     parser.add_argument("--planner-execution-window", type=positive_float, default=30, help="Game seconds to execute an accepted plan before ordinary events refresh it")
@@ -76,6 +79,8 @@ def main():
         parser.error("--max-requests must be positive")
     if args.max_planner_requests < 1:
         parser.error("--max-planner-requests must be positive")
+    if args.planner_model is None:
+        args.planner_model = {"codex": "gpt-6-astra", "claude": "claude-opus-5-5"}.get(args.planner)
     try:
         key = load_api_key(args.config_file)
     except ValueError as exc:
@@ -137,6 +142,11 @@ def main():
                     planner_client = CodexPlannerClient(output, args.codex_path, args.planner_model,
                                                        args.planner_timeout, args.planner_effort,
                                                        contract=contract)
+                elif args.planner == "claude":
+                    from .agent.astra_planner import ClaudePlannerClient
+                    planner_client = ClaudePlannerClient(output, args.claude_path, args.planner_model,
+                                                        args.planner_timeout, args.planner_effort,
+                                                        contract=contract)
                     bot = PlannedBot(client, output, args.decision_interval, args.max_decision_age,
                                                  args.max_requests, planner_client=planner_client, run_log=log,
                                                  planner_interval=args.planner_interval, plan_ttl=args.plan_ttl,

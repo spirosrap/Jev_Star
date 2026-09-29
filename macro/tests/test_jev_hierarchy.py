@@ -22,7 +22,7 @@ from sc2.units import Units
 
 import test_jev_protoss as support
 from sc2_rl_agent.starcraftenv_test.agent.astra_planner import (
-    CodexPlannerClient, PlannerError, StrategicPlanner, validate_plan)
+    ClaudePlannerClient, CodexPlannerClient, PlannerError, StrategicPlanner, validate_plan)
 from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, QUESTION
 from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import plan_progress, policy_reason
@@ -394,6 +394,63 @@ class CodexClientTests(unittest.IsolatedAsyncioTestCase):
                     await client.plan(1, {})
             process.kill.assert_called_once()
             self.assertIsNone(client._process)
+            await client.close()
+
+
+class ClaudeClientTests(unittest.IsolatedAsyncioTestCase):
+    def make_client(self, directory, **kwargs):
+        with patch('sc2_rl_agent.starcraftenv_test.agent.astra_planner.find_claude', return_value=Path('claude')):
+            return ClaudePlannerClient(Path(directory), **kwargs)
+
+    async def test_command_uses_structured_output_without_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self.make_client(directory, model='claude-fable-5-1', effort='high')
+            command = client._command()
+            self.assertEqual(command[1:5], ['-p', '--model', 'claude-fable-5-1', '--effort'])
+            self.assertEqual(command[command.index('--tools') + 1], '')
+            self.assertIn('--no-session-persistence', command)
+            self.assertEqual(json.loads(command[command.index('--json-schema') + 1])['type'], 'object')
+            self.assertEqual(command[command.index('--system-prompt') + 1], client.instructions)
+            await client.close()
+
+    async def test_structured_output_is_validated_and_cached_tokens_count_as_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self.make_client(directory)
+            prompts = []
+            def fake_popen(args, **kwargs):
+                self.assertNotIn('CLAUDECODE', kwargs['env'])
+                process = Mock(returncode=0)
+                def communicate(prompt, **_):
+                    prompts.append(prompt)
+                    return json.dumps({'type': 'result', 'is_error': False, 'structured_output': plan(),
+                                       'usage': {'input_tokens': 10, 'output_tokens': 20,
+                                                 'cache_read_input_tokens': 300, 'cache_creation_input_tokens': 40}}), ''
+                process.communicate.side_effect = communicate
+                return process
+            with patch('sc2_rl_agent.starcraftenv_test.agent.astra_planner.subprocess.Popen', side_effect=fake_popen), \
+                    patch.dict('os.environ', {'CLAUDECODE': '1'}):
+                result = await client.plan(1, {'state': {}})
+            self.assertEqual(result['plan'], plan())
+            self.assertEqual(result['usage']['input_tokens'], 350)
+            self.assertTrue(prompts[0].startswith('INPUT JSON:\n'))
+            self.assertEqual(json.loads((Path(directory) / 'planner' / 'plan-0001.json').read_text()), plan())
+            await client.close()
+
+    async def test_cli_errors_are_categorised_without_forwarding_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self.make_client(directory, timeout=.01)
+            process = Mock(returncode=0)
+            process.communicate.return_value = (json.dumps({'type': 'result', 'is_error': True,
+                                                            'result': 'Not logged in · Please run /login as bob'}), '')
+            with patch('sc2_rl_agent.starcraftenv_test.agent.astra_planner.subprocess.Popen', return_value=process):
+                with self.assertRaisesRegex(PlannerError, '^claude_error:authentication$'):
+                    await client.plan(1, {})
+            process = Mock()
+            process.communicate.side_effect = [subprocess.TimeoutExpired('claude', .01), ('', '')]
+            with patch('sc2_rl_agent.starcraftenv_test.agent.astra_planner.subprocess.Popen', return_value=process):
+                with self.assertRaisesRegex(PlannerError, 'claude_timeout'):
+                    await client.plan(2, {})
+            process.kill.assert_called_once()
             await client.close()
 
 
