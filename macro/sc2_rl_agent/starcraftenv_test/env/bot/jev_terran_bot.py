@@ -121,6 +121,9 @@ COUNTER_RECALL_DISTANCE = 30
 PUSH_MIN_SUPPLY = 185
 PUSH_MIN_MINERALS = 1500
 PUSH_WINDOW = 90
+# The push also goes when the Zerg have not attacked for this long: in T102 the army sat maxed at home with 4,800
+# minerals from 36:14 on, because the push waited for a wave that did not come.
+PUSH_IDLE = 60
 ZERG_BASES = {U.HATCHERY, U.LAIR, U.HIVE}
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
@@ -208,6 +211,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._counter_until = None
         self._last_counter = -1000
         self._push_active = False
+        self._last_threat_seen = 0.0
         self._own_army_supply = {}  # tag -> supply of our combat units, to count what each wave costs us
         self._wave = None  # the Zerg attack now under way: when it began and what each side has lost
 
@@ -748,7 +752,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
             return
         killed = sum(supply for _, supply in self._enemy_losses)
-        if (killed < COUNTER_ENEMY_LOSS or self._emergency() or not army or not self.townhalls
+        emergency = self._emergency()
+        if emergency:
+            self._last_threat_seen = self.time
+        quiet = self.time - self._last_threat_seen >= PUSH_IDLE
+        if ((killed < COUNTER_ENEMY_LOSS and not quiet) or emergency or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
         if not (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS

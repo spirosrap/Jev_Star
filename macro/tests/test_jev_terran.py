@@ -494,6 +494,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.supply_used, self.bot.minerals = supply_used, minerals
         self.bot._ready_army_supply = Mock(return_value=110)
         self.bot._enemy_losses.extend([(890.0, killed)])
+        self.bot._last_threat_seen = 890.0  # A Zerg wave was at our bases 10 s ago.
 
     async def test_without_push_conditions_a_beaten_wave_starts_no_attack(self):
         self.counter_world()  # 150 supply, 500 minerals, no +2.
@@ -520,6 +521,17 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
         self.bot.cautious_attacks = False
         self.assertNotEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
+
+    async def test_maxed_and_quiet_for_a_minute_the_push_goes_without_a_wave(self):
+        maxed = dict(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.counter_world(killed=0, **maxed)
+        self.bot._last_threat_seen = 850.0  # 50 s ago.
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.bot._last_threat_seen = 839.0  # 61 s ago.
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.assertTrue(self.bot._push_active)
 
     async def test_maxed_with_a_bank_and_plus_two_the_push_may_attack_the_main(self):
         self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
