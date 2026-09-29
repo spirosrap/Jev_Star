@@ -838,6 +838,15 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     def _hold_radius(self):
         return EARLY_SIEGE_RADIUS if self._early_defense_window() else HOLD_SIEGE_RADIUS
 
+    def _defense_anchor(self, position):
+        """Against CheatMoney and stronger, a defending army stays with the Tanks sieged at the front: in T97 the Tanks
+        were sieged for nearly every wave, but the Marines and Marauders chased Zerg units 10-16 away, outside their
+        cover, and the 13:11 and 15:18 waves were lost that way (124 -> 63 in five seconds, one or two Tanks lost)."""
+        if not self._hold_window() or self._early_defense_window():
+            return None
+        sieged = self.units(U.SIEGETANKSIEGED).closer_than(HOLD_SIEGE_RADIUS + 4, position)
+        return sieged.center if sieged else None
+
     def _siege_at_front(self):
         if not self._hold_window():
             return

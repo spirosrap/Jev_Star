@@ -9,6 +9,7 @@ WORKERS = {U.PROBE, U.SCV, U.DRONE}
 # Against CheatMoney and stronger (cautious_attacks), attack targets this close to the Zerg start or to a known Spine or
 # Spore Crawler are not attacked.
 CAUTIOUS_MAIN_RADIUS = 28
+DEFEND_LEASH = 12  # a defending army held with sieged Tanks fights enemies this close to them (Tank range 13)
 CAUTIOUS_DEFENSE_RADIUS = 12
 STATIC_DEFENSE = {"SPINECRAWLER", "SPINECRAWLERUPROOTED", "SPORECRAWLER", "SPORECRAWLERUPROOTED",
                   "PHOTONCANNON", "BUNKER", "PLANETARYFORTRESS", "MISSILETURRET"}
@@ -75,6 +76,10 @@ class MacroNavigation:
 
     def _emergency(self):
         return bool(self._threat_units()) or any(self._base_damaged_until.get(b.tag, 0) > self.time for b in self.townhalls)
+
+    def _defense_anchor(self, position):
+        """Where a defending army holds instead of chasing (a race may keep it with sieged Tanks); None: chase."""
+        return None
 
     def _defense_position(self):
         threats = self._threat_units()
@@ -201,6 +206,10 @@ class MacroNavigation:
         else:
             target_id, target = "home", self._defense_position()
             threats = self._threat_units().closer_than(30, target)
+            anchor = self._defense_anchor(target)
+            if anchor is not None:
+                # Stay with the sieged Tanks: fight only what comes within their cover.
+                target, threats = anchor, threats.closer_than(DEFEND_LEASH, anchor)
             # Shoot the enemy in the base. A ground point lets units arrive and then stand there.
             focus = threats.closest_to(target) if threats else None
             if focus is not None:

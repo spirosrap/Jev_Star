@@ -1150,6 +1150,31 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(marine.commands, [("move", self.cc.position)])
         self.assertEqual(sieged.commands, [])
 
+    def held_world(self, ling_at):
+        tank = FakeTerranUnit(4, U.SIEGETANKSIEGED, (14, 10))  # Sieged 4 from the only base.
+        marine = FakeTerranUnit(3, U.MARINE, (16, 10))
+        ling = FakeTerranUnit(9, U.ZERGLING, ling_at)
+        ling.can_attack = True
+        self.set_world([self.scv, marine, tank], [self.cc], [ling])
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot.state.game_loop = int(900 * 22.4)
+        return marine, ling
+
+    async def test_defending_bio_stays_with_sieged_tanks_instead_of_chasing(self):
+        marine, ling = self.held_world((30, 10))  # 16 from the Tank: outside its cover.
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(marine.commands, [])  # Already with the Tank: it waits there.
+        self.assertEqual(self.bot._resolved_army_target_id, "home")
+        self.bot.cautious_attacks = False
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(marine.commands, [("attack", ling)])  # Below CheatMoney it still chases.
+
+    async def test_defending_bio_fights_what_comes_under_the_tanks(self):
+        marine, ling = self.held_world((22, 10))  # 8 from the Tank.
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(marine.commands, [("attack", ling)])
+
     async def test_mule_goes_to_richest_nearby_patch(self):
         orbital = FakeTerranUnit(3, U.ORBITALCOMMAND)
         orbital.energy = 60
