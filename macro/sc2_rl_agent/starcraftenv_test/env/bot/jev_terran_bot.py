@@ -196,6 +196,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._counter_until = None
         self._last_counter = -1000
         self._push_active = False
+        self._own_army_supply = {}  # tag -> supply of our combat units, to count what each wave costs us
+        self._wave = None  # the Zerg attack now under way: when it began and what each side has lost
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -701,6 +703,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         supply = self._enemy_army_supply.pop(unit_tag, None)
         if supply:
             self._enemy_losses.append((self.time, supply))
+            if self._wave is not None:
+                self._wave["enemy_lost"] += supply
+        own = self._own_army_supply.pop(unit_tag, None)
+        if own and self._wave is not None:
+            self._wave["own_lost"] += own
 
     def _counter_attack(self):
         """Against CheatMoney and stronger: attack right after beating a Zerg wave, for a fixed window."""
@@ -712,6 +719,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         while self._enemy_losses and self._enemy_losses[0][0] < self.time - COUNTER_LOOKBACK:
             self._enemy_losses.popleft()
         army = self._combat_units()
+        self._record_waves(army)
         if self._counter_until is not None:
             threats = self._threat_units()
             threat = sum(self.calculate_supply_cost(e.type_id) for e in threats)
@@ -738,6 +746,23 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._action_stats["siege_pushes" if self._push_active else "counter_attacks"] += 1
         self.log("counter_attack", game_loop=self.state.game_loop, push=self._push_active, enemy_supply_killed=killed,
                  army_supply=self._ready_army_supply(), target_id=target)
+
+    def _record_waves(self, army):
+        """Log each Zerg attack on our bases with what it cost both sides; measurement only."""
+        self._own_army_supply = {u.tag: self.calculate_supply_cost(u.type_id) for u in army}
+        emergency = self._emergency()
+        if emergency and self._wave is None:
+            self._wave = {"start": self.time, "enemy_lost": 0, "own_lost": 0,
+                          "army_at_start": self._ready_army_supply(),
+                          "tanks_sieged_at_start": self.units(U.SIEGETANKSIEGED).amount,
+                          "tanks_at_start": self.units.of_type({U.SIEGETANK, U.SIEGETANKSIEGED}).amount}
+            self.log("wave_start", game_loop=self.state.game_loop, **self._wave)
+        elif not emergency and self._wave is not None:
+            wave, self._wave = self._wave, None
+            self.log("wave_over", game_loop=self.state.game_loop, seconds=round(self.time - wave["start"]),
+                     enemy_supply_killed=wave["enemy_lost"], own_supply_lost=wave["own_lost"],
+                     army_at_start=wave["army_at_start"], army_at_end=self._ready_army_supply(),
+                     tanks_sieged_at_start=wave["tanks_sieged_at_start"], tanks_at_start=wave["tanks_at_start"])
 
     def _end_counter(self, why):
         self._counter_until = None
