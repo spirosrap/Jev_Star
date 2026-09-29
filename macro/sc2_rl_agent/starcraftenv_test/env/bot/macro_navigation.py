@@ -6,6 +6,7 @@ from sc2.position import Point2
 WORKERS = {U.PROBE, U.SCV, U.DRONE}
 
 
+DEFEND_RAID_SUPPLY = 8  # against CheatMoney and stronger, enemy army supply at one base that the army defends against
 # Against CheatMoney and stronger (cautious_attacks), attack targets this close to the Zerg start or to a known Spine or
 # Spore Crawler are not attacked.
 CAUTIOUS_MAIN_RADIUS = 28
@@ -78,6 +79,18 @@ class MacroNavigation:
 
     def _defense_position(self):
         threats = self._threat_units()
+        if self.townhalls and threats and getattr(self, "cautious_attacks", False):
+            # Against CheatMoney and stronger, only a real attack (8+ army supply at one base) moves the army; smaller
+            # raids are left to Planetary Fortresses, Turrets and Bunkers. In T91 the army ran between bases after
+            # raids and met a big wave with its Tanks unsieged (125 -> 47).
+            supply = {}
+            for enemy in threats:
+                base = min(self.townhalls, key=lambda b: b.distance_to(enemy))
+                supply[base.tag] = supply.get(base.tag, 0) + self.calculate_supply_cost(enemy.type_id)
+            tag, most = max(supply.items(), key=lambda item: item[1])
+            if most >= DEFEND_RAID_SUPPLY:
+                return self.townhalls.find_by_tag(tag).position
+            threats = threats.filter(lambda e: False)
         if self.townhalls:
             if threats:
                 return min(self.townhalls, key=lambda b: threats.closest_distance_to(b)).position

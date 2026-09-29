@@ -514,7 +514,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
         self.counter_world()
-        self.bot._ready_army_supply = Mock(return_value=99)
+        self.bot._ready_army_supply = Mock(return_value=69)
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
         self.counter_world()
@@ -533,6 +533,38 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.bot._push_active)
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_2")
+
+    async def test_planner_attacks_are_refused_against_cheatmoney(self):
+        self.counter_world()
+        self.assertEqual(self.bot._posture_reason("attack"), "attacks_only_as_counter_attacks")
+        self.bot.cautious_attacks = False
+        self.assertNotEqual(self.bot._posture_reason("attack"), "attacks_only_as_counter_attacks")
+
+    async def test_each_wave_logs_what_it_cost_the_zerg(self):
+        self.counter_world(killed=12)
+        self.bot.log = Mock()
+        self.bot._emergency = Mock(return_value=True)
+        self.bot._counter_attack()
+        self.bot._emergency = Mock(return_value=False)
+        self.bot._counter_attack()
+        call = [c for c in self.bot.log.call_args_list if c.args[0] == "wave_over"][0]
+        self.assertEqual((call.kwargs["enemy_supply_killed"], call.kwargs["ready_army_supply"]), (12, 110))
+
+    async def test_the_defense_ignores_small_raids_against_cheatmoney(self):
+        far = FakeTerranUnit(3, U.COMMANDCENTER, (-40, 10))  # Farther from the Zerg than the rally base.
+        lings = [FakeTerranUnit(200 + i, U.ZERGLING, (-38, 12)) for i in range(7)]
+        for ling in lings:
+            ling.can_attack = True
+        self.set_world([self.scv], [self.cc, far], lings)
+        self.bot.cautious_attacks = True
+        self.assertEqual(self.bot._defense_position(), self.cc.position)  # 7 supply: stay at the rally base.
+        self.bot.cautious_attacks = False
+        self.assertEqual(self.bot._defense_position(), far.position)
+        lings.append(FakeTerranUnit(207, U.ZERGLING, (-38, 12)))
+        lings[-1].can_attack = True
+        self.set_world([self.scv], [self.cc, far], lings)
+        self.bot.cautious_attacks = True
+        self.assertEqual(self.bot._defense_position(), far.position)  # 8 supply: defend it.
 
     async def test_enemy_army_deaths_are_counted_as_losses(self):
         ling = FakeTerranUnit(90, U.ZERGLING, (50, 50))

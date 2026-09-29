@@ -109,7 +109,7 @@ UPGRADES = tuple(UpgradeId[n] for n in (
 # bank and +2 weapons, that attack may also go into the Zerg main and crawler cover (a push to win).
 COUNTER_ENEMY_LOSS = 30  # enemy army supply killed within COUNTER_LOOKBACK seconds that counts as a beaten wave
 COUNTER_LOOKBACK = 45
-COUNTER_MIN_ARMY = 100
+COUNTER_MIN_ARMY = 70  # at 100 it never fired in T91: every beaten wave left 44-97
 COUNTER_WINDOW = 45
 COUNTER_COOLDOWN = 120
 COUNTER_RECALL_THREAT = 8  # enemy army supply near a base that ends the window early
@@ -196,6 +196,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._counter_until = None
         self._last_counter = -1000
         self._push_active = False
+        self._wave_under_way = False
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -427,6 +428,10 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     def _posture_reason(self, posture):
         if self._counter_until is not None:
             return "counter_attack_under_way"
+        if posture == "attack" and self.cautious_attacks:
+            # Against CheatMoney and stronger the army goes out only in the timed counter-attack: in T91 the planner's
+            # own attack at 23:07 left the bases open, and the collapse began there.
+            return "attacks_only_as_counter_attacks"
         army = self._combat_units()
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
@@ -712,6 +717,14 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         while self._enemy_losses and self._enemy_losses[0][0] < self.time - COUNTER_LOOKBACK:
             self._enemy_losses.popleft()
         army = self._combat_units()
+        emergency = self._emergency()
+        if emergency != self._wave_under_way:
+            self._wave_under_way = emergency
+            if not emergency:
+                # What each wave cost the Zerg, to tune COUNTER_ENEMY_LOSS and COUNTER_MIN_ARMY.
+                self.log("wave_over", game_loop=self.state.game_loop,
+                         enemy_supply_killed=sum(supply for _, supply in self._enemy_losses),
+                         ready_army_supply=self._ready_army_supply())
         if self._counter_until is not None:
             threats = self._threat_units()
             threat = sum(self.calculate_supply_cost(e.type_id) for e in threats)
@@ -721,7 +734,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
             return
         killed = sum(supply for _, supply in self._enemy_losses)
-        if (killed < COUNTER_ENEMY_LOSS or self._emergency() or not army or not self.townhalls
+        if (killed < COUNTER_ENEMY_LOSS or emergency or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
         self._push_active = (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
