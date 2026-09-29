@@ -128,8 +128,10 @@ GAS_THROTTLE_OFF = 150
 # minerals" was true most of the game: in T100 the throttle switched on eleven times and each time emptied every
 # Refinery until gas fell to 25-135, and by 19:00 the army had five Tanks and was rebuilt from Marines. Tanks and
 # upgrades need that gas, so here only a real surplus moves SCVs off gas.
-CAUTIOUS_GAS_THROTTLE_ON = 1000
-CAUTIOUS_GAS_THROTTLE_OFF = 500
+CAUTIOUS_GAS_THROTTLE_ON = 500
+CAUTIOUS_GAS_THROTTLE_OFF = 250
+# At 1,000 (T101) gas piled up unused (700-1,100) while minerals stayed at 25-120, so the third base came late and the
+# army lagged; 500/250, without the ratio to minerals, keeps a modest gas bank for Tanks and upgrades.
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
 LURKERS = {U.LURKERMP, U.LURKERMPBURROWED, U.LURKERMPEGG, U.LURKERDENMP}
 LURKER_MEMORY = 90
@@ -860,7 +862,15 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if not self._hold_window() or self._early_defense_window():
             return None
         sieged = self.units(U.SIEGETANKSIEGED).closer_than(HOLD_SIEGE_RADIUS + 4, position)
-        return sieged.center if sieged else None
+        if sieged:
+            return sieged.center
+        # Defending a base away from the Tanks: they go there, and the rest of the army moves with them rather
+        # than ahead of them. In T99 and T100 the waves that hit a base away from the rally were lost (130 -> 14;
+        # 124 -> 63) because the bio arrived first and fought before the Tanks were set up.
+        tanks = self.units.of_type({U.SIEGETANK, U.SIEGETANKSIEGED}).ready
+        return tanks.center if tanks and tanks.center.distance_to(position) > HOLD_SIEGE_RADIUS else None
+
+    defense_lead_types = frozenset({U.SIEGETANK})
 
     def _siege_at_front(self):
         if not self._hold_window():
@@ -1006,7 +1016,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self._gas_throttled = False
             self.log("gas_throttle", game_loop=self.state.game_loop, active=False,
                      gas=self.vespene, minerals=self.minerals)
-        elif not self._gas_throttled and self.vespene >= on and self.vespene > 2 * self.minerals:
+        elif not self._gas_throttled and self.vespene >= on and (
+                self.cautious_attacks or self.vespene > 2 * self.minerals):
             self._gas_throttled = True
             self.log("gas_throttle", game_loop=self.state.game_loop, active=True,
                      gas=self.vespene, minerals=self.minerals)

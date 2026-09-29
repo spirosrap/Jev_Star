@@ -869,19 +869,19 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.bot._gas_throttled)
         going.gather.assert_not_called()
 
-    async def test_against_cheatmoney_only_a_real_gas_surplus_moves_scvs_off_gas(self):
+    async def test_against_cheatmoney_scvs_leave_gas_above_500_whatever_the_minerals(self):
         _, going, _ = self.gas_world(gas=400, minerals=100)
         self.bot.cautious_attacks = True
         self.bot._balance_gas()
-        self.assertFalse(self.bot._gas_throttled)  # 400 gas is needed for Tanks and upgrades.
+        self.assertFalse(self.bot._gas_throttled)  # A modest bank for Tanks and upgrades.
         going.gather.assert_not_called()
-        self.bot.vespene = 1000
+        self.bot.vespene, self.bot.minerals = 500, 2000  # Minerals no longer matter.
         self.bot._balance_gas()
         self.assertTrue(self.bot._gas_throttled)
-        self.bot.vespene = 600
+        self.bot.vespene = 300
         self.bot._balance_gas()
         self.assertTrue(self.bot._gas_throttled)
-        self.bot.vespene = 499
+        self.bot.vespene = 249
         self.bot._balance_gas()
         self.assertFalse(self.bot._gas_throttled)
 
@@ -1189,6 +1189,21 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         marine, ling = self.held_world((22, 10))  # 8 from the Tank.
         self.bot._issue_army_intent(include_busy=True)
         self.assertEqual(marine.commands, [("attack", ling)])
+
+    async def test_defending_a_far_base_the_bio_follows_the_tanks(self):
+        far = FakeTerranUnit(30, U.COMMANDCENTER, (60, 10))
+        tank = FakeTerranUnit(4, U.SIEGETANK, (14, 12))
+        marine = FakeTerranUnit(3, U.MARINE, (30, 30))
+        lings = [FakeTerranUnit(200 + i, U.ZERGLING, (62, 12)) for i in range(3)]
+        for ling in lings:
+            ling.can_attack = True
+        self.set_world([self.scv, marine, tank], [self.cc, far], lings)
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._issue_army_intent(include_busy=True)
+        self.assertEqual(tank.commands, [("attack", far.position)])  # The Tank heads for the attacked base.
+        self.assertEqual(marine.commands, [("attack", tank.position)])  # The bio moves with it, not ahead.
 
     async def test_mule_goes_to_richest_nearby_patch(self):
         orbital = FakeTerranUnit(3, U.ORBITALCOMMAND)

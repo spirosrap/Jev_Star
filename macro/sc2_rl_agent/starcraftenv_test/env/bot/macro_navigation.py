@@ -77,6 +77,8 @@ class MacroNavigation:
     def _emergency(self):
         return bool(self._threat_units()) or any(self._base_damaged_until.get(b.tag, 0) > self.time for b in self.townhalls)
 
+    defense_lead_types = frozenset()  # units that go to the defense position while the rest hold at the anchor
+
     def _defense_anchor(self, position):
         """Where a defending army holds instead of chasing (a race may keep it with sieged Tanks); None: chase."""
         return None
@@ -194,7 +196,7 @@ class MacroNavigation:
                                            and u.type_id not in self.stationary_army_types)
         if not army:
             return
-        focus = None
+        focus = lead = None
         if self.army_intent == "attack":
             target_id, target = self._attack_position()
         elif self.army_intent == "retreat":
@@ -208,7 +210,9 @@ class MacroNavigation:
             threats = self._threat_units().closer_than(30, target)
             anchor = self._defense_anchor(target)
             if anchor is not None:
-                # Stay with the sieged Tanks: fight only what comes within their cover.
+                # Stay with the Tanks: fight only what comes within their cover. Tanks that are not yet sieged
+                # still go to the defense position, and the rest of the army follows them there.
+                lead = target
                 target, threats = anchor, threats.closer_than(DEFEND_LEASH, anchor)
             # Shoot the enemy in the base. A ground point lets units arrive and then stand there.
             focus = threats.closest_to(target) if threats else None
@@ -221,8 +225,10 @@ class MacroNavigation:
         self._army_destination = target
         self._resolved_army_target_id = target_id
         for unit in army:
+            destination = lead if lead is not None and focus is None and unit.type_id in self.defense_lead_types \
+                else target
             previous = self._unit_destinations.get(unit.tag)
-            changed = previous is None or previous.distance_to(target) > 6
+            changed = previous is None or previous.distance_to(destination) > 6
             if not include_busy and not changed and not unit.is_idle:
                 continue
             if focus is not None:
@@ -235,13 +241,13 @@ class MacroNavigation:
                 self._unit_destinations[unit.tag] = target
                 continue
             self._unit_focus.pop(unit.tag, None)
-            if unit.distance_to(target) < 4 and self.army_intent != "attack":
+            if unit.distance_to(destination) < 4 and self.army_intent != "attack":
                 continue
             if self.army_intent == "retreat":
-                unit.move(target)
+                unit.move(destination)
             else:
-                unit.attack(target)
-            self._unit_destinations[unit.tag] = target
+                unit.attack(destination)
+            self._unit_destinations[unit.tag] = destination
 
     def _scout_candidates(self, kind):
         units = self.units(kind).ready
