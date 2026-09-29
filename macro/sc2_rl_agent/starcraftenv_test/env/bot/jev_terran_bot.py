@@ -1,7 +1,7 @@
 """Jev macro executor for Terran: SC2-checked legality, placement and local unit upkeep."""
 
 import math
-from collections import Counter
+from collections import Counter, deque
 
 from sc2.bot_ai import BotAI
 from sc2.dicts.unit_train_build_abilities import TRAIN_INFO
@@ -87,6 +87,13 @@ EARLY_SIEGE_RADIUS = 6
 RECALL_THREAT_SUPPLY = 8  # enemy army supply near our bases that counts as a real attack
 RECALL_DISTANCE = 30  # an army centre this far from the attacked base is away
 RECALL_HOLD = 10  # seconds after the last real attack before the army may attack again
+# Against CheatMoney and stronger, an attack that loses a quarter of the army within 15 s is called off at once
+# instead of on Astra's next plan, and attacks stay blocked for a while. In T85-T87 our own attacks into burrowed
+# Roaches, Crawler cover or the Zerg army cost 35-70 army supply before Astra ended them 30-50 s later.
+PULLOUT_WINDOW = 15
+PULLOUT_SHARE = 0.25
+PULLOUT_MIN_SUPPLY = 12
+PULLOUT_HOLD = 30
 GAS_THROTTLE_ON = 300
 GAS_THROTTLE_OFF = 150
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
@@ -160,6 +167,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_early_defense = -1000
         self._last_scout_scan = -1000
         self._recall_until = -1000
+        self._pullout_until = -1000
+        self._army_supply_by_tag = {}
+        self._attack_deaths = deque()  # (game seconds, supply) of combat units lost while attacking
 
     # ---- counts and forecasts -------------------------------------------------
 
@@ -386,6 +396,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         army = self._combat_units()
         if posture == "attack" and self.time < self._recall_until:
             return "base_under_attack"
+        if posture == "attack" and self.time < self._pullout_until:
+            return "attack_called_off"
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
             floor = max(10, attack_floor(self.contract, 0, self.supply_used))
@@ -648,9 +660,40 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._man_bunkers()
         self._repair()
         self._clear_changelings()
+        self._pull_out()
         self._recall()
         self._issue_army_intent()
         self._maintain_scouts_and_detection()
+
+    async def on_unit_destroyed(self, unit_tag):
+        await super().on_unit_destroyed(unit_tag)
+        supply = self._army_supply_by_tag.pop(unit_tag, None)
+        if supply and self.army_intent == "attack":
+            self._attack_deaths.append((self.time, supply))
+
+    def _pull_out(self):
+        """Against CheatMoney and stronger: call off an attack that is losing the army fast."""
+        if not self.cautious_attacks:
+            return
+        army = self._combat_units()
+        self._army_supply_by_tag = {u.tag: self.calculate_supply_cost(u.type_id) for u in army}
+        while self._attack_deaths and self._attack_deaths[0][0] < self.time - PULLOUT_WINDOW:
+            self._attack_deaths.popleft()
+        if self.army_intent != "attack" or not army or not self.townhalls:
+            return
+        lost = sum(supply for _, supply in self._attack_deaths)
+        alive = sum(self._army_supply_by_tag.values())
+        if lost < PULLOUT_MIN_SUPPLY or lost < PULLOUT_SHARE * (lost + alive):
+            return
+        distance = self.townhalls.closest_distance_to(army.center)
+        if distance < RECALL_DISTANCE:
+            return  # A fight at our own bases is a defense.
+        self._pullout_until = self.time + PULLOUT_HOLD
+        self._attack_deaths.clear()
+        self._set_army_intent("defend")
+        self._action_stats["attack_pullouts"] += 1
+        self.log("attack_pullout", game_loop=self.state.game_loop, lost_supply=lost, army_supply=alive,
+                 home_distance=round(distance, 1))
 
     def _recall(self):
         """Against CheatMoney and stronger: bring an attacking army home when a base is under real attack."""

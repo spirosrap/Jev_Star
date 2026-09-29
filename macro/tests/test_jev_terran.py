@@ -607,6 +607,64 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot.army_intent, "attack")
         self.assertNotEqual(self.bot._posture_reason("attack"), "base_under_attack")
 
+    async def pullout_world(self, marines, killed, army_at=(80, 80)):
+        army = [FakeTerranUnit(300 + i, U.MARINE, army_at) for i in range(marines)]
+        self.set_world([self.scv, *army], [self.cc])
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "attack"
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._pull_out()  # Learns the army.
+        for unit in army[:killed]:
+            await self.bot.on_unit_destroyed(unit.tag)
+        self.set_world([self.scv, *army[killed:]], [self.cc])
+        self.bot.state.game_loop = int(905 * 22.4)
+        return army[killed:]
+
+    async def test_an_attack_losing_a_quarter_of_the_army_is_called_off(self):
+        survivors = await self.pullout_world(40, 12)
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "defend")
+        self.assertEqual(self.bot._action_stats["attack_pullouts"], 1)
+        self.assertTrue(all(m.commands for m in survivors))
+        self.assertEqual(self.bot._posture_reason("attack"), "attack_called_off")
+        self.bot.state.game_loop = int(936 * 22.4)
+        self.assertNotEqual(self.bot._posture_reason("attack"), "attack_called_off")
+
+    async def test_no_pullout_for_small_losses_old_losses_home_fights_or_outside_cheatmoney(self):
+        await self.pullout_world(60, 12)  # 20 %
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.bot._attack_deaths.clear()
+        await self.pullout_world(30, 11)  # Under 12 supply.
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.bot._attack_deaths.clear()
+        await self.pullout_world(40, 12)
+        self.bot.state.game_loop = int(921 * 22.4)  # Losses older than 15 s.
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.bot._attack_deaths.clear()
+        await self.pullout_world(40, 12, army_at=(20, 20))  # At our own base.
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.bot._attack_deaths.clear()
+        await self.pullout_world(40, 12)
+        self.bot.cautious_attacks = False
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "attack")
+
+    async def test_losses_while_defending_do_not_count(self):
+        army = [FakeTerranUnit(300 + i, U.MARINE, (80, 80)) for i in range(40)]
+        self.set_world([self.scv, *army], [self.cc])
+        self.bot.cautious_attacks = True
+        self.bot.army_intent = "defend"
+        self.bot._pull_out()
+        for unit in army[:12]:
+            await self.bot.on_unit_destroyed(unit.tag)
+        self.bot.army_intent = "attack"
+        self.bot._pull_out()
+        self.assertEqual(self.bot.army_intent, "attack")
+
     async def test_map_without_enemy_start_aims_at_the_map_centre(self):
         # Zero Hour lists no other start location; code that reads enemy_start_locations[0] must still work.
         self.bot.game_info.start_locations = []
