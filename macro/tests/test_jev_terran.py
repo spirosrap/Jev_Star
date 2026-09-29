@@ -534,6 +534,26 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_2")
 
+    async def test_each_wave_is_logged_with_what_it_cost_both_sides(self):
+        marine = FakeTerranUnit(60, U.MARINE, (40, 40))
+        ling = FakeTerranUnit(90, U.ZERGLING, (12, 10))
+        ling.can_attack = True
+        self.set_world([self.scv, marine], [self.cc], [ling])
+        self.bot.cautious_attacks = True
+        self.bot.log = Mock()
+        self.bot.state.game_loop = int(600 * 22.4)
+        self.bot._counter_attack()  # The Zerg are at our base: a wave begins.
+        await self.bot.on_unit_destroyed(90)
+        await self.bot.on_unit_destroyed(60)
+        self.set_world([self.scv], [self.cc])
+        self.bot.state.game_loop = int(620 * 22.4)
+        self.bot._counter_attack()
+        events = {c.args[0]: c.kwargs for c in self.bot.log.call_args_list}
+        self.assertIn("wave_start", events)
+        over = events["wave_over"]
+        self.assertEqual((over["seconds"], over["enemy_supply_killed"], over["own_supply_lost"]), (20, 1, 1))
+        self.assertIsNone(self.bot._counter_until)  # Measurement only: no counter-attack from this.
+
     async def test_enemy_army_deaths_are_counted_as_losses(self):
         ling = FakeTerranUnit(90, U.ZERGLING, (50, 50))
         ling.can_attack = True
