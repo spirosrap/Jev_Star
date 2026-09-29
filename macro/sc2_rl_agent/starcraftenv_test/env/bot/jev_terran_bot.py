@@ -124,6 +124,10 @@ PUSH_WINDOW = 90
 # The push also goes when the Zerg have not attacked for this long: in T102 the army sat maxed at home with 4,800
 # minerals from 36:14 on, because the push waited for a wave that did not come.
 PUSH_IDLE = 60
+# A push has no time limit: it goes from the nearest known Zerg building to the next, and comes home only when a base
+# of ours is hit while the army is far, or the army has lost half of what it set out with. With a 90 s window and a
+# far target the army spent most of each push walking (T103, and the 12:29 push in T104).
+PUSH_HALF = 0.5
 ZERG_BASES = {U.HATCHERY, U.LAIR, U.HIVE}
 # Against CheatMoney and stronger, the bot keeps Siege Tanks coming itself instead of leaving it to Jev's and the
 # planner's orders: four Factories with Tech Labs from 6:00, and every free Tech Lab Factory trains a Tank whenever it
@@ -221,6 +225,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_counter = -1000
         self._push_active = False
         self._last_threat_seen = 0.0
+        self._push_start_army = 0
         self._own_army_supply = {}  # tag -> supply of our combat units, to count what each wave costs us
         self._wave = None  # the Zerg attack now under way: when it began and what each side has lost
 
@@ -758,8 +763,16 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             threat = sum(self.calculate_supply_cost(e.type_id) for e in threats)
             far = (army and self.townhalls and threat >= COUNTER_RECALL_THREAT and army.center.distance_to(
                 min(self.townhalls, key=lambda b: threats.closest_distance_to(b))) >= COUNTER_RECALL_DISTANCE)
-            if self.time >= self._counter_until or not army or far:
-                self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
+            halved = self._ready_army_supply() < PUSH_HALF * self._push_start_army
+            if not army or far or halved:
+                self._end_counter("base_attacked" if far else "army_halved" if army else "army_gone")
+            elif self._army_target_id not in {m["id"] for m in self._known_enemy_buildings.values()}:
+                # That building is gone (or was never known): on to the nearest one left.
+                target = self._push_target(army)
+                if target != self._army_target_id:
+                    self._army_target_id = target
+                    self._issue_army_intent(include_busy=True)
+                    self.log("push_next_target", game_loop=self.state.game_loop, target_id=target)
             return
         killed = sum(supply for _, supply in self._enemy_losses)
         emergency = self._emergency()
@@ -769,16 +782,17 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if ((killed < COUNTER_ENEMY_LOSS and not quiet) or emergency or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
-        if not (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
-                and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades):
+        # After a beaten wave the push needs a bank to rebuild from; when the Zerg have been quiet for a minute it
+        # goes without one, so a mined-out standoff does not end in a stalemate with the army at home (T102).
+        if not (self.supply_used >= PUSH_MIN_SUPPLY and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades
+                and (quiet or self.minerals >= PUSH_MIN_MINERALS)):
             # The army leaves home only for the push: smaller counter-attacks cost far more than they gained
             # (T93: 33 army supply for no kill; T98: 23 and six Tanks, then a wave caught the army on its way home).
             return
         self._push_active = True
-        bases = [m for m in self._known_enemy_buildings.values()
-                 if m["type"] in {b.name for b in ZERG_BASES} and self._attack_allowed(m["position"])]
-        target = min(bases, key=lambda m: army.center.distance_to(Point2(m["position"])))["id"] if bases else None
-        self._counter_until = self.time + (PUSH_WINDOW if self._push_active else COUNTER_WINDOW)
+        self._push_start_army = self._ready_army_supply()
+        target = self._push_target(army)
+        self._counter_until = math.inf  # Until the army comes home; see above.
         self._last_counter = self.time
         self._enemy_losses.clear()
         self.army_intent = "attack"
@@ -787,6 +801,13 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._action_stats["siege_pushes" if self._push_active else "counter_attacks"] += 1
         self.log("counter_attack", game_loop=self.state.game_loop, push=self._push_active, enemy_supply_killed=killed,
                  army_supply=self._ready_army_supply(), target_id=target)
+
+    def _push_target(self, army):
+        """The nearest known Zerg building, or the Zerg start when none is known."""
+        known = list(self._known_enemy_buildings.values())
+        if not known:
+            return "enemy_start"
+        return min(known, key=lambda m: army.center.distance_to(Point2(m["position"])))["id"]
 
     def _record_waves(self, army):
         """Log each Zerg attack on our bases with what it cost both sides; measurement only."""

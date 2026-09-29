@@ -539,11 +539,26 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.bot._push_active)
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_1")
-        self.bot.state.game_loop = int(991 * 22.4)  # The 90 s push is over.
+
+    async def test_the_push_goes_building_to_building_until_the_army_is_halved(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.assertEqual(self.bot._army_target_id, "enemy_2")  # The nearest known building to the army.
+        del self.bot._known_enemy_buildings[2]  # Destroyed.
+        self.bot.state.game_loop = int(1100 * 22.4)  # Long past the old 90 s window.
+        self.bot._counter_attack()
+        self.assertTrue(self.bot._push_active)
+        self.assertNotEqual(self.bot._army_target_id, "enemy_2")
+        self.bot._ready_army_supply = Mock(return_value=54)  # Under half of the 110 it set out with.
         self.bot._counter_attack()
         self.assertFalse(self.bot._push_active)
-        self.bot._army_target_id = "enemy_1"
-        self.assertEqual(self.bot._attack_position()[0], "enemy_2")
+        self.assertEqual(self.bot.army_intent, "defend")
+
+    async def test_a_quiet_minute_pushes_without_a_bank(self):
+        self.counter_world(killed=0, supply_used=190, minerals=100, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._last_threat_seen = 839.0
+        self.bot._counter_attack()
+        self.assertTrue(self.bot._push_active)
 
     async def test_each_wave_is_logged_with_what_it_cost_both_sides(self):
         marine = FakeTerranUnit(60, U.MARINE, (40, 40))
