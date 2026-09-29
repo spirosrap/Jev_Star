@@ -514,7 +514,7 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
         self.counter_world()
-        self.bot._ready_army_supply = Mock(return_value=99)
+        self.bot._ready_army_supply = Mock(return_value=69)
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
         self.counter_world()
@@ -533,6 +533,25 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.bot._push_active)
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_2")
+
+    async def test_marines_in_bunkers_count_for_the_counter_attack(self):
+        self.counter_world()
+        bunker = FakeTerranUnit(95, U.BUNKER, (20, 20))
+        bunker.cargo_used = 4
+        self.set_world(list(self.bot.units), [self.cc, bunker])
+        self.bot._ready_army_supply = Mock(return_value=66)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+
+    async def test_each_wave_logs_what_it_cost_the_zerg(self):
+        self.counter_world(killed=12)
+        self.bot.log = Mock()
+        self.bot._emergency = Mock(return_value=True)
+        self.bot._counter_attack()
+        self.bot._emergency = Mock(return_value=False)
+        self.bot._counter_attack()
+        call = [c for c in self.bot.log.call_args_list if c.args[0] == "wave_over"][0]
+        self.assertEqual((call.kwargs["enemy_supply_killed"], call.kwargs["counter_army_supply"]), (12, 110))
 
     async def test_enemy_army_deaths_are_counted_as_losses(self):
         ling = FakeTerranUnit(90, U.ZERGLING, (50, 50))
