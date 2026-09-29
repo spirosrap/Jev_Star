@@ -495,32 +495,31 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._ready_army_supply = Mock(return_value=110)
         self.bot._enemy_losses.extend([(890.0, killed)])
 
-    async def test_a_beaten_wave_starts_a_timed_counter_attack_on_an_exposed_base(self):
-        self.counter_world()
-        self.bot._counter_attack()
-        self.assertEqual((self.bot.army_intent, self.bot._army_target_id), ("attack", "enemy_2"))
-        self.assertFalse(self.bot._push_active)
-        self.assertEqual(self.bot._posture_reason("defend"), "counter_attack_under_way")
-        self.bot.state.game_loop = int(946 * 22.4)  # The 45 s window is over.
+    async def test_without_push_conditions_a_beaten_wave_starts_no_attack(self):
+        self.counter_world()  # 150 supply, 500 minerals, no +2.
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
         self.assertIsNone(self.bot._counter_until)
-        self.bot._enemy_losses.extend([(945.0, 40)])
-        self.bot._counter_attack()
-        self.assertEqual(self.bot.army_intent, "defend")  # Not again within 120 s.
 
-    async def test_no_counter_attack_for_small_losses_or_a_small_army_or_outside_cheatmoney(self):
-        self.counter_world(killed=29)
+    async def test_no_push_for_small_losses_or_a_small_army_or_outside_cheatmoney(self):
+        maxed = dict(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.counter_world(killed=29, **maxed)
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
-        self.counter_world()
+        self.counter_world(**maxed)
         self.bot._ready_army_supply = Mock(return_value=99)
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
-        self.counter_world()
+        self.counter_world(**maxed)
         self.bot.cautious_attacks = False
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
+
+    async def test_planner_attacks_are_refused_against_cheatmoney(self):
+        self.counter_world()
+        self.assertEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
+        self.bot.cautious_attacks = False
+        self.assertNotEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
 
     async def test_maxed_with_a_bank_and_plus_two_the_push_may_attack_the_main(self):
         self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})

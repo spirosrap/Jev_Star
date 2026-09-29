@@ -433,6 +433,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     def _posture_reason(self, posture):
         if self._counter_until is not None:
             return "counter_attack_under_way"
+        if posture == "attack" and self.cautious_attacks:
+            # Against CheatMoney and stronger the army goes out only in the bot's own push, so the Tanks stay sieged
+            # at home between pushes: the planner's attack orders broke the defence at bad moments (T91 at 23:07,
+            # T98 at 13:25).
+            return "attacks_only_as_pushes"
         army = self._combat_units()
         if posture == "attack":
             retarget = self._planned_target() != self._army_target_id
@@ -738,8 +743,12 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if (killed < COUNTER_ENEMY_LOSS or self._emergency() or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
-        self._push_active = (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
-                             and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades)
+        if not (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
+                and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades):
+            # The army leaves home only for the push: smaller counter-attacks cost far more than they gained
+            # (T93: 33 army supply for no kill; T98: 23 and six Tanks, then a wave caught the army on its way home).
+            return
+        self._push_active = True
         bases = [m for m in self._known_enemy_buildings.values()
                  if m["type"] in {b.name for b in ZERG_BASES} and self._attack_allowed(m["position"])]
         target = min(bases, key=lambda m: army.center.distance_to(Point2(m["position"])))["id"] if bases else None
