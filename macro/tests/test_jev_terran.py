@@ -556,6 +556,41 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_2")
 
+    async def test_push_comes_home_when_the_army_at_the_attacked_base_is_smaller_than_the_wave(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.assertTrue(self.bot._push_active)
+        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: {U.ROACH: 2, U.MARAUDER: 2}.get(kind, 1))
+        roaches = []
+        for tag in range(90, 95):  # 10 supply of Roaches at the base.
+            roach = FakeTerranUnit(tag, U.ROACH, (14, 10))
+            roach.can_attack = True
+            roaches.append(roach)
+        # Like T109 at 18:18: reinforcements at home and the push far away put the army's centre near the base.
+        home = [FakeTerranUnit(60 + i, U.MARINE, (12, 12)) for i in range(4)]
+        away = [FakeTerranUnit(70 + i, U.MARINE, (40, 40)) for i in range(6)]  # Centre 27 from the base.
+        self.set_world([self.scv] + home + away, [self.cc], roaches)
+        self.bot.state.game_loop = int(910 * 22.4)
+        self.bot._counter_attack()
+        self.assertFalse(self.bot._push_active)
+        self.assertEqual(self.bot.army_intent, "defend")
+
+    async def test_push_goes_on_while_the_army_at_home_outnumbers_the_wave(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: {U.ROACH: 2, U.MARAUDER: 2}.get(kind, 1))
+        roaches = []
+        for tag in range(90, 95):
+            roach = FakeTerranUnit(tag, U.ROACH, (14, 10))
+            roach.can_attack = True
+            roaches.append(roach)
+        home = [FakeTerranUnit(60 + i, U.MARAUDER, (12, 12)) for i in range(6)]  # 12 supply.
+        away = [FakeTerranUnit(70 + i, U.MARINE, (90, 90)) for i in range(30)]
+        self.set_world([self.scv] + home + away, [self.cc], roaches)
+        self.bot.state.game_loop = int(910 * 22.4)
+        self.bot._counter_attack()
+        self.assertTrue(self.bot._push_active)
+
     async def test_each_wave_is_logged_with_what_it_cost_both_sides(self):
         marine = FakeTerranUnit(60, U.MARINE, (40, 40))
         ling = FakeTerranUnit(90, U.ZERGLING, (12, 10))

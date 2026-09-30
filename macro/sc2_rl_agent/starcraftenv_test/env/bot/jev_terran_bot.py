@@ -783,8 +783,15 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if self._counter_until is not None:
             threats = self._threat_units()
             threat = sum(self.calculate_supply_cost(e.type_id) for e in threats)
-            far = (army and self.townhalls and threat >= COUNTER_RECALL_THREAT and army.center.distance_to(
-                min(self.townhalls, key=lambda b: threats.closest_distance_to(b))) >= COUNTER_RECALL_DISTANCE)
+            far = False
+            if army and self.townhalls and threat >= COUNTER_RECALL_THREAT:
+                # Come home when the army at the attacked base is smaller than the wave. The army's centre does not
+                # tell: in T109 reinforcements at home and the push near the Zerg put it 30 from the base, so the
+                # push went on through an 18 s wave that cost 43 army supply to 29, and two bases fell after it.
+                base = min(self.townhalls, key=lambda b: threats.closest_distance_to(b))
+                near = army.closer_than(COUNTER_RECALL_DISTANCE, base)
+                home = sum(self.calculate_supply_cost(u.type_id) for u in near)
+                far = home < threat
             if self.time >= self._counter_until or not army or far:
                 self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
             return
