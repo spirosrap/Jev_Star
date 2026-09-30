@@ -23,7 +23,7 @@ from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, 
 from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import policy_reason
 from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_terran_bot import HierarchicalTerranBot
-from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import JevTerranBot
+from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import GHOST_CAP, JevTerranBot
 
 
 def terran_plan(**changes):
@@ -676,6 +676,61 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._last_tank_check = -1000
         await self.bot._keep_tanks_coming()
         factory.train.assert_not_called()  # Only against CheatMoney and stronger.
+
+    def caster_world(self, enemies):
+        rax = FakeTerranUnit(91, U.BARRACKS, (44, 40))
+        rax.has_add_on = rax.has_techlab = True
+        self.set_world([self.scv], [self.cc, rax], enemies)
+        self.abilities[rax.tag] = {TRAIN_INFO[U.BARRACKS][U.GHOST]["ability"]}
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._build_one = AsyncMock()
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._count_with_pending = Mock(return_value=0)
+        return rax
+
+    async def test_ghosts_come_once_infestors_or_vipers_are_seen(self):
+        rax = self.caster_world([])
+        await self.bot._refresh_abilities()
+        await self.bot._answer_casters()
+        self.bot._build_one.assert_not_awaited()  # No casters seen yet.
+        rax = self.caster_world([FakeTerranUnit(80, U.INFESTOR, (70, 70))])
+        await self.bot._refresh_abilities()
+        self.bot._last_caster_response = -1000
+        await self.bot._answer_casters()
+        self.bot._build_one.assert_awaited_once_with(self.bot.empty_action, U.GHOSTACADEMY)
+        rax.train.assert_called_once_with(U.GHOST)
+        self.bot.cautious_attacks = False  # Only against CheatMoney and stronger.
+        self.bot._casters_since = None
+        self.bot._last_caster_response = -1000
+        rax.train.reset_mock()
+        await self.bot._answer_casters()
+        rax.train.assert_not_called()
+
+    async def test_no_ghosts_beyond_the_cap(self):
+        rax = self.caster_world([FakeTerranUnit(80, U.VIPER, (70, 70))])
+        self.bot._count_with_pending = Mock(side_effect=lambda kind: GHOST_CAP if kind == U.GHOST else 1)
+        await self.bot._refresh_abilities()
+        await self.bot._answer_casters()
+        rax.train.assert_not_called()
+        self.bot._build_one.assert_not_awaited()  # The Academy is there.
+
+    async def test_ghosts_emp_the_densest_group_of_casters_once(self):
+        ghost, tired = FakeTerranUnit(60, U.GHOST, (30, 30)), FakeTerranUnit(61, U.GHOST, (30, 31))
+        ghost.energy, tired.energy = 75, 74
+        pair = [FakeTerranUnit(80, U.INFESTOR, (38, 30)), FakeTerranUnit(81, U.INFESTOR, (38.5, 30.5))]
+        lone = FakeTerranUnit(82, U.VIPER, (34, 30))  # Nearer, but alone.
+        far = FakeTerranUnit(83, U.INFESTOR, (60, 60))
+        self.set_world([self.scv, ghost, tired], [self.cc], pair + [lone, far])
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._emp_casters()
+        self.assertEqual(ghost.commands, [(A.EMP_EMP, pair[0].position)])
+        self.assertEqual(tired.commands, [])
+        ghost.commands.clear()
+        ghost.energy = 150
+        self.bot.unit_tags_received_action = set()
+        self.bot._emp_casters()
+        self.assertEqual(ghost.commands, [(A.EMP_EMP, lone.position)])  # The pair is drained: no second EMP there.
 
     async def test_no_extra_factory_before_six_minutes(self):
         self.early_world(300)

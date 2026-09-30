@@ -70,6 +70,16 @@ BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines
 AIR_TECH = {U.CORRUPTOR, U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
 VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
 AIR_STARPORTS = 2
+# Against CheatMoney and stronger, once Infestors or Vipers are seen, a Ghost Academy and up to GHOST_CAP Ghosts from
+# Tech Lab Barracks, and each Ghost with the energy EMPs the nearest group of them: EMP drains all their energy, so no
+# Fungal Growth, Neural Parasite, Abduct or Blinding Cloud. T109 and T110 were broken after 20:00 by armies with 6-9
+# Infestors and 2 Vipers (Infestors took our Tanks with Neural Parasite in T110).
+CASTERS = {U.INFESTOR, U.VIPER}
+GHOST_CAP = 6
+EMP_ENERGY = 75
+EMP_REACH = 13  # EMP range is 10; a Ghost walks the last cells itself
+EMP_RADIUS = 1.5
+EMP_REPEAT = 10  # seconds before a drained caster is worth another EMP
 MEDIVAC_FRONT = 8  # the bio units nearest the army's heading that Medivacs stay over
 MEDIVAC_SLACK = 6
 # Against CheatMoney and stronger, surplus minerals grow the bot into the map (T70-T73 sat on 3,000-17,000 unused
@@ -215,6 +225,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_bank_spend = -1000
         self._action_ids = {name: action for action, name in self.contract.actions.items()}
         self._air_threat_since = None
+        self._casters_since = None
+        self._last_caster_response = -1000
+        self._emp_until = {}  # enemy caster tag -> game time its energy is drained until
         self._broodlords_seen = 0
         self._last_air_response = -1000
         self._last_grow = -1000
@@ -738,6 +751,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
+        await self._answer_casters()
         self._spend_bank()
         self._resume_construction()
         self._deploy_units()
@@ -1049,6 +1063,64 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self.log("anti_air_vikings", game_loop=self.state.game_loop, trained=trained,
                      vikings=vikings + trained, target=target)
 
+    async def _answer_casters(self):
+        """Against CheatMoney and stronger: once Infestors or Vipers are seen, a Ghost Academy and Ghosts."""
+        if not self.cautious_attacks or self.time - self._last_caster_response < 1:
+            return
+        self._last_caster_response = self.time
+        seen = [e for e in self.enemy_units if e.type_id in CASTERS]
+        if seen and self._casters_since is None:
+            self._casters_since = self.time
+            self.log("caster_threat", game_loop=self.state.game_loop, types=sorted({e.type_id.name for e in seen}))
+        if self._casters_since is None:
+            return
+        # Not Jev's orders (Ghosts are not in its action list): keep their failures out of the feedback Jev reads.
+        failures = list(self.temp_failure_list)
+        try:
+            if (not self._count_with_pending(U.GHOSTACADEMY) and not self.already_pending(U.GHOSTACADEMY)
+                    and self.tech_requirement_progress(U.GHOSTACADEMY) == 1 and self.can_afford(U.GHOSTACADEMY)):
+                await self._build_one(self.empty_action, U.GHOSTACADEMY)
+                self._ghosts("build_ghostacademy")
+            ghosts = self._count_with_pending(U.GHOST)
+            for barracks in self._train_slots(U.GHOST):
+                if (ghosts >= GHOST_CAP or barracks.tag in self.unit_tags_received_action
+                        or not self.can_afford(U.GHOST)):
+                    break
+                barracks.train(U.GHOST)
+                ghosts += 1
+                self._ghosts("train_ghost")
+        finally:
+            self.temp_failure_list = failures
+
+    def _ghosts(self, what):
+        self._action_stats[f"ghosts_{what}"] += 1
+        self.log("answer_casters", game_loop=self.state.game_loop, what=what)
+
+    def _emp_casters(self):
+        """Each Ghost with the energy EMPs the visible Infestor or Viper with most undrained casters around it."""
+        casters = [e for e in self.enemy_units if e.type_id in CASTERS and e.is_visible
+                   and self._emp_until.get(e.tag, 0) <= self.time]
+        if not casters:
+            return
+        for ghost in self.units(U.GHOST).ready:
+            if ghost.energy < EMP_ENERGY or ghost.tag in self.unit_tags_received_action:
+                continue
+            near = [c for c in casters if ghost.distance_to(c) <= EMP_REACH]
+            if not near:
+                continue
+            target = max(near, key=lambda c: (sum(1 for o in casters if o.distance_to(c) <= EMP_RADIUS),
+                                              -ghost.distance_to(c)))
+            hit = [c for c in casters if c.distance_to(target) <= EMP_RADIUS]
+            ghost(A.EMP_EMP, target.position)
+            for caster in hit:
+                self._emp_until[caster.tag] = self.time + EMP_REPEAT
+            casters = [c for c in casters if c not in hit]
+            self._action_stats["ghost_emps"] += 1
+            self.log("ghost_emp", game_loop=self.state.game_loop, ghost_tag=ghost.tag,
+                     targets=[c.type_id.name for c in hit])
+            if not casters:
+                return
+
     def _spend_bank(self):
         """Queue army in every idle production slot while unspent minerals pile up."""
         if self.minerals < self.contract.bank_minerals or self.time - self._last_bank_spend < 1:
@@ -1164,6 +1236,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                          structure_tag=structure.tag, worker_tag=worker.tag)
 
     def _fast_micro(self):
+        self._emp_casters()
         self._dodge_banelings()
         self._scan_for_burrowed()
 
