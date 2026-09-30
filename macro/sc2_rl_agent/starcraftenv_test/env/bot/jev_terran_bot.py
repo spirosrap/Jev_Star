@@ -126,8 +126,8 @@ UPGRADES = tuple(UpgradeId[n] for n in (
     "TERRANVEHICLEWEAPONSLEVEL3", "PUNISHERGRENADES"))
 # Against CheatMoney and stronger, holding alone only delays the loss: the Zerg out-produce us, and the best result
 # so far is a stalemate tie. The Zerg army is weakest right after one of its waves dies against our defense, so then
-# the army counter-attacks the nearest known Zerg base for a short window and comes home. When we are maxed with a
-# bank and +2 weapons, that attack may also go into the Zerg main and crawler cover (a push to win).
+# the army counter-attacks the nearest known Zerg base for a short window and comes home. When we are maxed with
+# +2 weapons, that attack may also go into the Zerg main and crawler cover (a push to win).
 COUNTER_ENEMY_LOSS = 30  # enemy army supply killed within COUNTER_LOOKBACK seconds that counts as a beaten wave
 COUNTER_LOOKBACK = 45
 COUNTER_MIN_ARMY = 100
@@ -136,7 +136,6 @@ COUNTER_COOLDOWN = 120
 COUNTER_RECALL_THREAT = 8  # enemy army supply near a base that ends the window early
 COUNTER_RECALL_DISTANCE = 30
 PUSH_MIN_SUPPLY = 185
-PUSH_MIN_MINERALS = 1500
 PUSH_WINDOW = 90
 # The push also goes when the Zerg have not attacked for this long: in T102 the army sat maxed at home with 4,800
 # minerals from 36:14 on, because the push waited for a wave that did not come.
@@ -802,8 +801,10 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if ((killed < COUNTER_ENEMY_LOSS and not quiet) or emergency or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
-        if not (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
-                and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades):
+        # No bank needed: a bot that spends as it goes never has one. In T112 it was maxed with 127 army at 15:15 and
+        # beat a wave 90 to 55 at 16:40 with 51 minerals banked, so the push waited until 24:27 and met 7 Ultralisks;
+        # the Cistern wins pushed at 12:29 (T104) and 14:07 (T111), before that army existed.
+        if not (self.supply_used >= PUSH_MIN_SUPPLY and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades):
             # The army leaves home only for the push: smaller counter-attacks cost far more than they gained
             # (T93: 33 army supply for no kill; T98: 23 and six Tanks, then a wave caught the army on its way home).
             return

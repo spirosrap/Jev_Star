@@ -527,6 +527,13 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
 
+    async def test_maxed_with_plus_two_the_push_goes_after_a_beaten_wave_without_a_bank(self):
+        # T112 at 16:40: maxed, +2, a wave beaten 90 to 55, 51 minerals banked.
+        self.counter_world(supply_used=197, minerals=51, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.assertTrue(self.bot._push_active)
+
     async def test_planner_attacks_are_refused_against_cheatmoney(self):
         self.counter_world()
         self.assertEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
