@@ -776,6 +776,19 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._emp_casters()
         self.assertEqual(ghost.commands, [(A.EMP_EMP, lone.position)])  # The pair is drained: no second EMP there.
 
+    async def test_after_air_tech_starports_and_vikings_come_before_more_tanks(self):
+        self.bot.cautious_attacks = True
+        self.assertFalse(self.bot._air_first())  # No air tech seen: Tanks as usual.
+        self.bot._air_threat_since = 800.0
+        self.assertTrue(self.bot._air_first())  # No Starport yet.
+        starports = [FakeTerranUnit(70 + i, U.STARPORT, (30, 30 + 4 * i)) for i in range(2)]
+        vikings = [FakeTerranUnit(80 + i, U.VIKINGFIGHTER, (20, 20)) for i in range(6)]
+        self.set_world([self.scv, *vikings], [self.cc, *starports])
+        self.assertFalse(self.bot._air_first())  # Two Starports and six Vikings: Tanks again.
+        self.bot.cautious_attacks = False
+        self.bot.structures = Units([self.cc], self.bot)
+        self.assertFalse(self.bot._air_first())  # Only against CheatMoney and stronger.
+
     async def test_no_extra_factory_before_six_minutes(self):
         self.early_world(300)
         self.bot.tech_requirement_progress = Mock(return_value=1)
