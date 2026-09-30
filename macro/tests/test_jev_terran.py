@@ -357,6 +357,17 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.game_info.placement_grid = grid
         self.bot.game_info.pathing_grid = SimpleNamespace(data_numpy=np.ones((200, 200), dtype=np.uint8))
 
+    async def test_production_is_placed_beyond_a_full_inner_base(self):
+        # Like Babylon's corner main: nothing free within 24 of the base, and the free ground is to the side.
+        self.use_open_grid()
+        grid = Mock()
+        grid.__getitem__ = Mock(side_effect=lambda pos: 1 if pos[1] >= 34 else 0)
+        self.bot.game_info.placement_grid = grid
+        self.bot.can_place = AsyncMock(side_effect=lambda kind, positions: [True] * len(positions))
+        position = await self.bot._placement(U.FACTORY)
+        self.assertIsNotNone(position)
+        self.assertGreaterEqual(position.y, 34)
+
     async def test_walled_in_spot_is_skipped_for_a_reachable_one(self):
         self.use_open_grid()
         self.bot.can_place = AsyncMock(side_effect=lambda kind, positions: [True] * len(positions))
