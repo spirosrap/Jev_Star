@@ -794,11 +794,14 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
             return
         killed = sum(supply for _, supply in self._enemy_losses)
-        emergency = self._emergency()
-        if emergency:
+        # A few Zerg units at a base are not a wave: in T113, maxed with 7-8 bases after 21:00, pokes of one to a few
+        # units every 10-15 s kept resetting the quiet clock and the army stood at home while the Zerg wished to
+        # surrender. Only an attack of COUNTER_RECALL_THREAT supply or more holds the push back.
+        attack = sum(self.calculate_supply_cost(e.type_id) for e in self._threat_units()) >= COUNTER_RECALL_THREAT
+        if attack:
             self._last_threat_seen = self.time
         quiet = self.time - self._last_threat_seen >= PUSH_IDLE
-        if ((killed < COUNTER_ENEMY_LOSS and not quiet) or emergency or not army or not self.townhalls
+        if ((killed < COUNTER_ENEMY_LOSS and not quiet) or attack or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
         # No bank needed: a bot that spends as it goes never has one. In T112 it was maxed with 127 army at 15:15 and

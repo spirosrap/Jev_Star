@@ -551,6 +551,32 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot.army_intent, "attack")
         self.assertTrue(self.bot._push_active)
 
+    async def test_small_pokes_do_not_hold_the_push_back(self):
+        # T113 after 21:00: a few Zerglings at a base every 10-15 s, the army maxed at home.
+        maxed = dict(supply_used=200, minerals=6000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.counter_world(killed=0, **maxed)
+        self.bot._last_threat_seen = 839.0  # The last real wave, 61 s ago.
+        lings = []
+        for tag in range(90, 93):
+            ling = FakeTerranUnit(tag, U.ZERGLING, (14, 10))
+            ling.can_attack = True
+            lings.append(ling)
+        self.set_world(list(self.bot.units), list(self.bot.structures), lings)
+        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: .5 if kind == U.ZERGLING else 1)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.bot._end_counter("test")
+        self.bot._last_counter = -1000
+        roaches = []
+        for tag in range(95, 100):
+            roach = FakeTerranUnit(tag, U.ROACH, (14, 10))
+            roach.can_attack = True
+            roaches.append(roach)
+        self.set_world(list(self.bot.units), list(self.bot.structures), roaches)
+        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: 2 if kind == U.ROACH else 1)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")  # 10 supply of Roaches is a wave.
+
     async def test_maxed_with_a_bank_and_plus_two_the_push_may_attack_the_main(self):
         self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
         self.bot._counter_attack()
