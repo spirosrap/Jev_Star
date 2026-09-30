@@ -27,6 +27,7 @@ def positive_float(value):
 # Against these opponents the army does not attack into the enemy main or bases covered by static defence.
 AI_BUILDS = ["RandomBuild", "Rush", "Timing", "Power", "Macro", "Air"]  # sc2.data.AIBuild names
 CAUTIOUS_DIFFICULTIES = {"CheatMoney", "CheatInsane"}
+SCRIPTED_DECISION_INTERVAL = 0.5  # game seconds between scripted decisions
 STOP_GRACE = 20  # seconds the bot has to save the replay after a stop request
 CAUTIOUS_PLANNER_TEXT = (
     "This opponent gathers extra resources and out-produces us, so we win by trading, not by attacking into it. "
@@ -61,6 +62,10 @@ def main():
     parser.add_argument("--sc2-path", type=Path)
     parser.add_argument("--config-file", type=Path, default=repo.parent / "config.md", help="Fallback for api: entry; TYPESAFE_API_KEY takes precedence")
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--policy", choices=["jev", "scripted"], default="jev",
+                        help="Who chooses the macro actions: Jev over the API, or fixed rules (no API key, no planner)")
+    parser.add_argument("--fast", action="store_true",
+                        help="Run faster than real time; only with --policy scripted (Jev needs real time)")
     parser.add_argument("--planner", choices=["none", "codex", "claude"], default="none",
                         help="Strategic planner: the Codex CLI (OpenAI models) or the Claude Code CLI, each with its saved login")
     parser.add_argument("--planner-model", default=None,
@@ -89,10 +94,16 @@ def main():
         parser.error("--max-planner-requests must be positive")
     if args.planner_model is None:
         args.planner_model = {"codex": "gpt-6-astra", "claude": "claude-opus-5-5"}.get(args.planner)
-    try:
-        key = load_api_key(args.config_file)
-    except ValueError as exc:
-        parser.error(str(exc))
+    if args.policy == "scripted" and args.planner != "none":
+        parser.error("--policy scripted runs without a planner")
+    if args.fast and args.policy != "scripted":
+        parser.error("--fast needs --policy scripted")
+    key = ""
+    if args.policy == "jev":
+        try:
+            key = load_api_key(args.config_file)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.sc2_path:
         os.environ["SC2PATH"] = str(args.sc2_path.resolve())
     elif not os.environ.get("SC2PATH") and Path(r"C:\game\StarCraft II").is_dir():
@@ -107,7 +118,7 @@ def main():
     if args.race == "Terran" and args.difficulty.startswith("Cheat"):
         # A mid-game attack at ~50 supply is a coin flip against the cheating AIs; wait for a big army.
         contract = dataclasses.replace(contract, min_attack_army=90, maxed_attack_army=60)
-    settings.update(realtime=True, player_race=args.race, output_dir=str(output), macro_contract=VERSION,
+    settings.update(realtime=not args.fast, player_race=args.race, output_dir=str(output), macro_contract=VERSION,
                     attack_floor={"min_ready_army": contract.min_attack_army,
                                   "at_190_supply": contract.maxed_attack_army or contract.min_attack_army})
     source_dir = Path(__file__).resolve().parent
@@ -119,7 +130,7 @@ def main():
         "env/bot/macro_execution.py", "env/bot/macro_navigation.py", "run_jev.py", "utils/run_logging.py",
         "utils/sc2_runtime.py", "utils/action_info.py")]
     atomic_json(output / "source-fingerprints.json", {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
-    log = RunLog(output, settings, secrets=(key,), console=sys.stdout)
+    log = RunLog(output, settings, secrets=(key,) if key else (), console=sys.stdout)
     client = planner_client = bot = None
     result_name, status = "interrupted", "interrupted"
     try:
@@ -143,8 +154,12 @@ def main():
                 game_map = maps.get(args.map)
                 log("environment", map_path=str(game_map.path), map_sha256=hashlib.sha256(game_map.data).hexdigest(),
                     macro_contract=VERSION)
-                client = JevClient(key, args.model, args.request_timeout, instructions=instructions[0],
-                                   plan_instructions=instructions[1])
+                if args.policy == "scripted":
+                    from .agent.scripted_policy import ScriptedClient
+                    client = ScriptedClient()
+                else:
+                    client = JevClient(key, args.model, args.request_timeout, instructions=instructions[0],
+                                       plan_instructions=instructions[1])
                 if args.planner == "codex":
                     from .agent.astra_planner import CodexPlannerClient
                     planner_client = CodexPlannerClient(output, args.codex_path, args.planner_model,
@@ -178,6 +193,11 @@ def main():
                     bot.mission.clear_bank()
                     if planner_client is not None:
                         planner_client.instructions += "\n\n" + bot.mission.planner_text()
+                if args.policy == "scripted":
+                    # Rules answer at once and need no wall-clock pacing: a decision every half game second,
+                    # whatever the game speed.
+                    bot.scheduler.clock = lambda: bot.time
+                    bot.scheduler.interval = SCRIPTED_DECISION_INTERVAL
                 log.phase = "launching"
                 bot.contract = contract
                 players = [Bot(Race[args.race], bot)]
@@ -200,7 +220,7 @@ def main():
 
                 try:
                     result = run_windowed_game(game_map, players,
-                                               realtime=True, game_time_limit=args.game_time_limit,
+                                               realtime=not args.fast, game_time_limit=args.game_time_limit,
                                                random_seed=args.seed, save_replay_as=str(output / "game.SC2Replay"),
                                                event_sink=log, on_interrupt=request_stop)
                 finally:
