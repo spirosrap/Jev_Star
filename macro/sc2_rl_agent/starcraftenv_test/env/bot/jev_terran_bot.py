@@ -43,6 +43,13 @@ MODE_HOLD = 3
 REJECTED_SPOT_SECONDS = 120
 # Placeable spots checked for a walking path from the builder, in one batched query.
 PATH_CHECKS = 16
+# Distances from each base, (other buildings, production), and turns away from the mineral line searched for spots.
+PLACEMENT_RINGS = {False: (8, 11, 14, 17, 20, 23), True: (10, 13, 16, 19, 22, 25)}
+PLACEMENT_TURNS = tuple(sorted({sign * k * math.pi / 8 for k in range(9) for sign in (1, -1)}, key=abs))
+# Filtered spots sent to the engine's placement query, nearest base first.
+PLACEMENT_QUERY = 800
+# Grid steps around each anchor, nearest first.
+ANCHOR_OFFSETS = sorted(((x, y) for x in range(-4, 5, 2) for y in range(-4, 5, 2)), key=lambda d: abs(d[0]) + abs(d[1]))
 # Buildings other than Supply Depots, Missile Turrets and Bunkers keep this many cells of walkable
 # terrain (no cliff, map edge or rocks) around their footprint and add-on slot, so units they make
 # are never trapped in a pocket between a building and the edge of the base.
@@ -565,13 +572,20 @@ class JevTerranBot(JevMacroBot, TerranObservation):
     def _overlaps(point, half, areas):
         return any(abs(point.x - c.x) < half + h and abs(point.y - c.y) < half + h for c, h in areas)
 
-    def _blocks_resources(self, position, kind):
-        resources = self.mineral_field | self.vespene_geyser
+    def _blocks_resources(self, position, kind, obstacles):
+        """obstacles: (resource points, townhall points) as (x, y) tuples, from _resource_obstacles."""
+        resources, halls = obstacles
         clearance = 3 if kind == U.MISSILETURRET else 4 if kind == U.BUNKER else 6
-        if any(r.distance_to(position) < clearance for r in resources.closer_than(12, position)):
+        x, y = position
+        if any(math.hypot(x - rx, y - ry) < clearance for rx, ry in resources):
             return True
         return (kind not in {U.MISSILETURRET, U.BUNKER}
-                and any(t.distance_to(position) < 7 for t in self.townhalls))
+                and any(math.hypot(x - hx, y - hy) < 7 for hx, hy in halls))
+
+    def _resource_obstacles(self):
+        # Plain tuples, built once per search: the search tests thousands of spots.
+        return ([tuple(r.position) for r in self.mineral_field | self.vespene_geyser],
+                [tuple(t.position) for t in self.townhalls])
 
     def _anchors(self, kind):
         bases = list(self.townhalls.ready) or list(self.townhalls)
@@ -592,9 +606,11 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 continue
             away = base.position.towards(mineral_center, -1)
             direction = math.atan2(away.y - base.position.y, away.x - base.position.x)
-            # Rings of points, nearest first, starting on the side away from the mineral line.
-            for distance in ((10, 14, 18) if kind in PRODUCTION else (8, 12, 16)):
-                for turn in (0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 2.6, -2.6):
+            # Rings of points, nearest first, starting on the side away from the mineral line and going all
+            # the way round. Babylon's corner main fills by 6:00 and the three rings to 18 found 2 spots at its
+            # natural in T108's layout (54 Factory orders, 1 Factory); out to 25 in 16 directions they find 32.
+            for distance in PLACEMENT_RINGS[kind in PRODUCTION]:
+                for turn in PLACEMENT_TURNS:
                     angle = direction + turn
                     anchors.append(base.position + Point2((math.cos(angle), math.sin(angle))) * distance)
         return anchors
@@ -646,10 +662,13 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         odd = kind not in {U.SUPPLYDEPOT, U.MISSILETURRET}  # 3x3 footprints centre on half cells.
         half = 1.5 if odd else 1
         reserved = self._reserved_areas()
+        obstacles = self._resource_obstacles()
+        production, edges = kind in PRODUCTION, kind not in EDGE_EXEMPT
         candidates, seen = [], set()
         for anchor in self._anchors(kind):
-            for dx, dy in sorted(((x, y) for x in range(-4, 5, 2) for y in range(-4, 5, 2)),
-                                 key=lambda d: abs(d[0]) + abs(d[1])):
+            if len(candidates) >= PLACEMENT_QUERY:
+                break
+            for dx, dy in ANCHOR_OFFSETS:
                 x, y = round(anchor.x) + dx, round(anchor.y) + dy
                 point = Point2((x + .5, y + .5)) if odd else Point2((x, y))
                 if point in seen:
@@ -660,20 +679,20 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                         continue
                 except (AssertionError, IndexError):  # Outside the map.
                     continue
-                if self._blocks_resources(point, kind) or self._overlaps(point, half, reserved):
+                if self._blocks_resources(point, kind, obstacles) or self._overlaps(point, half, reserved):
                     continue
-                if kind in PRODUCTION and self._overlaps(point.offset((2.5, -0.5)), 1, reserved):
+                if production and self._overlaps(point.offset((2.5, -0.5)), 1, reserved):
                     continue
-                if kind in PRODUCTION and self._blocks_resources(point.offset((2.5, -0.5)), kind):
+                if production and self._blocks_resources(point.offset((2.5, -0.5)), kind, obstacles):
                     continue
-                if kind not in EDGE_EXEMPT and not self._clear_of_edges(point, kind):
+                if edges and not self._clear_of_edges(point, kind):
                     continue
                 candidates.append(point)
         return candidates
 
     async def _placement(self, kind):
         # Two batched engine queries; per-spot queries stall the realtime game.
-        candidates = self._placement_candidates(kind)[:400]
+        candidates = self._placement_candidates(kind)[:PLACEMENT_QUERY]
         if not candidates:
             return None
         valid = [p for p, ok in zip(candidates, await self.can_place(kind, candidates)) if ok]
