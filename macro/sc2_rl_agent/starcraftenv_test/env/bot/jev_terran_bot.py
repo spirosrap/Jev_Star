@@ -63,6 +63,12 @@ BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines
 AIR_TECH = {U.CORRUPTOR, U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
 VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
 AIR_STARPORTS = 2
+# Against CheatMoney and stronger, Vikings from new Starports came too slowly: in T106 air tech was seen at 13:54 and
+# only two Vikings were out when Brood Lords and Vipers attacked at 17:01 (123 -> 26). So the air response also builds
+# Missile Turrets at every base at once (cheap, no gas, quick), two at a time, and lets Marines past their cap.
+AIR_TURRETS_PER_BASE = 2
+AIR_TURRETS_PENDING = 2
+AIR_MARINE_CAP = 80
 MEDIVAC_FRONT = 8  # the bio units nearest the army's heading that Medivacs stay over
 MEDIVAC_SLACK = 6
 # Against CheatMoney and stronger, surplus minerals grow the bot into the map (T70-T73 sat on 3,000-17,000 unused
@@ -315,7 +321,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         return "no_ready_producer_with_available_ability"
 
     def _over_cautious_cap(self, unit_type, extra=0):
-        cap = {U.MARINE: MARINE_CAP, U.HELLIONTANK: HELLBAT_CAP}.get(unit_type)
+        marines = AIR_MARINE_CAP if self._air_threat_since is not None else MARINE_CAP
+        cap = {U.MARINE: marines, U.HELLIONTANK: HELLBAT_CAP}.get(unit_type)
         return self.cautious_attacks and cap is not None and self._count_with_pending(unit_type) + extra >= cap
 
     def _train_producer(self, unit_type, ignore_resources=False):
@@ -1019,6 +1026,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if self._air_threat_since is None or self.time - self._last_air_response < 1:
             return
         self._last_air_response = self.time
+        if self.cautious_attacks:
+            await self._air_turrets()
         starports = self.structures(U.STARPORT).amount + self.already_pending(U.STARPORT)
         if (starports < AIR_STARPORTS and self.tech_requirement_progress(U.STARPORT) == 1
                 and self.can_afford(U.STARPORT)):
@@ -1042,6 +1051,21 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self._action_stats["anti_air_vikings"] += trained
             self.log("anti_air_vikings", game_loop=self.state.game_loop, trained=trained,
                      vikings=vikings + trained, target=target)
+
+    async def _air_turrets(self):
+        """Missile Turrets at the mineral lines, two per finished base, up to two building at a time."""
+        turrets = self._count_with_pending(U.MISSILETURRET)
+        wanted = min(AIR_TURRETS_PER_BASE * self.townhalls.ready.amount, self.contract.building_limits["MISSILETURRET"])
+        if (turrets >= wanted or self.already_pending(U.MISSILETURRET) >= AIR_TURRETS_PENDING
+                or not self.structures(U.ENGINEERINGBAY).ready or not self.can_afford(U.MISSILETURRET)):
+            return
+        failures = list(self.temp_failure_list)  # Not Jev's order: keep its failures out of Jev's feedback.
+        try:
+            await self._build_one(self._action_ids["BUILD MISSILETURRET"], U.MISSILETURRET)
+        finally:
+            self.temp_failure_list = failures
+        self._action_stats["air_turrets"] += 1
+        self.log("air_turret", game_loop=self.state.game_loop, turrets=turrets + 1, wanted=wanted)
 
     def _spend_bank(self):
         """Queue army in every idle production slot while unspent minerals pile up."""
