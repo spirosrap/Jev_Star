@@ -286,6 +286,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T128 | **CheatMoney** | **Victory** | 22:16 | 4.75M (Jev) + 0.84M (Opus) | **No Hellbats against CheatMoney: Factories and supply go to Tanks**; first win against the Power build (CheatMoney Zerg, **Ancient Cistern LE**, **Power build**, 60-minute limit; branch `cheatmoney-no-hellbats`, commit `cc33727`, on `main` with the SCV fix; planner Opus 5.5, medium; started by me) |
 | T129 | **CheatMoney** | Defeat (stopped at 22:03, lost on the board) | 22:03 | 4.69M (Jev) + 0.91M (Opus) | None: `main` with the SCV fix and no Hellbats back on Gresvan (CheatMoney Zerg, **Gresvan LE**, **Macro build**, 60-minute limit; `main` merge `33509fc`; planner Opus 5.5, medium; started by me) |
 | T130 | **CheatMoney** | **Victory** | 29:34 | 6.66M (Jev) + 1.26M (Opus) | None: `main` with the SCV fix and no Hellbats back on Dragon Scales (CheatMoney Zerg, **Dragon Scales LE**, **Macro build**, 60-minute limit; `main` commit `7c39475`; planner Opus 5.5, medium; started by me) |
+| T131 | **CheatMoney** | **Victory** | 24:08 | none (no Jev, no planner) | **Scripted policy: fixed rules in place of Jev, run faster than real time** (CheatMoney Zerg, **Ancient Cistern LE**, **Macro build**, 60-minute limit; branch `scripted-policy`, commit `a6e0567`, on `main` `4864616`; run from the command line with `--policy scripted --fast`) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -580,6 +581,8 @@ T129 took the merged `main` (the SCV fix and no Hellbats) back to Gresvan, where
 
 T130 took the same `main` back to Dragon Scales, where T119 lost at 19:43 when its bases fell. It won at 29:34, the first win on that map (the older code had a 56-minute tie there). The waves went even or our way (46 to 44 at 9:09, 63 to 34 at 11:38, 68 to 15 at 19:47, 43 to 27 at 25:29); the bot had 72 SCVs and 12 Tanks at 12:15 (T119: 66 SCVs, three Barracks), six bases at 15:20 and eight, maxed, at 24:24, and SCVs fled Banelings 17 times. Pushes went from 13:18 on. With `main` the map check against the Macro build now stands at five wins in six maps (Gresvan still lost).
 
+T131 was the first game without Jev or any LLM. `--policy scripted` replaces Jev's choices with fixed rules from the CheatMoney games (SCVs to 76, a Supply Depot whenever supply is forecast short, bases on a schedule, Barracks to 12, Tanks before infantry, Marines to 40, no Hellbats, no attack orders of its own); every other routine of the bot runs unchanged. It won on Ancient Cistern against the Macro build at 24:08. It had seven bases, 12 Barracks, four Factories and 14 Tanks at 14:00 and was maxed from about 12:00 (the mineral bank grew to 37,000 with no supply left to spend it on). `--fast` ran the game without the real-time limit, but only at about 1.2 times real time (24 game minutes in 20 wall minutes), so the bot's own work per step, not SC2, looks like the limit; that has to be found before batches of games are practical.
+
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
 In T22 the upgrades came on time (Engineering Bay 5:37, Armory 6:45), but the army never reached the attack size: CheatVision brought 19 Banelings before 10:00 on Babylon (17–20 in T20–T21 as well) and destroyed a mostly-Marine defense with one or two Siege Tanks at 9:00 and again at 13:30. The schedule now also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by 6:30, and four Widow Mines by 7:00, and for a Planetary Fortress at the most exposed base once Banelings are seen; sieged Tanks and burrowed Mines now count toward those numbers.
@@ -871,6 +874,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T128 | **CheatMoney** | **胜** | 22:16 | 475 万（Jev）+ 84 万（Opus） | **对 CheatMoney 不再出 Hellbat：Factory 和人口都给坦克**；首次战胜 Power 构建（CheatMoney Zerg，**Ancient Cistern LE**，**Power 构建**，60 分钟上限；分支 `cheatmoney-no-hellbats`，提交 `cc33727`，基于带 SCV 修复的 `main`；规划者 Opus 5.5，medium；由我启动） |
 | T129 | **CheatMoney** | 负（22:03 停止，场面已输） | 22:03 | 469 万（Jev）+ 91 万（Opus） | 无：带 SCV 修复和“不出 Hellbat”的 `main` 回到 Gresvan（CheatMoney Zerg，**Gresvan LE**，**Macro 构建**，60 分钟上限；`main` 合并 `33509fc`；规划者 Opus 5.5，medium；由我启动） |
 | T130 | **CheatMoney** | **胜** | 29:34 | 666 万（Jev）+ 126 万（Opus） | 无：带 SCV 修复和“不出 Hellbat”的 `main` 回到 Dragon Scales（CheatMoney Zerg，**Dragon Scales LE**，**Macro 构建**，60 分钟上限；`main` 提交 `7c39475`；规划者 Opus 5.5，medium；由我启动） |
+| T131 | **CheatMoney** | **胜** | 24:08 | 无（无 Jev、无规划者） | **脚本策略：用固定规则代替 Jev，并以快于实时的速度运行**（CheatMoney Zerg，**Ancient Cistern LE**，**Macro 构建**，60 分钟上限；分支 `scripted-policy`，提交 `a6e0567`，基于 `main` `4864616`；从命令行以 `--policy scripted --fast` 运行） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -1164,6 +1168,8 @@ T128 之前，逐一统计了 T114-T127 录像中我方每种单位的击杀。�
 T129 把合并后的 `main`（SCV 修复和不出 Hellbat）带回 Gresvan，T118 曾在这里 29:31 输掉。这次输得更早：我在 22:03 停止时只剩 20 个 SCV。经济一直撑到后期（12:13 有 72 个 SCV，18:22 有 73 个；SCV 逃开 Baneling 47 次），家门口的交战持平或占优（60 对 54、53 对 32、21 对 5），但推进以 281 换 121。第一次推进以 125 人口、19 辆坦克出发，14:24 在距我方最近基地 64 处遇到 20 个 Baneling、6 个 Ultralisk 和 Spine Crawler，全军覆没，以 123 换 75，19 辆坦克全部阵亡（Baneling 杀 27，Ultralisk 杀 12，我方坦克误伤 9）；第二次在 17:44、距我方基地 53 处以 103 换 28（Baneling 杀 33）。在 Gresvan 上，推进要走很远去撞 Zerg 准备好的 Baneling 防线，这两项改动都没有触及这一点。
 
 T130 把同样的 `main` 带回 Dragon Scales，T119 曾在这里因基地失守于 19:43 输掉。这局在 29:34 获胜，是该地图上的首胜（旧代码在这里打成 56 分钟平局）。几波交战持平或我方占优（9:09 46 对 44，11:38 63 对 34，19:47 68 对 15，25:29 43 对 27）；12:15 时 Bot 有 72 个 SCV 和 12 辆坦克（T119：66 个 SCV、三座 Barracks），15:20 有六个基地，24:24 以八个基地满人口，SCV 逃开 Baneling 17 次。推进从 13:18 开始。用 `main` 对阵 Macro 构建的地图检验现在是六张图赢五张（Gresvan 仍然失利）。
+
+T131 是第一局没有 Jev、也没有任何 LLM 的比赛。`--policy scripted` 用来自 CheatMoney 对局的固定规则代替 Jev 的选择（SCV 造到 76、预计人口不足时就建 Supply Depot、按时间表扩张、Barracks 到 12 座、先坦克后步兵、Marine 到 40、不出 Hellbat、自己不下进攻命令）；Bot 的其他流程全部不变。它在 Ancient Cistern 上对阵 Macro 构建，于 24:08 获胜。14:00 时有七个基地、12 座 Barracks、四座 Factory 和 14 辆坦克，大约从 12:00 起一直满人口（没有人口可花，矿物存款涨到 37000）。`--fast` 去掉了实时限制，但只快了约 1.2 倍（24 分钟游戏用了 20 分钟真实时间），看来瓶颈是 Bot 每一步自己的计算而不是 SC2；要能成批跑比赛，必须先找出这一点。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
