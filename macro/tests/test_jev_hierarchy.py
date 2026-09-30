@@ -238,6 +238,22 @@ class PlannerSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(task.cancelled())
         client.close.assert_awaited_once()
 
+    async def test_shutdown_after_a_stop_cancelled_the_request(self):
+        # A stopped game's event loop cancels the planner request in flight before shutdown runs.
+        pending = asyncio.Event()
+        client = SimpleNamespace(close=AsyncMock(), model="gpt-6-astra")
+        async def wait(*_): await pending.wait()
+        client.plan = wait
+        s = StrategicPlanner(client, Mock())
+        s.tick(0, {}, catalog())
+        await asyncio.sleep(0)
+        task = s.task
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        await s.close()  # Must not raise CancelledError.
+        client.close.assert_awaited_once()
+
     async def test_new_plan_clears_old_goal_event_and_urgent_threat_bypasses_window(self):
         now, events = [0.0], []
         client = SimpleNamespace(plan=AsyncMock(return_value={"plan": plan(), "usage": {}, "model": "astra"}),

@@ -615,6 +615,12 @@ class StrategicPlanner:
         if self.task is None or not self.task.done():
             return
         task, self.task = self.task, None
+        if task.cancelled():
+            # A stopped game's event loop cancels the request in flight; there is nothing to read from it.
+            self.stats["unconsumed_at_shutdown"] += 1
+            self.emit("planner_cancelled", request_id=self.request_id, game_loop=game_loop,
+                      reason="cancelled_by_stop", usage_known=False)
+            return
         now, game_time = self.clock(), game_loop / 22.4
         try:
             result, observation_loop, started, latency_ms, urgent_revision = task.result()
