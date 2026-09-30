@@ -789,6 +789,22 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.structures = Units([self.cc], self.bot)
         self.assertFalse(self.bot._air_first())  # Only against CheatMoney and stronger.
 
+    async def test_air_tech_brings_turrets_and_more_marines(self):
+        bay = FakeTerranUnit(80, U.ENGINEERINGBAY, (30, 30))
+        marines = [FakeTerranUnit(100 + i, U.MARINE) for i in range(40)]
+        self.set_world([self.scv, *marines], [self.cc, bay])
+        self.bot.cautious_attacks = True
+        self.bot._build_one = AsyncMock()
+        self.assertTrue(self.bot._over_cautious_cap(U.MARINE))  # The cap of 40 before air tech.
+        self.bot._air_threat_since = 800.0
+        self.assertFalse(self.bot._over_cautious_cap(U.MARINE))  # Up to 80 after it.
+        await self.bot._air_turrets()
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD MISSILETURRET"], U.MISSILETURRET)
+        self.bot._build_one.reset_mock()
+        self.bot.already_pending = Mock(side_effect=lambda kind: 2 if kind == U.MISSILETURRET else 0)
+        await self.bot._air_turrets()
+        self.bot._build_one.assert_not_awaited()  # Two already building.
+
     async def test_no_extra_factory_before_six_minutes(self):
         self.early_world(300)
         self.bot.tech_requirement_progress = Mock(return_value=1)
