@@ -200,6 +200,9 @@ def main():
                     # whatever the game speed.
                     bot.scheduler.clock = lambda: bot.time
                     bot.scheduler.interval = SCRIPTED_DECISION_INTERVAL
+                    # The request budget guards Jev's API bill; rules cost nothing. At two decisions a game second
+                    # the default 2,000 ran out at 18:05 in the first batch, and the bot then stopped deciding.
+                    bot.scheduler.max_requests = 10 ** 9
                 bot.game_step = args.game_step
                 log.phase = "launching"
                 bot.contract = contract
