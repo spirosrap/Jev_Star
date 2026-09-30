@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import signal
 from contextlib import suppress
 from functools import partial
 
@@ -48,8 +49,18 @@ def run_windowed_game(*args, **kwargs):
     # override to this invocation; no installed SDK or other process is modified.
     previous = sc2_main.SC2Process
     event_sink = kwargs.pop("event_sink", None)
-    if os.name == "nt":
-        sc2_main.SC2Process = partial(WindowedSC2Process, event_sink=event_sink)
+    on_interrupt = kwargs.pop("on_interrupt", None)
+    base = WindowedSC2Process if os.name == "nt" else SC2Process
+
+    class Process(base):
+        async def __aenter__(self):
+            controller = await super().__aenter__()
+            # The SDK's own SIGINT handler kills SC2 at once, so no replay is written; put ours back.
+            if on_interrupt is not None:
+                signal.signal(signal.SIGINT, on_interrupt)
+            return controller
+
+    sc2_main.SC2Process = partial(Process, event_sink=event_sink) if os.name == "nt" else Process
     try:
         return sc2_main.run_game(*args, **kwargs)
     finally:

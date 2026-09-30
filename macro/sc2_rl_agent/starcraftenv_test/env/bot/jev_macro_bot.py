@@ -38,6 +38,8 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
         self.action_dict = dict(self.contract.actions)
         self.empty_action = self.contract.empty_action
         self.output_dir = output_dir
+        # Set by the runner on the first interrupt: the next step saves the replay, then stops the game.
+        self.stop_requested = False
         self._owns_log = run_log is None
         self.log = run_log if run_log is not None else RunLog(output_dir)
         self.scheduler = DecisionScheduler(jev_client, self.log, decision_interval,
@@ -237,7 +239,21 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
         results = getattr(client, "_game_result", None) or {}
         return results.get(player_id)
 
+    async def _stop_if_requested(self):
+        """Save the replay before an interrupt ends the game: SC2 writes none when the run is cut off."""
+        if not self.stop_requested:
+            return
+        self.stop_requested = False
+        path = self.output_dir / "game.SC2Replay"
+        try:
+            await self.client.save_replay(str(path))
+            self.log("replay_saved_on_stop", game_loop=self.state.game_loop, path=path.name)
+        except Exception as exc:
+            self.log("replay_save_failed", game_loop=self.state.game_loop, error=type(exc).__name__)
+        raise KeyboardInterrupt
+
     async def on_step(self, iteration):
+        await self._stop_if_requested()
         try:
             await self._step(iteration)
         except ProtocolError as exc:

@@ -267,6 +267,7 @@ class HierarchicalMixin:
         self._completed_goals |= completed
 
     async def on_step(self, iteration):
+        await self._stop_if_requested()
         try:
             await self._hierarchical_step(iteration)
         except Exception as exc:

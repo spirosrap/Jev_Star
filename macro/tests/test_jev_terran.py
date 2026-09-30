@@ -284,6 +284,17 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.shutdown("test")
         self.directory.cleanup()
 
+    async def test_a_stop_request_saves_the_replay_then_interrupts(self):
+        self.bot.client.save_replay = AsyncMock()
+        self.bot.log = Mock()
+        await self.bot._stop_if_requested()  # Nothing requested: nothing happens.
+        self.bot.client.save_replay.assert_not_awaited()
+        self.bot.stop_requested = True
+        with self.assertRaises(KeyboardInterrupt):
+            await self.bot._stop_if_requested()
+        self.bot.client.save_replay.assert_awaited_once_with(str(self.bot.output_dir / "game.SC2Replay"))
+        self.assertFalse(self.bot.stop_requested)
+
     async def test_opening_mask(self):
         choices, blocked = await self.bot.available_actions()
         self.assertEqual(choices, {0: "TRAIN SCV", 69: "EMPTY ACTION"})

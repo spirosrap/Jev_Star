@@ -5,7 +5,9 @@ import asyncio
 import dataclasses
 import hashlib
 import os
+import signal
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +27,7 @@ def positive_float(value):
 # Against these opponents the army does not attack into the enemy main or bases covered by static defence.
 AI_BUILDS = ["RandomBuild", "Rush", "Timing", "Power", "Macro", "Air"]  # sc2.data.AIBuild names
 CAUTIOUS_DIFFICULTIES = {"CheatMoney", "CheatInsane"}
+STOP_GRACE = 20  # seconds the bot has to save the replay after a stop request
 CAUTIOUS_PLANNER_TEXT = (
     "This opponent gathers extra resources and out-produces us, so we win by trading, not by attacking into it. "
     "The army will not attack the enemy main (near enemy_start) or bases covered by Spine or Spore Crawlers; such "
@@ -183,10 +186,22 @@ def main():
                                             AIBuild[args.ai_build]))
                 # A campaign mission's enemies are run by its own scripts. A built-in computer would take over the
                 # enemy's slot, and its quitting would end the game as a Victory with no objective met.
-                result = run_windowed_game(game_map, players,
-                                           realtime=True, game_time_limit=args.game_time_limit,
-                                           random_seed=args.seed, save_replay_as=str(output / "game.SC2Replay"),
-                                           event_sink=log)
+                # The first interrupt (the panel's Stop) asks the bot to save the replay and stop at its next step;
+                # a second one, or none handled within STOP_GRACE seconds, interrupts at once as before.
+                def request_stop(signum, frame):
+                    bot.stop_requested = True
+                    signal.signal(signal.SIGINT, signal.default_int_handler)
+                    timer = threading.Timer(STOP_GRACE, os.kill, (os.getpid(), signal.SIGINT))
+                    timer.daemon = True
+                    timer.start()
+
+                try:
+                    result = run_windowed_game(game_map, players,
+                                               realtime=True, game_time_limit=args.game_time_limit,
+                                               random_seed=args.seed, save_replay_as=str(output / "game.SC2Replay"),
+                                               event_sink=log, on_interrupt=request_stop)
+                finally:
+                    signal.signal(signal.SIGINT, signal.default_int_handler)
                 result_name, status = result.name, "completed"
             except (Exception, KeyboardInterrupt) as exc:
                 log.fail(exc)
