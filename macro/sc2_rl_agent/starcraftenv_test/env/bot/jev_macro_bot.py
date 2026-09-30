@@ -40,6 +40,8 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
         self.output_dir = output_dir
         # Set by the runner on the first interrupt: the next step saves the replay, then stops the game.
         self.stop_requested = False
+        # Game frames between bot steps (4 = 5.6 steps a game second); fast batches may step less often.
+        self.game_step = 4
         self._owns_log = run_log is None
         self.log = run_log if run_log is not None else RunLog(output_dir)
         self.scheduler = DecisionScheduler(jev_client, self.log, decision_interval,
@@ -72,7 +74,7 @@ class JevMacroBot(MacroExecution, MacroNavigation, BotAI):
         self.temp_failure_list.append(f'Action failed: {self.action_dict[action]}, Reason: {reason}')
 
     async def on_start(self):
-        self.client.game_step = 4
+        self.client.game_step = self.game_step
         self._set_search_sites(self.expansion_locations_list)
         self._install_action_feedback()
         self.log("start", model=self.scheduler.client.model, race=self.contract.race, realtime=True,

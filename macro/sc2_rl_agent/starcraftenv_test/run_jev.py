@@ -66,6 +66,8 @@ def main():
                         help="Who chooses the macro actions: Jev over the API, or fixed rules (no API key, no planner)")
     parser.add_argument("--fast", action="store_true",
                         help="Run faster than real time; only with --policy scripted (Jev needs real time)")
+    parser.add_argument("--game-step", type=int, default=4,
+                        help="Game frames between bot steps; more is faster but reacts less often")
     parser.add_argument("--planner", choices=["none", "codex", "claude"], default="none",
                         help="Strategic planner: the Codex CLI (OpenAI models) or the Claude Code CLI, each with its saved login")
     parser.add_argument("--planner-model", default=None,
@@ -198,6 +200,7 @@ def main():
                     # whatever the game speed.
                     bot.scheduler.clock = lambda: bot.time
                     bot.scheduler.interval = SCRIPTED_DECISION_INTERVAL
+                bot.game_step = args.game_step
                 log.phase = "launching"
                 bot.contract = contract
                 players = [Bot(Race[args.race], bot)]

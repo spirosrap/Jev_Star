@@ -34,12 +34,13 @@ def environment():
     return env
 
 
-def play(index, spec, folder, minutes, difficulty):
+def play(index, spec, folder, minutes, difficulty, game_step):
     game_map, build = spec.split(":")
     out = folder / f"{index:02d}-{game_map.split()[0].lower()}-{build.lower()}"
     command = [str(PYTHON), "-m", "sc2_rl_agent.starcraftenv_test.run_jev", "--race", "Terran",
                "--map", game_map, "--opponent-race", "Zerg", "--difficulty", difficulty, "--ai-build", build,
-               "--game-time-limit", str(minutes * 60), "--policy", "scripted", "--fast", "--output-dir", str(out)]
+               "--game-time-limit", str(minutes * 60), "--policy", "scripted", "--fast", "--game-step", str(game_step),
+               "--output-dir", str(out)]
     started = time.time()
     with open(folder / f"{out.name}.log", "w") as log:
         subprocess.run(command, cwd=MACRO, env=environment(), stdout=log, stderr=subprocess.STDOUT)
@@ -58,12 +59,14 @@ def main():
     parser.add_argument("--parallel", type=int, default=3)
     parser.add_argument("--minutes", type=int, default=45, help="game minutes before a game counts as a tie")
     parser.add_argument("--difficulty", default="CheatMoney")
+    parser.add_argument("--game-step", type=int, default=4)
     parser.add_argument("--games", nargs="*", default=DEFAULT_GAMES, help="MAP:BUILD entries")
     args = parser.parse_args()
     folder = MACRO / "jev_runs" / f"batch-{args.name}"
     folder.mkdir(parents=True, exist_ok=False)
     with ThreadPoolExecutor(args.parallel) as pool:
-        rows = list(pool.map(lambda item: play(item[0], item[1], folder, args.minutes, args.difficulty),
+        rows = list(pool.map(lambda item: play(item[0], item[1], folder, args.minutes, args.difficulty,
+                                                  args.game_step),
                              enumerate(args.games, 1)))
     with open(folder / "results.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
