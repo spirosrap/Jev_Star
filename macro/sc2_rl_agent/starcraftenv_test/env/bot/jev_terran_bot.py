@@ -120,8 +120,11 @@ DEFENSE_UNSIEGE_RANGE = 22
 # 15:00 while we mostly had +1/+1. So Marines stop at a cap and the bank goes to Tanks, Marauders and Hellbats, and
 # two Engineering Bays and an Armory keep infantry and vehicle upgrades going.
 MARINE_CAP = 40
-CAUTIOUS_BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.HELLIONTANK, U.MARINE)
-HELLBAT_CAP = 16
+# No Hellbats against CheatMoney: they come from the Factories that make Tanks, and in the replays of T114-T127 they
+# killed 62 Zerg army supply for 450 of their own in the seven losses and 98 for 344 in the six wins, while Siege
+# Tanks killed 1,491 for 657 and 1,700 for 318 (52-65% of all Zerg army supply killed).
+CAUTIOUS_BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)
+HELLBAT_CAP = 0
 UPGRADE_INTERVAL = 2
 UPGRADE_BUILDINGS = ((U.ENGINEERINGBAY, 1, 300), (U.ENGINEERINGBAY, 2, 420), (U.ARMORY, 1, 480))  # kind, count, from
 UPGRADES = tuple(UpgradeId[n] for n in (
