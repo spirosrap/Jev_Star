@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MACRO = ROOT / "macro"
 PYTHON = ROOT / ".venvs" / "macro" / "bin" / "python"
+STAGGER = 20  # seconds between game starts in a batch
 DEFAULT_GAMES = [f"{m}:{b}" for m in ("Ancient Cistern LE", "Babylon LE", "Altitude LE", "Neohumanity LE",
                                          "Gresvan LE", "Dragon Scales LE") for b in ("Macro",)] + \
                 [f"Ancient Cistern LE:{b}" for b in ("Rush", "Timing", "Power", "Air")]
@@ -42,10 +43,18 @@ def play(index, spec, folder, minutes, difficulty, game_step):
                "--game-time-limit", str(minutes * 60), "--policy", "scripted", "--fast", "--game-step", str(game_step),
                "--output-dir", str(out)]
     started = time.time()
-    with open(folder / f"{out.name}.log", "w") as log:
-        subprocess.run(command, cwd=MACRO, env=environment(), stdout=log, stderr=subprocess.STDOUT)
-    summary = out / "summary.json"
-    data = json.loads(summary.read_text()) if summary.exists() else {}
+    # Several SC2s starting at once under Wine can miss the connection timeout: stagger starts, retry once.
+    time.sleep(STAGGER * (index % 16))
+    for attempt in range(2):
+        target = out if attempt == 0 else out.with_name(out.name + "-retry")
+        with open(folder / f"{target.name}.log", "w") as log:
+            subprocess.run(command[:-1] + [str(target)], cwd=MACRO, env=environment(), stdout=log,
+                           stderr=subprocess.STDOUT)
+        summary = target / "summary.json"
+        data = json.loads(summary.read_text()) if summary.exists() else {}
+        if data.get("game_seconds", 0) > 60:
+            break
+    out = target
     row = {"game": out.name, "map": game_map, "build": build, "result": data.get("result", "no summary"),
            "game_time": round(data.get("game_seconds", 0) / 60, 1), "wall_minutes": round((time.time() - started) / 60, 1)}
     print(f"{row['game']:40s} {row['result']:10s} game {row['game_time']:5.1f} min  wall {row['wall_minutes']:5.1f} min",
