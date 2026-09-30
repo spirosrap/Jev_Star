@@ -972,6 +972,48 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(miner.commands[0][1].distance_to(baneling.position), miner.distance_to(baneling))
         self.assertEqual(builder.commands, [])
 
+    async def test_miners_run_behind_the_command_center_and_stay_off_the_minerals(self):
+        # T126: a Baneling run-by at 11:00 killed 15 SCVs in the mineral line.
+        baneling = FakeTerranUnit(90, U.BANELING, (17, 10))  # 7 from the miner, beyond the 5-cell dodge.
+        miner = FakeTerranUnit(5, U.SCV, (14, 16))
+        idle = FakeTerranUnit(6, U.SCV, (40, 40))  # Far away: keeps working.
+        self.set_world([miner, idle], [self.cc], [baneling])
+        self.bot._fast_micro()
+        (kind, refuge), *_ = miner.commands
+        self.assertEqual(kind, "move")
+        self.assertLess(refuge.x, self.cc.position.x)  # The far side of the Command Center from the Baneling.
+        self.assertAlmostEqual(refuge.distance_to(self.cc.position), 6, places=5)
+        self.assertEqual(idle.commands, [])
+        self.assertEqual(self.bot._fleeing, {miner.tag})
+        # Out of range but not yet clear: the SCV stays off the minerals (worker distribution skips it).
+        miner.position = Point2((8, 11))  # 9 from the Baneling.
+        miner.commands.clear()
+        self.bot._fast_micro()
+        self.assertEqual(miner.commands, [])
+        self.assertIn(miner.tag, self.bot._fleeing)
+        # The Baneling is gone: back to work.
+        self.set_world([miner, idle], [self.cc], [])
+        self.bot._fast_micro()
+        self.assertEqual(self.bot._fleeing, set())
+
+    async def test_worker_distribution_skips_fleeing_scvs(self):
+        miner, other = FakeTerranUnit(5, U.SCV, (14, 16)), FakeTerranUnit(6, U.SCV, (14, 4))
+        self.set_world([miner, other], [self.cc])
+        self.bot._fleeing = {miner.tag}
+        seen = []
+        async def distribute(**_):
+            seen.append({w.tag for w in self.bot.workers})
+        self.bot.distribute_workers = distribute
+        for name in ("_early_defense", "_keep_upgrading", "_keep_tanks_coming", "_grow_into_map",
+                     "_answer_air_threat", "_answer_casters"):
+            setattr(self.bot, name, AsyncMock())
+        for name in ("_balance_gas", "_siege_at_front", "_call_down_mules", "_spend_bank", "_resume_construction",
+                     "_deploy_units", "_stim", "_man_bunkers", "_repair", "_clear_changelings", "_counter_attack",
+                     "_issue_army_intent", "_maintain_scouts_and_detection"):
+            setattr(self.bot, name, Mock())
+        await self.bot._maintain_local_behaviors()
+        self.assertEqual(seen, [{other.tag}])
+
     async def test_neighbouring_marines_spread_to_different_sides(self):
         baneling = FakeTerranUnit(90, U.BANELING, (20, 20))
         a, b = FakeTerranUnit(3, U.MARINE, (23, 20)), FakeTerranUnit(4, U.MARINE, (23, 20))

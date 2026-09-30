@@ -58,6 +58,12 @@ EDGE_EXEMPT = {U.SUPPLYDEPOT, U.MISSILETURRET, U.BUNKER}
 # Marines and SCVs this close to a Baneling step away from it.
 BANELING_DODGE_RANGE = 5
 BANELING_DODGE_STEP = 3
+# SCVs near Banelings leave the mineral line for the far side of their Command Center and stay off the minerals until
+# the Banelings are gone: stepping 3 away was not enough, and worker distribution sent them straight back. In T126
+# Banelings killed 17 SCVs before 15:00 (15 in one run-by at 11:00) and in T119 12; the economy never recovered.
+WORKER_FLEE_RANGE = 8
+WORKER_FLEE_DISTANCE = 6  # beyond the Command Center, on the side away from the Banelings
+WORKER_FLEE_CLEAR = 10  # SCVs go back to work once no Baneling is this close
 # Pull SCVs off gas while this much gas is banked and it is more than twice the minerals;
 # send them back once gas falls below the lower mark.
 # Unspent minerals above the contract's bank threshold go into army from idle production, down to this floor,
@@ -227,6 +233,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._casters_since = None
         self._last_caster_response = -1000
         self._emp_until = {}  # enemy caster tag -> game time its energy is drained until
+        self._fleeing = set()  # SCVs kept off the minerals while Banelings are near
         self._broodlords_seen = 0
         self._last_air_response = -1000
         self._last_grow = -1000
@@ -732,7 +739,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if not any(command.unit.type_id == U.SCV for command in self.actions):
             self._balance_gas()
             workers, gas_buildings = self.workers, self.gas_buildings
-            self.workers = workers.filter(lambda u: u.tag not in self._scouts)
+            self.workers = workers.filter(lambda u: u.tag not in self._scouts and u.tag not in self._fleeing)
             if self._gas_throttled:
                 # Otherwise worker distribution refills the Refineries every second.
                 self.gas_buildings = gas_buildings.filter(lambda g: False)
@@ -1241,8 +1248,35 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _fast_micro(self):
         self._emp_casters()
+        self._workers_flee_banelings()
         self._dodge_banelings()
         self._scan_for_burrowed()
+
+    def _workers_flee_banelings(self):
+        """SCVs near Banelings run behind their Command Center and stay off the minerals until the Banelings are gone."""
+        banelings = [e for e in self.enemy_units if e.type_id == U.BANELING and e.is_visible]
+        workers = {w.tag: w for w in self.workers}
+        self._fleeing = {tag for tag in self._fleeing if tag in workers and any(
+            workers[tag].distance_to(b) < WORKER_FLEE_CLEAR for b in banelings)}
+        if not banelings or not self.townhalls:
+            return
+        for worker in workers.values():
+            if (worker.tag in self._scouts or worker.is_constructing_scv or worker.is_repairing
+                    or worker.tag in self.unit_tags_received_action):
+                continue
+            near = [b for b in banelings if worker.distance_to(b) < WORKER_FLEE_RANGE]
+            if not near:
+                continue
+            hall = self.townhalls.closest_to(worker)
+            danger = Point2((sum(b.position.x for b in near) / len(near), sum(b.position.y for b in near) / len(near)))
+            if hall.distance_to(danger) < 1:
+                refuge = worker.position.towards(danger, -WORKER_FLEE_DISTANCE)
+            else:
+                refuge = hall.position.towards(danger, -WORKER_FLEE_DISTANCE)
+            worker.move(refuge)
+            if worker.tag not in self._fleeing:
+                self._fleeing.add(worker.tag)
+                self._action_stats["workers_fled_banelings"] += 1
 
     def _dodge_banelings(self):
         banelings = [e for e in self.enemy_units if e.type_id == U.BANELING and e.is_visible]
