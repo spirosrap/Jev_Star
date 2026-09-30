@@ -281,6 +281,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T123 | **CheatMoney** | Defeat (stopped at 21:29, lost on the board) | 21:29 | 4.88M (Jev) + 0.98M (Opus) | **The air response pays first each second but no longer holds Tanks back** (CheatMoney Zerg, **Ancient Cistern LE**, **Air build**, 60-minute limit; branch `cheatmoney-air-on-main`, commit `48c202d`; planner Opus 5.5, medium; started by me) |
 | T124 | **CheatMoney** | **Victory** | 18:33 | 3.62M (Jev) + 0.69M (Opus) | None: `main` against the Zerg **Rush build** (CheatMoney Zerg, **Ancient Cistern LE**, **Rush build**, 60-minute limit; `main` commit `26c81d0`, bot code as T114-T121; planner Opus 5.5, medium; started by me) |
 | T125 | **CheatMoney** | **Victory** | 17:18 | 3.46M (Jev) + 0.64M (Opus) | None: `main` against the Zerg **Timing build** (CheatMoney Zerg, **Ancient Cistern LE**, **Timing build**, 60-minute limit; `main` commit `5524c54`, bot code as T114-T124; planner Opus 5.5, medium; started by me) |
+| T126 | **CheatMoney** | Defeat (stopped at 19:12, lost on the board) | 19:12 | 4.20M (Jev) + 0.75M (Opus) | None: `main` against the Zerg **Power build** (CheatMoney Zerg, **Ancient Cistern LE**, **Power build**, 60-minute limit; `main` commit `39e014e`, bot code as T114-T125; planner Opus 5.5, medium; started by me) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -564,6 +565,8 @@ T123 kept T122's air response but ran it before the Tank routine each second ins
 T124 tried the next Zerg AI build, Rush, with `main` on Ancient Cistern and won at 18:33, the fastest CheatMoney win so far. The rush came at 3:54 and was small: 4 Zerg supply for 4 of ours (three Marines), with one Bunker up since before 3:03 and a second by 4:15. The waves after it cost the Zerg 12 and 33 supply for none of ours. The bot was maxed at 11:07 on four bases (40 Marines, 12 Tanks) and pushed at 11:32, 13:33, 15:33 and 17:34, each running its full 90 s; it had eight bases and 20 Tanks at 17:15. In the pushes it lost 112 army supply for 174, and 7 for 58 in the rest of the game.
 
 T125 played the Timing build with `main` on Ancient Cistern and won at 17:18, the fastest CheatMoney win so far. The timing attack came at 10:06 and was held, 50 Zerg supply for 41 of ours; the next wave, at 12:04, cost the Zerg 40 for none. The bot was maxed at 12:12 on four bases (40 Marines, 12 Tanks) and pushed at 12:02, 14:03 and 16:03, each running its full 90 s; it had six bases, 12 Barracks, 20 Tanks and five Ghosts at 15:14. The pushes traded 188 Zerg supply for 97 of ours, the rest of the game 112 for 52. Of the Zerg AI's builds on Ancient Cistern, `main` has now beaten Macro (T116), Rush (T124) and Timing, and lost to Air (T121).
+
+T126 played the last of the Zerg AI's builds, Power, with `main` on Ancient Cistern and lost: the army was gone at 19:06 and I stopped the game at 19:12 (11 SCVs). The first wave went to the Zerg (30 to 57, army 60 to 16); after it the bot traded well (63 to 33 at 12:08, 57 to 29 at 14:04, 62 to 55 at 16:13; 317 Zerg army supply for 245 of ours over the game), but it never reached 185 supply, so no push went. It stayed on three bases and four Barracks (the other Ancient Cistern games had six to eight bases and 9-12 Barracks by 15:00) and was worn down: Hydralisks, Banelings, Roaches, Ravagers and Infestors did most of the killing. Corruptors were seen at 13:43 but the first Viking came only at 17:04; the air did little damage in this game. Of the five builds on Ancient Cistern, `main` beat Macro, Rush and Timing and lost to Air and Power.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -851,6 +854,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T123 | **CheatMoney** | 负（21:29 停止，场面已输） | 21:29 | 488 万（Jev）+ 98 万（Opus） | **防空应对每秒先付费，但不再暂停坦克**（CheatMoney Zerg，**Ancient Cistern LE**，**Air 构建**，60 分钟上限；分支 `cheatmoney-air-on-main`，提交 `48c202d`；规划者 Opus 5.5，medium；由我启动） |
 | T124 | **CheatMoney** | **胜** | 18:33 | 362 万（Jev）+ 69 万（Opus） | 无：`main` 对阵 Zerg **Rush 构建**（CheatMoney Zerg，**Ancient Cistern LE**，**Rush 构建**，60 分钟上限；`main` 提交 `26c81d0`，Bot 代码同 T114-T121；规划者 Opus 5.5，medium；由我启动） |
 | T125 | **CheatMoney** | **胜** | 17:18 | 346 万（Jev）+ 64 万（Opus） | 无：`main` 对阵 Zerg **Timing 构建**（CheatMoney Zerg，**Ancient Cistern LE**，**Timing 构建**，60 分钟上限；`main` 提交 `5524c54`，Bot 代码同 T114-T124；规划者 Opus 5.5，medium；由我启动） |
+| T126 | **CheatMoney** | 负（19:12 停止，场面已输） | 19:12 | 420 万（Jev）+ 75 万（Opus） | 无：`main` 对阵 Zerg **Power 构建**（CheatMoney Zerg，**Ancient Cistern LE**，**Power 构建**，60 分钟上限；`main` 提交 `39e014e`，Bot 代码同 T114-T125；规划者 Opus 5.5，medium；由我启动） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
@@ -1134,6 +1138,8 @@ T123 保留 T122 的防空应对，但改为每秒在坦克流程之前运行，
 T124 用 `main` 在 Ancient Cistern 上尝试 Zerg AI 的下一种构建 Rush，于 18:33 获胜，是目前最快的 CheatMoney 胜利。Rush 在 3:54 到来，规模很小：Zerg 4 人口换我方 4（三个 Marine），3:03 前已有一座 Bunker，4:15 有两座。之后几波 Zerg 损失 12 和 33 人口，我方无损失。Bot 在 11:07 以四个基地满人口（40 个 Marine、12 辆坦克），在 11:32、13:33、15:33 和 17:34 推进，每次都打满 90 秒；17:15 有八个基地和 20 辆坦克。推进中以 112 换 Zerg 174，其余时间以 7 换 58。
 
 T125 用 `main` 在 Ancient Cistern 上对阵 Timing 构建，于 17:18 获胜，是目前最快的 CheatMoney 胜利。Timing 进攻在 10:06 到来并被守住，Zerg 50 人口换我方 41；12:04 的下一波 Zerg 损失 40，我方无损失。Bot 在 12:12 以四个基地满人口（40 个 Marine、12 辆坦克），在 12:02、14:03 和 16:03 推进，每次都打满 90 秒；15:14 有六个基地、12 座 Barracks、20 辆坦克和五个 Ghost。推进中以 97 换 Zerg 188，其余时间以 52 换 112。在 Ancient Cistern 上，`main` 已击败 Zerg AI 的 Macro（T116）、Rush（T124）和 Timing 构建，输给了 Air（T121）。
+
+T126 用 `main` 在 Ancient Cistern 上对阵 Zerg AI 的最后一种构建 Power，输了：部队在 19:06 全灭，我在 19:12 停止了游戏（11 个 SCV）。第一波 Zerg 占优（30 对 57，部队从 60 降到 16）；之后 Bot 交换得不错（12:08 63 对 33，14:04 57 对 29，16:13 62 对 55；全场 Zerg 317 人口部队换我方 245），但人口始终没到 185，所以一次推进都没有。它一直停在三个基地和四座 Barracks（其他 Ancient Cistern 对局到 15:00 有六到八个基地和 9-12 座 Barracks），被慢慢耗垮：大部分击杀来自 Hydralisk、Baneling、Roach、Ravager 和 Infestor。13:43 看到 Corruptor，但第一架 Viking 直到 17:04 才出现；这局空军造成的伤害不大。在 Ancient Cistern 的五种构建中，`main` 击败了 Macro、Rush 和 Timing，输给了 Air 和 Power。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
