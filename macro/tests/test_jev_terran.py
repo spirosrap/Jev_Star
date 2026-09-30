@@ -776,18 +776,20 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._emp_casters()
         self.assertEqual(ghost.commands, [(A.EMP_EMP, lone.position)])  # The pair is drained: no second EMP there.
 
-    async def test_after_air_tech_starports_and_vikings_come_before_more_tanks(self):
-        self.bot.cautious_attacks = True
-        self.assertFalse(self.bot._air_first())  # No air tech seen: Tanks as usual.
+    async def test_after_air_tech_the_air_response_pays_first_and_tanks_keep_coming(self):
+        calls = []
         self.bot._air_threat_since = 800.0
-        self.assertTrue(self.bot._air_first())  # No Starport yet.
-        starports = [FakeTerranUnit(70 + i, U.STARPORT, (30, 30 + 4 * i)) for i in range(2)]
-        vikings = [FakeTerranUnit(80 + i, U.VIKINGFIGHTER, (20, 20)) for i in range(6)]
-        self.set_world([self.scv, *vikings], [self.cc, *starports])
-        self.assertFalse(self.bot._air_first())  # Two Starports and six Vikings: Tanks again.
-        self.bot.cautious_attacks = False
-        self.bot.structures = Units([self.cc], self.bot)
-        self.assertFalse(self.bot._air_first())  # Only against CheatMoney and stronger.
+        self.bot.cautious_attacks = True
+        for name in ("_early_defense", "_keep_upgrading", "_answer_air_threat", "_keep_tanks_coming", "_grow_into_map",
+                     "_answer_casters"):
+            setattr(self.bot, name, AsyncMock(side_effect=lambda *a, n=name: calls.append(n)))
+        for name in ("_balance_gas", "_siege_at_front", "_call_down_mules", "_spend_bank", "_resume_construction",
+                     "_deploy_units", "_stim", "_man_bunkers", "_repair", "_clear_changelings", "_counter_attack",
+                     "_issue_army_intent", "_maintain_scouts_and_detection"):
+            setattr(self.bot, name, Mock())
+        self.bot.distribute_workers = AsyncMock()
+        await self.bot._maintain_local_behaviors()
+        self.assertLess(calls.index("_answer_air_threat"), calls.index("_keep_tanks_coming"))
 
     async def test_air_tech_brings_turrets_and_more_marines(self):
         bay = FakeTerranUnit(80, U.ENGINEERINGBAY, (30, 30))

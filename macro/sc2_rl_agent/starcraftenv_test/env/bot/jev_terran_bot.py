@@ -753,11 +753,13 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         if not self._early_defense_window():
             self._siege_at_front()
         await self._keep_upgrading()
-        if not self._air_first():
-            await self._keep_tanks_coming()
+        # The air response pays before the Tank routine each second (in T105 the Tank routine spent the few minerals
+        # first: no Starport until 16:01, no Viking ever), but no longer holds Tanks back: in T122 that pause left one
+        # Tank at 15:18 and the ground army lost to Infestors and Banelings while the Vikings beat the Brood Lords.
+        await self._answer_air_threat()
+        await self._keep_tanks_coming()
         await self._grow_into_map()
         self._call_down_mules()
-        await self._answer_air_threat()
         await self._answer_casters()
         self._spend_bank()
         self._resume_construction()
@@ -877,18 +879,6 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                     break  # One per check: the researcher stays "idle" until the next step.
         finally:
             self.temp_failure_list = failures
-
-    def _air_first(self):
-        """Against CheatMoney, once Zerg air tech is seen, Starports and the first Vikings come before more Tanks.
-
-        In T105 Corruptors were seen at 13:42, but the Tank routine, which runs first each second, kept spending the
-        few minerals there were: no Starport until 16:01, no Viking ever, and a Brood Lord, Mutalisk and Corruptor
-        attack took the army from 107 to 16 in 25 seconds."""
-        if not self.cautious_attacks or self._air_threat_since is None:
-            return False
-        starports = self.structures(U.STARPORT).amount + self.already_pending(U.STARPORT)
-        vikings = self._count_with_pending(U.VIKINGFIGHTER) + self.units(U.VIKINGASSAULT).amount
-        return starports < AIR_STARPORTS or vikings < VIKINGS_MIN
 
     async def _keep_tanks_coming(self):
         """Against CheatMoney and stronger: four Factories with Tech Labs, and a Tank from every free one."""
