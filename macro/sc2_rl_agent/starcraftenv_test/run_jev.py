@@ -188,12 +188,15 @@ def main():
                 # enemy's slot, and its quitting would end the game as a Victory with no objective met.
                 # The first interrupt (the panel's Stop) asks the bot to save the replay and stop at its next step;
                 # a second one, or none handled within STOP_GRACE seconds, interrupts at once as before.
+                timers = []
+
                 def request_stop(signum, frame):
                     bot.stop_requested = True
                     signal.signal(signal.SIGINT, signal.default_int_handler)
                     timer = threading.Timer(STOP_GRACE, os.kill, (os.getpid(), signal.SIGINT))
                     timer.daemon = True
                     timer.start()
+                    timers.append(timer)
 
                 try:
                     result = run_windowed_game(game_map, players,
@@ -201,6 +204,9 @@ def main():
                                                random_seed=args.seed, save_replay_as=str(output / "game.SC2Replay"),
                                                event_sink=log, on_interrupt=request_stop)
                 finally:
+                    # The game has stopped: the fallback must not interrupt the shutdown that writes the summary.
+                    for timer in timers:
+                        timer.cancel()
                     signal.signal(signal.SIGINT, signal.default_int_handler)
                 result_name, status = result.name, "completed"
             except (Exception, KeyboardInterrupt) as exc:

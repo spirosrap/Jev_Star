@@ -318,6 +318,9 @@ class DecisionScheduler:
         if self.closed:
             return
         self.closed = True
+        if self.task is not None and self.task.done() and self.task.cancelled():
+            # A stopped game's event loop cancels the request in flight; there is nothing to read from it.
+            self.task = None
         if self.task is not None and self.task.done():
             decision = self.poll(self.last_game_loop)
             if decision is not None:

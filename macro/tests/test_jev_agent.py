@@ -176,6 +176,17 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.client.http.is_closed)
         self.assertFalse(self.scheduler.ready)
 
+    async def test_shutdown_after_a_stop_cancelled_the_request(self):
+        # A stopped game's event loop cancels the request in flight before shutdown runs.
+        self.scheduler.submit(10, {}, self.choices)
+        task = self.scheduler.task
+        await asyncio.sleep(0)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        await self.scheduler.close()  # Must not raise CancelledError.
+        self.assertTrue(self.client.http.is_closed)
+
     async def test_payment_required_disables_retry_and_reports_bounded_billing_error(self):
         await self.client.close()
         self.client = JevClient("test-only", transport=httpx.MockTransport(
