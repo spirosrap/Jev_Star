@@ -262,7 +262,7 @@ All games: Terran against the built-in Zerg AI, Astra planning at `medium` effor
 | T104 | **CheatMoney** | **Victory** | 32:44 | 6.40M (Jev) + 1.12M (Opus) | None (CheatMoney Zerg, **Ancient Cistern LE**, **Macro build**, 60-minute limit; T103's code plus **Siege Tanks kept coming** (four Factories with Tech Labs, a Tank from each free one), branch `cheatmoney-hold`, commit `acdc673`; planner Opus 5.5, medium; **first win against CheatMoney**) |
 | T105 | **CheatMoney** | Defeat | 19:57 | 3.87M (Jev) + 0.91M (Opus) | None (CheatMoney Zerg, **Babylon LE**, **Macro build**, 60-minute limit; the T104 win code on `main`, merge `e0277cb`; planner Opus 5.5, medium) |
 | T106 | **CheatMoney** | Defeat | 21:57 | 4.21M (Jev) + 0.98M (Opus) | None (CheatMoney Zerg, **Babylon LE**, **Macro build**, 60-minute limit; the win code plus **Starports and Vikings before more Tanks once Zerg air tech is seen**, branch `cheatmoney-air`, commit `1d3f266`; planner Opus 5.5, medium) |
-| T107 | **CheatMoney** | Defeat | 14:37 | 2.73M (Jev) + 0.62M (Opus) | None (CheatMoney Zerg, **Babylon LE**, **Macro build**, 60-minute limit; the air fix plus **Missile Turrets and Marines up to 80 once Zerg air tech is seen**, branch `cheatmoney-air`, commit `72f6f82`; planner Opus 5.5, medium) |
+| T107 | **CheatMoney** | Defeat | 14:37 | 2.01M (Jev) + 0.57M (Opus) | None (CheatMoney Zerg, **Babylon LE**, **Macro build**, 60-minute limit; the air fix plus **Missile Turrets and Marines up to 80 once Zerg air tech is seen**, branch `cheatmoney-air`, commit `72f6f82`; planner Opus 5.5, medium) |
 
 Uncounted runs (stopped or excluded, not part of any result):
 
@@ -778,7 +778,7 @@ Zero Hour 中三支叛军小队会出现在基地外（Hard 难度下在任务�
 | T104 | **CheatMoney** | **胜** | 32:44 | 640 万（Jev）+ 112 万（Opus） | 无（CheatMoney Zerg，**Ancient Cistern LE**，**Macro 构建**，60 分钟上限；T103 代码加**持续生产 Siege Tank**（四座带 Tech Lab 的 Factory，每座空闲的都生产 Tank），分支 `cheatmoney-hold`，提交 `acdc673`；规划者 Opus 5.5，medium；**首次战胜 CheatMoney**） |
 | T105 | **CheatMoney** | 负 | 19:57 | 387 万（Jev）+ 91 万（Opus） | 无（CheatMoney Zerg，**Babylon LE**，**Macro 构建**，60 分钟上限；`main` 上 T104 的获胜代码，合并 `e0277cb`；规划者 Opus 5.5，medium） |
 | T106 | **CheatMoney** | 负 | 21:57 | 421 万（Jev）+ 98 万（Opus） | 无（CheatMoney Zerg，**Babylon LE**，**Macro 构建**，60 分钟上限；获胜代码加**看到 Zerg 空军科技后先建 Starport 和 Viking 再造 Tank**，分支 `cheatmoney-air`，提交 `1d3f266`；规划者 Opus 5.5，medium） |
-| T107 | **CheatMoney** | 负 | 14:37 | 273 万（Jev）+ 62 万（Opus） | 无（CheatMoney Zerg，**Babylon LE**，**Macro 构建**，60 分钟上限；防空修复加**看到 Zerg 空军科技后建 Missile Turret、Marine 上限提到 80**，分支 `cheatmoney-air`，提交 `72f6f82`；规划者 Opus 5.5，medium） |
+| T107 | **CheatMoney** | 负 | 14:37 | 201 万（Jev）+ 57 万（Opus） | 无（CheatMoney Zerg，**Babylon LE**，**Macro 构建**，60 分钟上限；防空修复加**看到 Zerg 空军科技后建 Missile Turret、Marine 上限提到 80**，分支 `cheatmoney-air`，提交 `72f6f82`；规划者 Opus 5.5，medium） |
 
 未计入的对局（中途停止或排除，不属于任何成绩）：
 
