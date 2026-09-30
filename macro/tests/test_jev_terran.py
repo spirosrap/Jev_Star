@@ -23,7 +23,7 @@ from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, 
 from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import policy_reason
 from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_terran_bot import HierarchicalTerranBot
-from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import GHOST_CAP, JevTerranBot
+from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import CAUTIOUS_BANK_ARMY, GHOST_CAP, JevTerranBot
 
 
 def terran_plan(**changes):
@@ -637,6 +637,14 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.bot._train_reason(U.MARINE))
         self.bot.cautious_attacks = True
         self.assertEqual(self.bot._train_reason(U.MARINE), "cap_against_banelings")
+
+    async def test_no_hellbats_against_cheatmoney(self):
+        self.set_world([self.scv], [self.cc])
+        self.bot._train_producer = Mock(return_value=self.cc)
+        self.assertIsNone(self.bot._train_reason(U.HELLIONTANK))  # Below CheatMoney, Hellbats as before.
+        self.bot.cautious_attacks = True
+        self.assertEqual(self.bot._train_reason(U.HELLIONTANK), "cap_against_banelings")
+        self.assertNotIn(U.HELLIONTANK, CAUTIOUS_BANK_ARMY)
 
     async def test_upgrade_buildings_then_one_upgrade_per_check(self):
         self.bot.cautious_attacks = True
