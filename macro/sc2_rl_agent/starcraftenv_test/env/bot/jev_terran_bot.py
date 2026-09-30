@@ -70,6 +70,16 @@ BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines
 AIR_TECH = {U.CORRUPTOR, U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
 VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
 AIR_STARPORTS = 2
+# Against CheatMoney and stronger, once Infestors or Vipers are seen, a Ghost Academy and up to GHOST_CAP Ghosts from
+# Tech Lab Barracks, and each Ghost with the energy EMPs the nearest group of them: EMP drains all their energy, so no
+# Fungal Growth, Neural Parasite, Abduct or Blinding Cloud. T109 and T110 were broken after 20:00 by armies with 6-9
+# Infestors and 2 Vipers (Infestors took our Tanks with Neural Parasite in T110).
+CASTERS = {U.INFESTOR, U.VIPER}
+GHOST_CAP = 6
+EMP_ENERGY = 75
+EMP_REACH = 13  # EMP range is 10; a Ghost walks the last cells itself
+EMP_RADIUS = 1.5
+EMP_REPEAT = 10  # seconds before a drained caster is worth another EMP
 MEDIVAC_FRONT = 8  # the bio units nearest the army's heading that Medivacs stay over
 MEDIVAC_SLACK = 6
 # Against CheatMoney and stronger, surplus minerals grow the bot into the map (T70-T73 sat on 3,000-17,000 unused
@@ -116,8 +126,8 @@ UPGRADES = tuple(UpgradeId[n] for n in (
     "TERRANVEHICLEWEAPONSLEVEL3", "PUNISHERGRENADES"))
 # Against CheatMoney and stronger, holding alone only delays the loss: the Zerg out-produce us, and the best result
 # so far is a stalemate tie. The Zerg army is weakest right after one of its waves dies against our defense, so then
-# the army counter-attacks the nearest known Zerg base for a short window and comes home. When we are maxed with a
-# bank and +2 weapons, that attack may also go into the Zerg main and crawler cover (a push to win).
+# the army counter-attacks the nearest known Zerg base for a short window and comes home. When we are maxed with
+# +2 weapons, that attack may also go into the Zerg main and crawler cover (a push to win).
 COUNTER_ENEMY_LOSS = 30  # enemy army supply killed within COUNTER_LOOKBACK seconds that counts as a beaten wave
 COUNTER_LOOKBACK = 45
 COUNTER_MIN_ARMY = 100
@@ -126,7 +136,6 @@ COUNTER_COOLDOWN = 120
 COUNTER_RECALL_THREAT = 8  # enemy army supply near a base that ends the window early
 COUNTER_RECALL_DISTANCE = 30
 PUSH_MIN_SUPPLY = 185
-PUSH_MIN_MINERALS = 1500
 PUSH_WINDOW = 90
 # The push also goes when the Zerg have not attacked for this long: in T102 the army sat maxed at home with 4,800
 # minerals from 36:14 on, because the push waited for a wave that did not come.
@@ -215,6 +224,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_bank_spend = -1000
         self._action_ids = {name: action for action, name in self.contract.actions.items()}
         self._air_threat_since = None
+        self._casters_since = None
+        self._last_caster_response = -1000
+        self._emp_until = {}  # enemy caster tag -> game time its energy is drained until
         self._broodlords_seen = 0
         self._last_air_response = -1000
         self._last_grow = -1000
@@ -738,6 +750,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
+        await self._answer_casters()
         self._spend_bank()
         self._resume_construction()
         self._deploy_units()
@@ -781,15 +794,20 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                 self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
             return
         killed = sum(supply for _, supply in self._enemy_losses)
-        emergency = self._emergency()
-        if emergency:
+        # A few Zerg units at a base are not a wave: in T113, maxed with 7-8 bases after 21:00, pokes of one to a few
+        # units every 10-15 s kept resetting the quiet clock and the army stood at home while the Zerg wished to
+        # surrender. Only an attack of COUNTER_RECALL_THREAT supply or more holds the push back.
+        attack = sum(self.calculate_supply_cost(e.type_id) for e in self._threat_units()) >= COUNTER_RECALL_THREAT
+        if attack:
             self._last_threat_seen = self.time
         quiet = self.time - self._last_threat_seen >= PUSH_IDLE
-        if ((killed < COUNTER_ENEMY_LOSS and not quiet) or emergency or not army or not self.townhalls
+        if ((killed < COUNTER_ENEMY_LOSS and not quiet) or attack or not army or not self.townhalls
                 or self._ready_army_supply() < COUNTER_MIN_ARMY or self.time - self._last_counter < COUNTER_COOLDOWN):
             return
-        if not (self.supply_used >= PUSH_MIN_SUPPLY and self.minerals >= PUSH_MIN_MINERALS
-                and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades):
+        # No bank needed: a bot that spends as it goes never has one. In T112 it was maxed with 127 army at 15:15 and
+        # beat a wave 90 to 55 at 16:40 with 51 minerals banked, so the push waited until 24:27 and met 7 Ultralisks;
+        # the Cistern wins pushed at 12:29 (T104) and 14:07 (T111), before that army existed.
+        if not (self.supply_used >= PUSH_MIN_SUPPLY and UpgradeId.TERRANINFANTRYWEAPONSLEVEL2 in self.state.upgrades):
             # The army leaves home only for the push: smaller counter-attacks cost far more than they gained
             # (T93: 33 army supply for no kill; T98: 23 and six Tanks, then a wave caught the army on its way home).
             return
@@ -1049,6 +1067,64 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self.log("anti_air_vikings", game_loop=self.state.game_loop, trained=trained,
                      vikings=vikings + trained, target=target)
 
+    async def _answer_casters(self):
+        """Against CheatMoney and stronger: once Infestors or Vipers are seen, a Ghost Academy and Ghosts."""
+        if not self.cautious_attacks or self.time - self._last_caster_response < 1:
+            return
+        self._last_caster_response = self.time
+        seen = [e for e in self.enemy_units if e.type_id in CASTERS]
+        if seen and self._casters_since is None:
+            self._casters_since = self.time
+            self.log("caster_threat", game_loop=self.state.game_loop, types=sorted({e.type_id.name for e in seen}))
+        if self._casters_since is None:
+            return
+        # Not Jev's orders (Ghosts are not in its action list): keep their failures out of the feedback Jev reads.
+        failures = list(self.temp_failure_list)
+        try:
+            if (not self._count_with_pending(U.GHOSTACADEMY) and not self.already_pending(U.GHOSTACADEMY)
+                    and self.tech_requirement_progress(U.GHOSTACADEMY) == 1 and self.can_afford(U.GHOSTACADEMY)):
+                await self._build_one(self.empty_action, U.GHOSTACADEMY)
+                self._ghosts("build_ghostacademy")
+            ghosts = self._count_with_pending(U.GHOST)
+            for barracks in self._train_slots(U.GHOST):
+                if (ghosts >= GHOST_CAP or barracks.tag in self.unit_tags_received_action
+                        or not self.can_afford(U.GHOST)):
+                    break
+                barracks.train(U.GHOST)
+                ghosts += 1
+                self._ghosts("train_ghost")
+        finally:
+            self.temp_failure_list = failures
+
+    def _ghosts(self, what):
+        self._action_stats[f"ghosts_{what}"] += 1
+        self.log("answer_casters", game_loop=self.state.game_loop, what=what)
+
+    def _emp_casters(self):
+        """Each Ghost with the energy EMPs the visible Infestor or Viper with most undrained casters around it."""
+        casters = [e for e in self.enemy_units if e.type_id in CASTERS and e.is_visible
+                   and self._emp_until.get(e.tag, 0) <= self.time]
+        if not casters:
+            return
+        for ghost in self.units(U.GHOST).ready:
+            if ghost.energy < EMP_ENERGY or ghost.tag in self.unit_tags_received_action:
+                continue
+            near = [c for c in casters if ghost.distance_to(c) <= EMP_REACH]
+            if not near:
+                continue
+            target = max(near, key=lambda c: (sum(1 for o in casters if o.distance_to(c) <= EMP_RADIUS),
+                                              -ghost.distance_to(c)))
+            hit = [c for c in casters if c.distance_to(target) <= EMP_RADIUS]
+            ghost(A.EMP_EMP, target.position)
+            for caster in hit:
+                self._emp_until[caster.tag] = self.time + EMP_REPEAT
+            casters = [c for c in casters if c not in hit]
+            self._action_stats["ghost_emps"] += 1
+            self.log("ghost_emp", game_loop=self.state.game_loop, ghost_tag=ghost.tag,
+                     targets=[c.type_id.name for c in hit])
+            if not casters:
+                return
+
     def _spend_bank(self):
         """Queue army in every idle production slot while unspent minerals pile up."""
         if self.minerals < self.contract.bank_minerals or self.time - self._last_bank_spend < 1:
@@ -1164,6 +1240,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                          structure_tag=structure.tag, worker_tag=worker.tag)
 
     def _fast_micro(self):
+        self._emp_casters()
         self._dodge_banelings()
         self._scan_for_burrowed()
 

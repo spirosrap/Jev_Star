@@ -23,7 +23,7 @@ from sc2_rl_agent.starcraftenv_test.agent.jev_agent import Decision, JevClient, 
 from sc2_rl_agent.starcraftenv_test.agent.macro_contract import PROTOSS, TERRAN, primary_action
 from sc2_rl_agent.starcraftenv_test.agent.strategic_policy import policy_reason
 from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_terran_bot import HierarchicalTerranBot
-from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import JevTerranBot
+from sc2_rl_agent.starcraftenv_test.env.bot.jev_terran_bot import GHOST_CAP, JevTerranBot
 
 
 def terran_plan(**changes):
@@ -527,6 +527,13 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "defend")
 
+    async def test_maxed_with_plus_two_the_push_goes_after_a_beaten_wave_without_a_bank(self):
+        # T112 at 16:40: maxed, +2, a wave beaten 90 to 55, 51 minerals banked.
+        self.counter_world(supply_used=197, minerals=51, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.assertTrue(self.bot._push_active)
+
     async def test_planner_attacks_are_refused_against_cheatmoney(self):
         self.counter_world()
         self.assertEqual(self.bot._posture_reason("attack"), "attacks_only_as_pushes")
@@ -543,6 +550,32 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._counter_attack()
         self.assertEqual(self.bot.army_intent, "attack")
         self.assertTrue(self.bot._push_active)
+
+    async def test_small_pokes_do_not_hold_the_push_back(self):
+        # T113 after 21:00: a few Zerglings at a base every 10-15 s, the army maxed at home.
+        maxed = dict(supply_used=200, minerals=6000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.counter_world(killed=0, **maxed)
+        self.bot._last_threat_seen = 839.0  # The last real wave, 61 s ago.
+        lings = []
+        for tag in range(90, 93):
+            ling = FakeTerranUnit(tag, U.ZERGLING, (14, 10))
+            ling.can_attack = True
+            lings.append(ling)
+        self.set_world(list(self.bot.units), list(self.bot.structures), lings)
+        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: .5 if kind == U.ZERGLING else 1)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "attack")
+        self.bot._end_counter("test")
+        self.bot._last_counter = -1000
+        roaches = []
+        for tag in range(95, 100):
+            roach = FakeTerranUnit(tag, U.ROACH, (14, 10))
+            roach.can_attack = True
+            roaches.append(roach)
+        self.set_world(list(self.bot.units), list(self.bot.structures), roaches)
+        self.bot.calculate_supply_cost = Mock(side_effect=lambda kind: 2 if kind == U.ROACH else 1)
+        self.bot._counter_attack()
+        self.assertEqual(self.bot.army_intent, "defend")  # 10 supply of Roaches is a wave.
 
     async def test_maxed_with_a_bank_and_plus_two_the_push_may_attack_the_main(self):
         self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
@@ -676,6 +709,61 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._last_tank_check = -1000
         await self.bot._keep_tanks_coming()
         factory.train.assert_not_called()  # Only against CheatMoney and stronger.
+
+    def caster_world(self, enemies):
+        rax = FakeTerranUnit(91, U.BARRACKS, (44, 40))
+        rax.has_add_on = rax.has_techlab = True
+        self.set_world([self.scv], [self.cc, rax], enemies)
+        self.abilities[rax.tag] = {TRAIN_INFO[U.BARRACKS][U.GHOST]["ability"]}
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._build_one = AsyncMock()
+        self.bot.tech_requirement_progress = Mock(return_value=1)
+        self.bot._count_with_pending = Mock(return_value=0)
+        return rax
+
+    async def test_ghosts_come_once_infestors_or_vipers_are_seen(self):
+        rax = self.caster_world([])
+        await self.bot._refresh_abilities()
+        await self.bot._answer_casters()
+        self.bot._build_one.assert_not_awaited()  # No casters seen yet.
+        rax = self.caster_world([FakeTerranUnit(80, U.INFESTOR, (70, 70))])
+        await self.bot._refresh_abilities()
+        self.bot._last_caster_response = -1000
+        await self.bot._answer_casters()
+        self.bot._build_one.assert_awaited_once_with(self.bot.empty_action, U.GHOSTACADEMY)
+        rax.train.assert_called_once_with(U.GHOST)
+        self.bot.cautious_attacks = False  # Only against CheatMoney and stronger.
+        self.bot._casters_since = None
+        self.bot._last_caster_response = -1000
+        rax.train.reset_mock()
+        await self.bot._answer_casters()
+        rax.train.assert_not_called()
+
+    async def test_no_ghosts_beyond_the_cap(self):
+        rax = self.caster_world([FakeTerranUnit(80, U.VIPER, (70, 70))])
+        self.bot._count_with_pending = Mock(side_effect=lambda kind: GHOST_CAP if kind == U.GHOST else 1)
+        await self.bot._refresh_abilities()
+        await self.bot._answer_casters()
+        rax.train.assert_not_called()
+        self.bot._build_one.assert_not_awaited()  # The Academy is there.
+
+    async def test_ghosts_emp_the_densest_group_of_casters_once(self):
+        ghost, tired = FakeTerranUnit(60, U.GHOST, (30, 30)), FakeTerranUnit(61, U.GHOST, (30, 31))
+        ghost.energy, tired.energy = 75, 74
+        pair = [FakeTerranUnit(80, U.INFESTOR, (38, 30)), FakeTerranUnit(81, U.INFESTOR, (38.5, 30.5))]
+        lone = FakeTerranUnit(82, U.VIPER, (34, 30))  # Nearer, but alone.
+        far = FakeTerranUnit(83, U.INFESTOR, (60, 60))
+        self.set_world([self.scv, ghost, tired], [self.cc], pair + [lone, far])
+        self.bot.state.game_loop = int(900 * 22.4)
+        self.bot._emp_casters()
+        self.assertEqual(ghost.commands, [(A.EMP_EMP, pair[0].position)])
+        self.assertEqual(tired.commands, [])
+        ghost.commands.clear()
+        ghost.energy = 150
+        self.bot.unit_tags_received_action = set()
+        self.bot._emp_casters()
+        self.assertEqual(ghost.commands, [(A.EMP_EMP, lone.position)])  # The pair is drained: no second EMP there.
 
     async def test_no_extra_factory_before_six_minutes(self):
         self.early_world(300)
