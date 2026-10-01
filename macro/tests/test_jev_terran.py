@@ -1086,13 +1086,26 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._balance_gas()
         self.assertFalse(self.bot._gas_throttled)  # A modest bank for Tanks and upgrades.
         going.gather.assert_not_called()
-        self.bot.vespene, self.bot.minerals = 500, 2000  # Minerals no longer matter.
+        self.bot.vespene, self.bot.minerals = 500, 900  # Below the mineral bank only the gas counts.
         self.bot._balance_gas()
         self.assertTrue(self.bot._gas_throttled)
         self.bot.vespene = 300
         self.bot._balance_gas()
         self.assertTrue(self.bot._gas_throttled)
         self.bot.vespene = 249
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)
+
+    async def test_against_cheatmoney_scvs_stay_on_gas_while_minerals_are_banked(self):
+        _, going, _ = self.gas_world(gas=800, minerals=1000)
+        self.bot.cautious_attacks = True
+        self.bot._balance_gas()
+        self.assertFalse(self.bot._gas_throttled)  # Gas is the limit; it is kept for Tanks.
+        going.gather.assert_not_called()
+        self.bot.minerals = 999
+        self.bot._balance_gas()
+        self.assertTrue(self.bot._gas_throttled)
+        self.bot.minerals = 5000  # A bank again: the throttle ends at once.
         self.bot._balance_gas()
         self.assertFalse(self.bot._gas_throttled)
 

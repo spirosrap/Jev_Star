@@ -174,6 +174,11 @@ CAUTIOUS_GAS_THROTTLE_ON = 500
 CAUTIOUS_GAS_THROTTLE_OFF = 250
 # At 1,000 (T101) gas piled up unused (700-1,100) while minerals stayed at 25-120, so the third base came late and the
 # army lagged; 500/250, without the ratio to minerals, keeps a modest gas bank for Tanks and upgrades.
+# With a mineral bank, the gas is the limit: in scripted batch round2's Ancient Cistern loss the bot sat on 10,000-
+# 20,000 minerals while the throttle emptied its Refineries (12 of 42 minutes), and after each lost fight it had
+# 35-60 gas and 4-8 Tanks (the wins kept 15-24); Tanks waited for gas in half of the decisions from 20:00 to 28:00.
+# From this bank on, SCVs stay on gas and the surplus gas is kept for rebuilding Tanks.
+CAUTIOUS_GAS_KEEP_MINERALS = 1000
 # Burrowed Lurkers need detection: seen this recently, an Orbital keeps energy for a scan.
 LURKERS = {U.LURKERMP, U.LURKERMPBURROWED, U.LURKERMPEGG, U.LURKERDENMP}
 LURKER_MEMORY = 90
@@ -1176,6 +1181,12 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         """Move SCVs from gas to minerals while unspent gas piles up far beyond minerals."""
         on, off = (CAUTIOUS_GAS_THROTTLE_ON, CAUTIOUS_GAS_THROTTLE_OFF) if self.cautious_attacks else (
             GAS_THROTTLE_ON, GAS_THROTTLE_OFF)
+        if self.cautious_attacks and self.minerals >= CAUTIOUS_GAS_KEEP_MINERALS:
+            if self._gas_throttled:
+                self._gas_throttled = False
+                self.log("gas_throttle", game_loop=self.state.game_loop, active=False,
+                         gas=self.vespene, minerals=self.minerals)
+            return
         if self._gas_throttled and self.vespene < off:
             self._gas_throttled = False
             self.log("gas_throttle", game_loop=self.state.game_loop, active=False,
