@@ -600,6 +600,15 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_2")
 
+    async def test_a_push_heads_for_the_nearest_base_of_any_race(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._known_enemy_buildings = {
+            1: {"id": "enemy_1", "type": "SUPPLYDEPOT", "position": [45.0, 45.0], "last_seen": 0},
+            2: {"id": "enemy_2", "type": "ORBITALCOMMAND", "position": [60.0, 30.0], "last_seen": 0},
+            3: {"id": "enemy_3", "type": "NEXUS", "position": [90.0, 20.0], "last_seen": 0}}
+        self.bot._counter_attack()
+        self.assertEqual(self.bot._army_target_id, "enemy_2")  # Not the closer Supply Depot.
+
     async def test_each_wave_is_logged_with_what_it_cost_both_sides(self):
         marine = FakeTerranUnit(60, U.MARINE, (40, 40))
         ling = FakeTerranUnit(90, U.ZERGLING, (12, 10))

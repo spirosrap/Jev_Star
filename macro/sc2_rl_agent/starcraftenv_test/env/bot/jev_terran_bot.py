@@ -156,6 +156,11 @@ PUSH_WINDOW = 90
 # minerals from 36:14 on, because the push waited for a wave that did not come.
 PUSH_IDLE = 60
 ZERG_BASES = {U.HATCHERY, U.LAIR, U.HIVE}
+# What a push heads for, whatever the opponent's race: in scripted batch vsterran every push against Terran had no
+# target (only Zerg bases counted), so the army wandered and cleared 1-4 places in 30 minutes while banking 20,000
+# minerals at the supply cap.
+ENEMY_BASES = ZERG_BASES | {U.COMMANDCENTER, U.ORBITALCOMMAND, U.PLANETARYFORTRESS, U.COMMANDCENTERFLYING,
+                            U.ORBITALCOMMANDFLYING, U.NEXUS}
 # Against CheatMoney and stronger, the bot keeps Siege Tanks coming itself instead of leaving it to Jev's and the
 # planner's orders: four Factories with Tech Labs from 6:00, and every free Tech Lab Factory trains a Tank whenever it
 # can. With the same code and two Factories, T102 had 11 Tanks at 11:00 and held to a 43-minute stalemate; T103 had
@@ -835,7 +840,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             return
         self._push_active = True
         bases = [m for m in self._known_enemy_buildings.values()
-                 if m["type"] in {b.name for b in ZERG_BASES} and self._attack_allowed(m["position"])]
+                 if m["type"] in {b.name for b in ENEMY_BASES} and self._attack_allowed(m["position"])]
         target = min(bases, key=lambda m: army.center.distance_to(Point2(m["position"])))["id"] if bases else None
         self._counter_until = self.time + (PUSH_WINDOW if self._push_active else COUNTER_WINDOW)
         self._last_counter = self.time
