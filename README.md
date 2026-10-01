@@ -639,6 +639,27 @@ Batch `round2` (commit `9da085d`, saving for bases, Marauders and Ghost Snipe ag
 
 The Rush game's economy now held (76 SCVs by 14:00, against 21-23 in round1). Both losses came late from the Ultralisk rule itself: Marauders at 100 spare gas took the Tanks' gas (Cistern: 4-8 Tanks from 15:00 with 268 Marauder supply built; Rush: Tanks 8 to 1 while Marauders rose to 21-25), and in the Rush game, with Marines capped at 20, Mutalisks and Brood Lords killed 274 army supply. Batch `round3` (commit `ffb9b8e`) has Marauders against Ultralisks wait for 12 Tanks or 250 spare gas and keeps the Marine cap at 40 once Zerg air is seen. From round3 on, the bot's SC2 runs at the lowest graphics in a 640x480 window on a hidden Hyprland workspace.
 
+Batch `round3` (commit `ffb9b8e`, Marauders against Ultralisks wait for 12 Tanks or 250 spare gas, Marines stay at 40 once Zerg air is seen): **6/10 wins**.
+
+| Game | Map / Zerg build | Result | Game time |
+|---|---|---|---|
+| 01 | Ancient Cistern / Macro | Defeat (stopped at 37:42 with 2 SCVs and 28 army supply) | 37:42 |
+| 02 | Babylon / Macro | **Victory** | 22:42 |
+| 03 | Altitude / Macro | **Victory** | 22:12 |
+| 04 | Neohumanity / Macro | **Victory** | 35:18 |
+| 05 | Gresvan / Macro | **Victory** | 20:12 |
+| 06 | Dragon Scales / Macro | Tie (45:00 limit) | 45:00 |
+| 07 | Ancient Cistern / Rush | Defeat | 24:30 |
+| 08 | Ancient Cistern / Timing | **Victory** (second start; the first failed to start) | 21:24 |
+| 09 | Ancient Cistern / Power | **Victory** | 20:06 |
+| 10 | Ancient Cistern / Air | Defeat | 36:00 |
+
+The round3 change fixed neither game it aimed at (Cistern Macro and Rush lost again) and cost two: against Air it had no Marauders until 22:00 (round2 had 24 by 20:00) and Ultralisks broke the army, and Dragon Scales went from a win to a tie. **The games are deterministic**: the two Rush games are identical to the second up to 14:00, and the same Babylon game played on dell-pc and fujitsu-mint (one game each, to time the machines) ended exactly like the local one, Victory at 22:40. A batch therefore measures the code, not luck: a game changes only where a change changes the bot's play. Round3 is reverted (`528743c`), and the next change is tested first on the games it targets.
+
+Two things looked like problems but are not: the 10,000-30,000 minerals banked late come at the 200-supply cap (93 of 94 such heartbeats on Babylon), and the wins bank the most; and our own sieged Tanks hit our units in wins as much as in losses. What separates the games is the pushes: in the wins they trade 1.6-2.4 to 1 and keep 15-24 Tanks; in the losses Tanks fall to 2-12 after the first push and are not rebuilt, and pushes with that few Tanks lose 50-80 army supply. In the round2 Cistern Macro loss the Tank waited for gas in half of its decisions from 20:00 to 28:00 while 10,000-20,000 minerals sat unused and the gas throttle emptied the Refineries for 12 of 42 minutes. Batch `round4a` (commit `7406165`) keeps SCVs on gas while 1,000 or more minerals are banked, first on the two Ancient Cistern losses (Macro and Rush).
+
+The batch runner now spreads games over several machines (`--hosts local:3 dell-pc:1 fujitsu-mint:2`). With the lowest graphics, dell-pc (i5-8350U) plays at about 0.7x real time and fujitsu-mint (i5-8400) at about 0.9-1.0x late in the game (0.08-0.15x before).
+
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
 In T22 the upgrades came on time (Engineering Bay 5:37, Armory 6:45), but the army never reached the attack size: CheatVision brought 19 Banelings before 10:00 on Babylon (17–20 in T20–T21 as well) and destroyed a mostly-Marine defense with one or two Siege Tanks at 9:00 and again at 13:30. The schedule now also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by 6:30, and four Widow Mines by 7:00, and for a Planetary Fortress at the most exposed base once Banelings are seen; sieged Tanks and burrowed Mines now count toward those numbers.
@@ -1281,6 +1302,27 @@ T131 是第一局没有 Jev、也没有任何 LLM 的比赛。`--policy scripted
 | 10 | Ancient Cistern / Air | **胜** | 34:42 |
 
 对 Rush 的比赛经济守住了（14:00 有 76 个 SCV，round1 只有 21-23 个）。两场失利都发生在后期，原因正是 Ultralisk 规则：Marauder 只需 100 余量瓦斯，抢走了坦克的瓦斯（Cistern：15:00 起只有 4-8 辆坦克，Marauder 造了 268 人口；Rush：坦克从 8 辆降到 1 辆，Marauder 增到 21-25 个），而在 Rush 那局 Marine 上限为 20，Mutalisk 和 Brood Lord 杀了 274 人口部队。批次 `round3`（提交 `ffb9b8e`）让对 Ultralisk 的 Marauder 等到有 12 辆坦克或 250 余量瓦斯，并在看到 Zerg 空军后把 Marine 上限保持在 40。从 round3 起，Bot 的 SC2 以最低画质、640x480 窗口运行在隐藏的 Hyprland 工作区。
+
+批次 `round3`（提交 `ffb9b8e`，对 Ultralisk 的 Marauder 要等到有 12 辆坦克或 250 余量瓦斯；发现 Zerg 空军后 Marine 上限保持 40）：**10 局 6 胜**。
+
+| 局 | 地图 / Zerg 战术 | 结果 | 游戏时间 |
+|---|---|---|---|
+| 01 | Ancient Cistern / Macro | 失败（37:42 时只剩 2 个 SCV、28 部队人口，手动停止） | 37:42 |
+| 02 | Babylon / Macro | **胜利** | 22:42 |
+| 03 | Altitude / Macro | **胜利** | 22:12 |
+| 04 | Neohumanity / Macro | **胜利** | 35:18 |
+| 05 | Gresvan / Macro | **胜利** | 20:12 |
+| 06 | Dragon Scales / Macro | 平局（45:00 时限） | 45:00 |
+| 07 | Ancient Cistern / Rush | 失败 | 24:30 |
+| 08 | Ancient Cistern / Timing | **胜利**（第二次启动；第一次未能启动） | 21:24 |
+| 09 | Ancient Cistern / Power | **胜利** | 20:06 |
+| 10 | Ancient Cistern / Air | 失败 | 36:00 |
+
+round3 的改动没有修好目标对局（Cistern Macro 和 Rush 再次失利），反而丢了两局：对 Air 时直到 22:00 都没有 Marauder（round2 在 20:00 已有 24 个），Ultralisk 击溃了部队；Dragon Scales 从胜利变成平局。**对局是确定性的**：两局 Rush 在 14:00 之前完全相同；同一局 Babylon 分别在 dell-pc 和 fujitsu-mint 上运行（各一局，用于测速），结果与本机完全一样，都是 22:40 胜利。因此批次测的是代码而不是运气：只有改动影响了机器人的行为，对局才会不同。round3 已撤销（`528743c`），下一个改动先在目标对局上测试。
+
+有两件事看似问题其实不是：后期积存的 10,000-30,000 矿物出现在 200 人口满员时（Babylon 上 94 次心跳中有 93 次），而且胜局积存最多；我方架起的坦克误伤自己的单位，在胜局和败局中一样多。真正区分胜负的是进攻：胜局中进攻交换比为 1.6-2.4 比 1，并保持 15-24 辆坦克；败局中第一次进攻后坦克降到 2-12 辆且没有补充，这样的进攻会损失 50-80 部队人口。在 round2 的 Cistern Macro 败局中，20:00 到 28:00 之间有一半决策里坦克在等瓦斯，同时 10,000-20,000 矿物闲置，瓦斯限流在 42 分钟里有 12 分钟清空了瓦斯厂。批次 `round4a`（提交 `7406165`）在积存 1,000 以上矿物时让 SCV 留在瓦斯上，先在两局 Ancient Cistern 败局（Macro 和 Rush）上测试。
+
+批次运行器现在可以把对局分配到多台机器（`--hosts local:3 dell-pc:1 fujitsu-mint:2`）。在最低画质下，dell-pc（i5-8350U）后期约为实时的 0.7 倍，fujitsu-mint（i5-8400）约为 0.9-1.0 倍（之前为 0.08-0.15 倍）。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
