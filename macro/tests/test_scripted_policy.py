@@ -44,6 +44,21 @@ class ScriptedPolicyTests(unittest.TestCase):
         self.assertEqual(pick(state(seconds=600, workers=76, building={"COMMANDCENTER": 4},
                                     unit={"MARINE": 40}), army), "69")
 
+    def test_a_bunker_at_the_natural_once_it_is_started(self):
+        choices = {"0": "TRAIN SCV", "70": "BUILD BUNKER", "69": "EMPTY ACTION"}
+        self.assertEqual(pick(state(seconds=120, workers=20, planning={"COMMANDCENTER": 1}), choices), "0")
+        self.assertEqual(pick(state(seconds=150, workers=20, planning={"COMMANDCENTER": 1}), choices), "70")
+        built = state(seconds=150, workers=20, building={"BUNKER": 1}, planning={"COMMANDCENTER": 1})
+        self.assertEqual(pick(built, choices), "0")
+
+    def test_gas_is_kept_for_tanks(self):
+        army = {"2": "TRAIN MARAUDER", "11": "TRAIN MEDIVAC", "1": "TRAIN MARINE", "69": "EMPTY ACTION"}
+        low = state(seconds=900, workers=76, building={"COMMANDCENTER": 5}, unit={"MARINE": 40})
+        low["resource"]["gas"] = 150
+        self.assertEqual(pick(low, army), "69")  # Not enough gas to spare: wait for a Tank.
+        low["resource"]["gas"] = 300
+        self.assertEqual(pick(low, army), "2")
+
     def test_client_answers_in_the_jev_shape(self):
         client = ScriptedClient()
         response = asyncio.run(client.choose(client.payload(state(needs_supply=True), CHOICES)))

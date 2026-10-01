@@ -13,8 +13,14 @@ EXPANSIONS = ((0, 1), (75, 2), (390, 3), (570, 4), (720, 5))
 WORKERS_PER_BASE = 20
 MAX_WORKERS = 76
 # Barracks wanted by game time; production beyond this comes from the bank routine.
-BARRACKS_PLAN = ((60, 1), (240, 2), (330, 3), (480, 5), (600, 8), (720, 12))
+BARRACKS_PLAN = ((60, 1), (150, 2), (330, 3), (480, 5), (600, 8), (720, 12))
 REACTOR_BARRACKS = 2  # the rest get Tech Labs, for Marauders and Ghosts
+# A Bunker at the natural once it is started: T124 (Jev) had one before 3:03 and held the Rush build; batch
+# baseline2 had none until 5:30 and lost to it at 10:30.
+FIRST_BUNKER = 140
+# Gas goes to Tanks first: in the baseline2 Babylon loss the bot trained 67 Marauders and 13 Medivacs after 14:00
+# but only 16 Tanks (Jev wins: 22-32), and its Tanks fell from 15 to 1-5.
+GAS_SPARE = 200
 FIRST_FACTORY = 150
 FIRST_STARPORT = 480
 MEDIVACS = 6
@@ -76,6 +82,8 @@ def wanted_actions(state: dict):
 
     if resource.get("supply_cap", 0) < 200 and (forecast.get("needs_supply") or resource.get("needs_supply")):
         wanted.append("BUILD SUPPLYDEPOT")
+    if seconds >= FIRST_BUNKER and bases >= 2 and not have("BUNKER"):
+        wanted.append("BUILD BUNKER")
     if workers < min(MAX_WORKERS, WORKERS_PER_BASE * max(bases, 1)):
         wanted.append("TRAIN SCV")
     if (bases < _planned(EXPANSIONS, seconds) or workers >= WORKERS_PER_BASE * bases - 4) and bases < 8 \
@@ -98,11 +106,13 @@ def wanted_actions(state: dict):
     research = state.get("research", {})
     wanted += [f"RESEARCH {r}" for r in RESEARCH if not research.get(r)]
     wanted.append("TRAIN SIEGETANK")
-    if have("MARAUDER") * 2 < have("MARINE") + 4:
+    gas_to_spare = resource.get("gas", 0) >= GAS_SPARE
+    if gas_to_spare and have("MARAUDER") * 2 < have("MARINE") + 4:
         wanted.append("TRAIN MARAUDER")
     if have("MARINE") < MARINE_CAP:
         wanted.append("TRAIN MARINE")
-    if have("MEDIVAC") < MEDIVACS:
+    if gas_to_spare and have("MEDIVAC") < MEDIVACS:
         wanted.append("TRAIN MEDIVAC")
-    wanted.append("TRAIN MARAUDER")
+    if gas_to_spare:
+        wanted.append("TRAIN MARAUDER")
     return [name for name in wanted if not re.match(r"MULTI-|SCOUTING", name)]

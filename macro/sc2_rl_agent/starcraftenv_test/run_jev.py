@@ -203,6 +203,8 @@ def main():
                     # The request budget guards Jev's API bill; rules cost nothing. At two decisions a game second
                     # the default 2,000 ran out at 18:05 in the first batch, and the bot then stopped deciding.
                     bot.scheduler.max_requests = 10 ** 9
+                    from .agent.scripted_policy import GAS_SPARE
+                    bot.gas_reserve = GAS_SPARE
                 bot.game_step = args.game_step
                 log.phase = "launching"
                 bot.contract = contract

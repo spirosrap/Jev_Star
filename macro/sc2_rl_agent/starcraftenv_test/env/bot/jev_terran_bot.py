@@ -237,6 +237,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._last_caster_response = -1000
         self._emp_until = {}  # enemy caster tag -> game time its energy is drained until
         self._fleeing = set()  # SCVs kept off the minerals while Banelings are near
+        self.gas_reserve = 0  # scripted play sets this: bank spending leaves this much gas for Tanks
         self._broodlords_seen = 0
         self._last_air_response = -1000
         self._last_grow = -1000
@@ -1154,6 +1155,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                     continue
                 if not self.can_afford(unit_type) or self.minerals - cost.minerals < BANK_SPEND_FLOOR:
                     break
+                if self.gas_reserve and cost.vespene and unit_type != U.SIEGETANK \
+                        and self.vespene - cost.vespene < self.gas_reserve:
+                    break  # Scripted play keeps gas for Tanks.
                 producer.train(unit_type)
                 used[producer.tag] += 1
                 trained[unit_type] += 1
