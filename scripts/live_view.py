@@ -25,6 +25,9 @@ EFFORTS = ["none", "low", "medium", "high", "xhigh"]
 # Strategic planners: label -> (CLI, model). Both CLIs use their own saved login.
 PLANNERS = {"Astra (gpt-6-astra)": ("codex", "gpt-6-astra"), "Sol (gpt-6-sol)": ("codex", "gpt-6-sol"),
             "Fable 5.1": ("claude", "claude-fable-5-1"), "Opus 5.5": ("claude", "claude-opus-5-5")}
+# Who makes the decisions: label -> run_jev arguments. Scripted play needs no planner or API key.
+PLAYERS = {"Jev + planner": [], "Scripted, no LLM": ["--policy", "scripted"],
+           "Scripted, no LLM, fast": ["--policy", "scripted", "--fast"]}
 BUILDS = ["RandomBuild", "Rush", "Timing", "Power", "Macro", "Air"]  # the built-in AI's build
 sys.path.insert(0, str(ROOT / "scripts" / "campaign"))
 import campaign  # noqa: E402  (mission list and preparation)
@@ -79,8 +82,9 @@ PAGE = """<!doctype html>
     <label class="campaign">Campaign <select name="campaign"><option>Wings of Liberty</option></select></label>
     <label class="campaign">Mission difficulty <select name="mission_difficulty"></select></label>
     <label class="campaign wide">Mission (✅ fits · ⚠️ special objective · ❌ not playable) <select name="mission"></select></label>
-    <label>Planner <select name="planner"></select></label>
-    <label>Planner effort <select name="planner_effort"></select></label>
+    <label class="ladder">Player <select name="player"></select></label>
+    <label class="jev">Planner <select name="planner"></select></label>
+    <label class="jev">Planner effort <select name="planner_effort"></select></label>
     <label>Time limit (min) <input name="minutes" type="number" min="1" max="60" value="20"></label>
     <div class="actions">
       <button id="start" type="submit">Start game</button>
@@ -125,6 +129,7 @@ async function options() {
   fill("difficulty", o.difficulties, saved.difficulty || "Easy");
   fill("map", o.maps, saved.map || "Altitude LE");
   fill("ai_build", o.builds, saved.ai_build || "RandomBuild");
+  fill("player", o.players, saved.player || o.players[0]);
   fill("planner", o.planners, saved.planner || o.planners[0]);
   fill("planner_effort", o.efforts, saved.planner_effort || "medium");
   fill("mission_difficulty", o.mission_difficulties, saved.mission_difficulty || "Normal");
@@ -141,9 +146,12 @@ function showMode() {
   const campaignMode = form.elements.mode.value === "campaign";
   for (const el of form.querySelectorAll(".ladder")) el.style.display = campaignMode ? "none" : "";
   for (const el of form.querySelectorAll(".campaign")) el.style.display = campaignMode ? "" : "none";
+  const scripted = !campaignMode && form.elements.player.value.startsWith("Scripted");
+  for (const el of form.querySelectorAll(".jev")) el.style.display = scripted ? "none" : "";
   document.getElementById("start").textContent = campaignMode ? "Start mission" : "Start game";
 }
 form.elements.mode.addEventListener("change", showMode);
+form.elements.player.addEventListener("change", showMode);
 
 async function post(path, body) {
   const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"},
@@ -226,15 +234,21 @@ def maps():
 
 
 def game_pids():
-    """PIDs of running macro games, including ones started outside this panel."""
+    """PIDs of running macro games from this checkout, including ones started outside this panel.
+
+    Games from other checkouts (scripted test batches run from a separate worktree) are left alone, so the panel
+    neither waits for them nor stops them."""
     pids = []
     for proc in Path("/proc").glob("[0-9]*"):
         try:
             cmdline = (proc / "cmdline").read_bytes().split(b"\0")
+            if b"sc2_rl_agent.starcraftenv_test.run_jev" not in cmdline:
+                continue
+            if not (proc / "cwd").resolve().is_relative_to(ROOT.resolve()):
+                continue
         except OSError:
             continue
-        if b"sc2_rl_agent.starcraftenv_test.run_jev" in cmdline:
-            pids.append(int(proc.name))
+        pids.append(int(proc.name))
     return pids
 
 
@@ -312,18 +326,23 @@ def start_game(request):
         effort, minutes = request["planner_effort"], int(request["minutes"])
         build = request.get("ai_build", "RandomBuild")
         planner = request.get("planner", next(iter(PLANNERS)))
+        player = request.get("player", next(iter(PLAYERS)))
     except (KeyError, TypeError, ValueError):
         return 400, "Incomplete launch settings."
+    if player not in PLAYERS:
+        return 400, "Invalid launch settings."
     if (race not in RACES or opponent not in OPPONENTS or difficulty not in DIFFICULTIES
             or effort not in EFFORTS or game_map not in maps() or not 1 <= minutes <= 60
             or build not in BUILDS or planner not in PLANNERS):
         return 400, "Invalid launch settings."
     command = [sys.executable, str(ROOT / "jev_star.py"), "macro", "--race", race, "--map", game_map,
                "--opponent-race", opponent, "--difficulty", difficulty, "--ai-build", build,
-               "--game-time-limit", str(minutes * 60)]
-    command += planner_arguments(planner, effort)
+               "--game-time-limit", str(minutes * 60)] + PLAYERS[player]
+    if not PLAYERS[player]:
+        command += planner_arguments(planner, effort)
     opponent_text = f"{difficulty} {opponent}" + ("" if build == "RandomBuild" else f" ({build} build)")
-    return launch(command, f"Starting {race} vs {opponent_text} on {game_map}.")
+    player_text = "" if not PLAYERS[player] else f" ({player})"
+    return launch(command, f"Starting {race} vs {opponent_text} on {game_map}{player_text}.")
 
 
 def stop_game():
@@ -488,7 +507,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/options"):
             missions = [dict(m, mark=FIT_MARK[m["fit"]]) for m in campaign.catalog(sc2_path())]
             self._json(200, {"races": RACES, "opponents": OPPONENTS, "difficulties": DIFFICULTIES,
-                             "efforts": EFFORTS, "planners": list(PLANNERS), "builds": BUILDS, "maps": maps(),
+                             "efforts": EFFORTS, "planners": list(PLANNERS), "players": list(PLAYERS), "builds": BUILDS, "maps": maps(),
                              "missions": missions,
                              "mission_difficulties": MISSION_DIFFICULTIES})
         else:
