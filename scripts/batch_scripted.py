@@ -1,6 +1,6 @@
 """Play a batch of scripted (no-LLM) games faster than real time, several at once, and tabulate the results.
 
-usage: batch_scripted.py NAME [--parallel 3] [--hosts local:3 dell-pc:1 ...] [--minutes 45] [--games MAP:BUILD ...]
+usage: batch_scripted.py NAME [--parallel 3] [--hosts local:3 dell-pc:1 ...] [--minutes 45] [--games MAP:BUILD ...] [--seeds 1 2 ...]
 
 Each game runs `run_jev --policy scripted --fast` into macro/jev_runs/batch-NAME/NN-map-build/ (replay, events and
 summary as usual). results.csv in the batch folder gets one row per finished game.
@@ -61,12 +61,13 @@ def run_command(host, command, out, log):
                    stderr=subprocess.STDOUT)
 
 
-def play(host, index, spec, folder, minutes, difficulty, game_step):
+def play(host, index, spec, folder, minutes, difficulty, game_step, seed=1):
     game_map, build = spec.split(":")
-    out = folder / f"{index:02d}-{game_map.split()[0].lower()}-{build.lower()}"
+    out = folder / (f"{index:02d}-{game_map.split()[0].lower()}-{build.lower()}" + ("" if seed == 1 else f"-s{seed}"))
     command = [str(PYTHON), "-m", "sc2_rl_agent.starcraftenv_test.run_jev", "--race", "Terran",
                "--map", game_map, "--opponent-race", "Zerg", "--difficulty", difficulty, "--ai-build", build,
-               "--game-time-limit", str(minutes * 60), "--policy", "scripted", "--fast", "--game-step", str(game_step),
+               "--game-time-limit", str(minutes * 60), "--seed", str(seed), "--policy", "scripted", "--fast",
+               "--game-step", str(game_step),
                "--output-dir"]
     started = time.time()
     # Several SC2s starting at once under Wine can miss the connection timeout: retry once.
@@ -79,7 +80,7 @@ def play(host, index, spec, folder, minutes, difficulty, game_step):
         if data.get("game_seconds", 0) > 60:
             break
     out = target
-    row = {"game": out.name, "map": game_map, "build": build, "host": host,
+    row = {"game": out.name, "map": game_map, "build": build, "seed": seed, "host": host,
            "result": data.get("result", "no summary"), "game_time": round(data.get("game_seconds", 0) / 60, 1),
            "wall_minutes": round((time.time() - started) / 60, 1)}
     print(f"{row['game']:40s} {row['result']:10s} game {row['game_time']:5.1f} min  wall {row['wall_minutes']:5.1f} min"
@@ -108,6 +109,8 @@ def main():
     parser.add_argument("--difficulty", default="CheatMoney")
     parser.add_argument("--game-step", type=int, default=4)
     parser.add_argument("--games", nargs="*", default=DEFAULT_GAMES, help="MAP:BUILD entries")
+    parser.add_argument("--seeds", nargs="*", type=int, default=[1],
+                        help="play every game once per seed; games are deterministic for a given seed")
     args = parser.parse_args()
     folder = MACRO / "jev_runs" / f"batch-{args.name}"
     folder.mkdir(parents=True, exist_ok=False)
@@ -115,7 +118,7 @@ def main():
     for host in {h.rsplit(":", 1)[0] for h in hosts} - {"local"}:
         sync_code(host)
     games = queue.Queue()
-    for item in enumerate(args.games, 1):
+    for item in enumerate(((spec, seed) for seed in args.seeds for spec in args.games), 1):
         games.put(item)
     rows, lock = [], threading.Lock()
 
@@ -124,10 +127,10 @@ def main():
         time.sleep(start_delay)
         while True:
             try:
-                index, spec = games.get_nowait()
+                index, (spec, seed) = games.get_nowait()
             except queue.Empty:
                 return
-            row = play(host, index, spec, folder, args.minutes, args.difficulty, args.game_step)
+            row = play(host, index, spec, folder, args.minutes, args.difficulty, args.game_step, seed)
             with lock:
                 rows.append((index, row))
 
