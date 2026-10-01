@@ -583,6 +583,27 @@ T130 took the same `main` back to Dragon Scales, where T119 lost at 19:43 when i
 
 T131 was the first game without Jev or any LLM. `--policy scripted` replaces Jev's choices with fixed rules from the CheatMoney games (SCVs to 76, a Supply Depot whenever supply is forecast short, bases on a schedule, Barracks to 12, Tanks before infantry, Marines to 40, no Hellbats, no attack orders of its own); every other routine of the bot runs unchanged. It won on Ancient Cistern against the Macro build at 24:08. It had seven bases, 12 Barracks, four Factories and 14 Tanks at 14:00 and was maxed from about 12:00 (the mineral bank grew to 37,000 with no supply left to spend it on). `--fast` ran the game without the real-time limit, but only at about 1.2 times real time (24 game minutes in 20 wall minutes), so the bot's own work per step, not SC2, looks like the limit; that has to be found before batches of games are practical.
 
+**Scripted batches.** From here games run in batches with `scripts/batch_scripted.py` (branch `scripted-batch`): several scripted games at once, faster than real time, against CheatMoney Zerg, results in a CSV. Three games in parallel ran at about 0.65 times real time each, about 35-55 wall minutes per game.
+
+Batch `baseline1` (commit `cc63b5e`): Ancient Cistern / Macro **Victory** 24:06; Babylon / Macro Defeat 23:48; Altitude / Macro Defeat 29:54; the batch was then stopped. The two losses showed a bug: the scripted policy used up the 2,000-request budget meant for Jev's API at 18:05 and made no decisions after it, and the routines that rely on the ability list it refreshes went stale, so the army was never rebuilt (Altitude: 33,000 minerals banked, army 54 to 0). Fixed in `a8ef3d4` (no budget in scripted play).
+
+Batch `baseline2` (commit `a8ef3d4`):
+
+| Game | Map / Zerg build | Result | Game time |
+|---|---|---|---|
+| 01 | Ancient Cistern / Macro | **Victory** | 23:30 |
+| 02 | Babylon / Macro | Defeat | 24:48 |
+| 03 | Altitude / Macro | SC2 failed to start | - |
+| 04 | Neohumanity / Macro | **Victory** | 25:24 |
+| 05 | Gresvan / Macro | **Victory** (first win on Gresvan) | 36:30 |
+| 06 | Dragon Scales / Macro | **Victory** | 28:36 |
+| 07 | Ancient Cistern / Rush | Defeat | 10:30 |
+| 08 | Ancient Cistern / Timing | killed with the batch at 40:20 (37 army supply) | - |
+| 09 | Ancient Cistern / Power | killed with the batch at 25:45 (119 army supply) | - |
+| 10 | Ancient Cistern / Air | killed with the batch at 21:50 (116 army supply) | - |
+
+The batch runner was stopped by a two-hour limit on background commands, which killed the last three games; later batches run detached. The losses: against the Rush build the bot had one Barracks and no Bunker until 5:30 (T124, with Jev, had a Bunker before 3:03); on Babylon it trained 67 Marauders and 13 Medivacs after 14:00 but only 16 Tanks (the Jev wins T128 and T130: 22 and 32), and its Tanks fell from 15 to 1-5 while gas stayed under 100. Batch `round1` (commit `8f434b4`) adds a Bunker at the natural and a second Barracks at 2:30, and keeps gas for Tanks (Marauders, Medivacs and bank spending wait for 200 spare gas).
+
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
 In T22 the upgrades came on time (Engineering Bay 5:37, Armory 6:45), but the army never reached the attack size: CheatVision brought 19 Banelings before 10:00 on Babylon (17–20 in T20–T21 as well) and destroyed a mostly-Marine defense with one or two Siege Tanks at 9:00 and again at 13:30. The schedule now also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by 6:30, and four Widow Mines by 7:00, and for a Planetary Fortress at the most exposed base once Banelings are seen; sieged Tanks and burrowed Mines now count toward those numbers.
@@ -1170,6 +1191,27 @@ T129 把合并后的 `main`（SCV 修复和不出 Hellbat）带回 Gresvan，T11
 T130 把同样的 `main` 带回 Dragon Scales，T119 曾在这里因基地失守于 19:43 输掉。这局在 29:34 获胜，是该地图上的首胜（旧代码在这里打成 56 分钟平局）。几波交战持平或我方占优（9:09 46 对 44，11:38 63 对 34，19:47 68 对 15，25:29 43 对 27）；12:15 时 Bot 有 72 个 SCV 和 12 辆坦克（T119：66 个 SCV、三座 Barracks），15:20 有六个基地，24:24 以八个基地满人口，SCV 逃开 Baneling 17 次。推进从 13:18 开始。用 `main` 对阵 Macro 构建的地图检验现在是六张图赢五张（Gresvan 仍然失利）。
 
 T131 是第一局没有 Jev、也没有任何 LLM 的比赛。`--policy scripted` 用来自 CheatMoney 对局的固定规则代替 Jev 的选择（SCV 造到 76、预计人口不足时就建 Supply Depot、按时间表扩张、Barracks 到 12 座、先坦克后步兵、Marine 到 40、不出 Hellbat、自己不下进攻命令）；Bot 的其他流程全部不变。它在 Ancient Cistern 上对阵 Macro 构建，于 24:08 获胜。14:00 时有七个基地、12 座 Barracks、四座 Factory 和 14 辆坦克，大约从 12:00 起一直满人口（没有人口可花，矿物存款涨到 37000）。`--fast` 去掉了实时限制，但只快了约 1.2 倍（24 分钟游戏用了 20 分钟真实时间），看来瓶颈是 Bot 每一步自己的计算而不是 SC2；要能成批跑比赛，必须先找出这一点。
+
+**脚本批量对局。** 从这里开始，比赛用 `scripts/batch_scripted.py`（分支 `scripted-batch`）成批进行：多局脚本对局同时以快于实时的速度对阵 CheatMoney Zerg，结果写入 CSV。三局并行时每局约为实时的 0.65 倍，每局约 35-55 分钟真实时间。
+
+批次 `baseline1`（提交 `cc63b5e`）：Ancient Cistern / Macro **胜** 24:06；Babylon / Macro 负 23:48；Altitude / Macro 负 29:54；之后停止了该批次。两场失利暴露了一个错误：脚本策略在 18:05 用完了为 Jev API 设的 2000 次请求预算，此后不再做任何决定，依赖它刷新的能力列表的自动流程也随之失效，部队再没有补充（Altitude：存款 33000 矿，部队从 54 降到 0）。已在 `a8ef3d4` 修复（脚本模式不设预算）。
+
+批次 `baseline2`（提交 `a8ef3d4`）：
+
+| 局 | 地图 / Zerg 构建 | 结果 | 游戏时间 |
+|---|---|---|---|
+| 01 | Ancient Cistern / Macro | **胜** | 23:30 |
+| 02 | Babylon / Macro | 负 | 24:48 |
+| 03 | Altitude / Macro | SC2 启动失败 | - |
+| 04 | Neohumanity / Macro | **胜** | 25:24 |
+| 05 | Gresvan / Macro | **胜**（Gresvan 首胜） | 36:30 |
+| 06 | Dragon Scales / Macro | **胜** | 28:36 |
+| 07 | Ancient Cistern / Rush | 负 | 10:30 |
+| 08 | Ancient Cistern / Timing | 批次在 40:20 被终止（部队 37） | - |
+| 09 | Ancient Cistern / Power | 批次在 25:45 被终止（部队 119） | - |
+| 10 | Ancient Cistern / Air | 批次在 21:50 被终止（部队 116） | - |
+
+批量运行器被后台命令的两小时限制终止，最后三局也随之结束；之后的批次改为独立运行。失利原因：对 Rush 构建时，Bot 直到 5:30 只有一座 Barracks、没有 Bunker（T124 用 Jev 时 3:03 前就有 Bunker）；在 Babylon，14:00 之后训练了 67 个 Marauder 和 13 个 Medivac，却只有 16 辆坦克（Jev 胜局 T128 和 T130：22 和 32 辆），坦克从 15 辆降到 1-5 辆，瓦斯一直低于 100。批次 `round1`（提交 `8f434b4`）在分基地建 Bunker、2:30 建第二座 Barracks，并把瓦斯留给坦克（Marauder、Medivac 和存款消费都要等到有 200 余量瓦斯）。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
