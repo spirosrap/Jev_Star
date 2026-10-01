@@ -75,6 +75,17 @@ BANK_ARMY = (U.SIEGETANK, U.MARAUDER, U.MARINE)  # Tech Lab units first, Marines
 # saw two minutes before the first Brood Lord, so Corruptors start it too.
 AIR_TECH = {U.CORRUPTOR, U.GREATERSPIRE, U.BROODLORDCOCOON, U.BROODLORD}
 VIKINGS_MIN, VIKINGS_PER_BROODLORD, VIKINGS_MAX = 6, 2, 16
+# Terran air also calls for Vikings: in scripted batch vsterran's long losses Liberators (in ground mode) and
+# Battlecruisers were among the top killers of our pushes (225 and 131 army supply in Ancient Cistern Air alone), and
+# the bot built Vikings only for Brood Lords. Vikings per enemy seen at once, by type.
+TERRAN_AIR = {U.BANSHEE: 1, U.LIBERATOR: 1, U.LIBERATORAG: 1, U.BATTLECRUISER: 3}
+AIR_TECH = AIR_TECH | set(TERRAN_AIR)
+# Cloaked Banshees (and Ghosts) need detection: both early Timing losses in vsterran were Banshees killing mining
+# SCVs and Marines (50 of 61 army supply lost by 9:54), with no turret and no scan. Once one is seen: an Engineering
+# Bay, a Missile Turret at each base, and a scan on cloaked units near our units or buildings.
+CLOAKERS = {U.BANSHEE, U.GHOST}
+CLOAK_SCAN_INTERVAL = 6
+CLOAK_REACH = 15
 AIR_STARPORTS = 2
 # Against CheatMoney and stronger, once Infestors or Vipers are seen, a Ghost Academy and up to GHOST_CAP Ghosts from
 # Tech Lab Barracks, and each Ghost with the energy EMPs the nearest group of them: EMP drains all their energy, so no
@@ -250,6 +261,9 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._fleeing = set()  # SCVs kept off the minerals while Banelings are near
         self.gas_reserve = 0  # scripted play sets this: bank spending leaves this much gas for Tanks
         self._broodlords_seen = 0
+        self._terran_air_seen = 0
+        self._cloak_seen = None
+        self._last_cloak_scan = -1000
         self._last_air_response = -1000
         self._last_grow = -1000
         self._last_early_defense = -1000
@@ -772,6 +786,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         await self._grow_into_map()
         self._call_down_mules()
         await self._answer_air_threat()
+        await self._answer_cloak()
         await self._answer_casters()
         self._spend_bank()
         self._resume_construction()
@@ -1062,6 +1077,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self.log("air_threat", game_loop=self.state.game_loop, types=sorted({e.type_id.name for e in seen}))
         self._broodlords_seen = max(self._broodlords_seen, sum(
             1 for e in self.enemy_units if e.type_id in {U.BROODLORD, U.BROODLORDCOCOON}))
+        self._terran_air_seen = max(self._terran_air_seen, sum(
+            TERRAN_AIR.get(e.type_id, 0) for e in self.enemy_units))
         if self._air_threat_since is None or self.time - self._last_air_response < 1:
             return
         self._last_air_response = self.time
@@ -1071,7 +1088,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             await self._build_one(self._action_ids["BUILD STARPORT"], U.STARPORT)
         elif self.can_afford(U.STARPORTREACTOR) and self._addon_hosts(U.STARPORTREACTOR):
             await self._build_addon(self._action_ids["ADDON STARPORTREACTOR"], U.STARPORTREACTOR)
-        target = min(VIKINGS_MAX, max(VIKINGS_MIN, VIKINGS_PER_BROODLORD * self._broodlords_seen))
+        target = min(VIKINGS_MAX, max(VIKINGS_MIN, VIKINGS_PER_BROODLORD * self._broodlords_seen
+                                      + self._terran_air_seen))
         vikings = self._count_with_pending(U.VIKINGFIGHTER) + self.units(U.VIKINGASSAULT).amount
         used = Counter()
         trained = 0
@@ -1088,6 +1106,51 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             self._action_stats["anti_air_vikings"] += trained
             self.log("anti_air_vikings", game_loop=self.state.game_loop, trained=trained,
                      vikings=vikings + trained, target=target)
+
+    def _cloaked_enemies(self):
+        return [e for e in self.enemy_units if e.type_id in CLOAKERS and e.is_cloaked and not e.is_revealed]
+
+    async def _answer_cloak(self):
+        """Once a cloaked Banshee or Ghost is seen: an Engineering Bay, then a Missile Turret at each base."""
+        if self._cloak_seen is None:
+            seen = self._cloaked_enemies()
+            if not seen:
+                return
+            self._cloak_seen = self.time
+            self.log("cloak_threat", game_loop=self.state.game_loop, types=sorted({e.type_id.name for e in seen}))
+        failures = list(self.temp_failure_list)
+        try:
+            if not self.structures(U.ENGINEERINGBAY) and not self.already_pending(U.ENGINEERINGBAY):
+                if self.can_afford(U.ENGINEERINGBAY):
+                    await self._build_one(self._action_ids["BUILD ENGINEERINGBAY"], U.ENGINEERINGBAY)
+            elif (self.structures(U.ENGINEERINGBAY).ready and not self.already_pending(U.MISSILETURRET)
+                    and self._count_with_pending(U.MISSILETURRET) < self.townhalls.ready.amount
+                    and self.can_afford(U.MISSILETURRET)):
+                await self._build_one(self._action_ids["BUILD MISSILETURRET"], U.MISSILETURRET)
+                self._action_stats["cloak_turrets"] += 1
+        finally:
+            self.temp_failure_list = failures
+
+    def _scan_cloaked(self):
+        """Scan a cloaked Banshee or Ghost near our units or buildings, unless a turret already sees it."""
+        if self._cloak_seen is None or self.time - self._last_cloak_scan < CLOAK_SCAN_INTERVAL:
+            return
+        ours = self.units + self.structures
+        for enemy in self._cloaked_enemies():
+            if not ours.closer_than(CLOAK_REACH, enemy.position):
+                continue
+            if self.structures(U.MISSILETURRET).ready.closer_than(11, enemy.position):
+                continue
+            orbitals = self.structures(U.ORBITALCOMMAND).ready.filter(
+                lambda o: o.energy >= 50 and o.tag not in self.unit_tags_received_action)
+            if not orbitals:
+                return
+            orbitals.first(A.SCANNERSWEEP_SCAN, enemy.position)
+            self._last_cloak_scan = self.time
+            self._action_stats["cloak_scans"] += 1
+            self.log("cloak_scan", game_loop=self.state.game_loop, target=enemy.type_id.name,
+                     position=list(enemy.position))
+            return
 
     async def _answer_casters(self):
         """Against CheatMoney and stronger: once Infestors or Vipers are seen, a Ghost Academy and Ghosts."""
@@ -1246,8 +1309,8 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self.log("scanner_sweep", game_loop=self.state.game_loop, position=list(target))
 
     def _call_down_mules(self):
-        # Keep 50 energy for a scan while Lurkers may be burrowed nearby.
-        keep = 50 if self._lurker_threat() else 0
+        # Keep 50 energy for a scan while Lurkers may be burrowed nearby or cloaked units are about.
+        keep = 50 if self._lurker_threat() or self._cloak_seen is not None else 0
         bases = self.townhalls.ready
         fields = self.mineral_field.filter(lambda m: any(m.distance_to(b) < 10 for b in bases))
         if not fields:
@@ -1276,6 +1339,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._workers_flee_banelings()
         self._dodge_banelings()
         self._scan_for_burrowed()
+        self._scan_cloaked()
 
     def _snipe_ultralisks(self):
         """Ghosts with the energy, and no Infestor or Viper in EMP reach, snipe the nearest Ultralisk."""

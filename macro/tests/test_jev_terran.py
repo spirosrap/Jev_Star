@@ -1195,6 +1195,16 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         starport.train.assert_not_called()
         self.bot._build_one.assert_not_awaited()
 
+    async def test_terran_air_starts_the_viking_response_and_sets_its_size(self):
+        air = [FakeTerranUnit(100, U.LIBERATORAG), FakeTerranUnit(101, U.LIBERATOR), FakeTerranUnit(102, U.BATTLECRUISER),
+               FakeTerranUnit(103, U.BATTLECRUISER), FakeTerranUnit(104, U.BANSHEE)]
+        self.starport_world(enemies=air)
+        await self.bot._refresh_abilities()
+        self.bot._count_with_pending = Mock(return_value=8)
+        await self.bot._answer_air_threat()
+        self.assertEqual(self.bot._terran_air_seen, 9)  # 1 + 1 + 3 + 3 + 1
+        self.assertEqual(self.bot._action_stats["anti_air_vikings"], 1)  # 9 wanted, 8 there.
+
     async def test_viking_count_follows_the_brood_lords_seen(self):
         broods = [FakeTerranUnit(100 + i, U.BROODLORD) for i in range(5)]
         self.starport_world(enemies=broods)
@@ -1292,6 +1302,52 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         orbital.energy = 110
         self.bot._call_down_mules()
         self.assertEqual(orbital.commands[0][0], A.CALLDOWNMULE_CALLDOWNMULE)
+
+    def banshee_world(self, energy=60, cloaked=True, turret=False):
+        orbital = FakeTerranUnit(3, U.ORBITALCOMMAND)
+        orbital.energy = energy
+        banshee = FakeTerranUnit(90, U.BANSHEE, (14, 12))  # Over our mineral line.
+        banshee.is_cloaked, banshee.is_revealed = cloaked, False
+        structures = [self.cc, orbital] + ([FakeTerranUnit(4, U.MISSILETURRET, (13, 11))] if turret else [])
+        self.set_world([self.scv], structures, [banshee])
+        self.bot._build_one = AsyncMock()
+        return orbital, banshee
+
+    async def test_a_cloaked_banshee_is_scanned_and_brings_an_engineering_bay(self):
+        orbital, banshee = self.banshee_world()
+        await self.bot._answer_cloak()
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD ENGINEERINGBAY"], U.ENGINEERINGBAY)
+        self.bot._fast_micro()
+        self.assertIn((A.SCANNERSWEEP_SCAN, banshee.position), orbital.commands)
+        orbital.commands.clear()
+        self.bot._fast_micro()
+        self.assertEqual(orbital.commands, [])  # One scan every few seconds.
+
+    async def test_no_scan_where_a_turret_sees_or_for_a_visible_banshee(self):
+        orbital, _ = self.banshee_world(turret=True)
+        await self.bot._answer_cloak()
+        self.bot._fast_micro()
+        self.assertEqual(orbital.commands, [])
+        orbital, _ = self.banshee_world(cloaked=False)
+        self.bot._cloak_seen = None
+        await self.bot._answer_cloak()
+        self.assertIsNone(self.bot._cloak_seen)
+        self.bot._build_one.assert_not_awaited()
+
+    async def test_with_an_engineering_bay_turrets_follow_a_cloaked_banshee(self):
+        self.banshee_world()
+        ebay = FakeTerranUnit(5, U.ENGINEERINGBAY, (20, 20))
+        self.bot.structures = Units(list(self.bot.structures) + [ebay], self.bot)
+        self.bot._count_with_pending = Mock(return_value=0)
+        await self.bot._answer_cloak()
+        self.bot._build_one.assert_awaited_once_with(self.bot._action_ids["BUILD MISSILETURRET"], U.MISSILETURRET)
+
+    async def test_mules_leave_scan_energy_once_cloak_is_seen(self):
+        orbital, _ = self.banshee_world(energy=60)
+        await self.bot._answer_cloak()
+        self.bot.mineral_field = Units([FakeTerranUnit(9, U.MINERALFIELD, (15, 10))], self.bot)
+        self.bot._call_down_mules()
+        self.assertEqual(orbital.commands, [])
 
     async def test_cheating_ai_floor_hides_attack_from_jev(self):
         import dataclasses
