@@ -59,6 +59,27 @@ class ScriptedPolicyTests(unittest.TestCase):
         low["resource"]["gas"] = 300
         self.assertEqual(pick(low, army), "2")
 
+    def test_saves_for_a_due_command_center(self):
+        # A base is due (75 s) but unaffordable: no Marines, only SCVs and depots.
+        choices = {"1": "TRAIN MARINE", "16": "BUILD SUPPLYDEPOT", "69": "EMPTY ACTION"}
+        poor = state(seconds=300, workers=30, building={"BARRACKS": 2})
+        poor["resource"]["mineral"] = 200
+        self.assertEqual(pick(poor, choices), "69")
+        poor["base_under_attack"] = True  # Under attack: fight first.
+        self.assertEqual(pick(poor, choices), "1")
+
+    def test_marauders_before_marines_once_ultralisks_are_seen(self):
+        army = {"2": "TRAIN MARAUDER", "1": "TRAIN MARINE", "69": "EMPTY ACTION"}
+        late = state(seconds=1200, workers=76, building={"COMMANDCENTER": 5}, unit={"MARINE": 20, "MARAUDER": 30})
+        late["resource"]["gas"] = 150
+        memory = {}
+        self.assertEqual(pick(late, army, memory), "1")  # No Ultralisks seen: Marines to 40.
+        late["enemy"] = {"unit": {"ULTRALISK": 2}, "structure": {}}
+        self.assertEqual(pick(late, army, memory), "2")
+        late["enemy"] = {"unit": {}, "structure": {}}
+        late["resource"]["gas"] = 50
+        self.assertEqual(pick(late, army, memory), "69")  # Remembered: Marines stay at 20 now.
+
     def test_client_answers_in_the_jev_shape(self):
         client = ScriptedClient()
         response = asyncio.run(client.choose(client.payload(state(needs_supply=True), CHOICES)))

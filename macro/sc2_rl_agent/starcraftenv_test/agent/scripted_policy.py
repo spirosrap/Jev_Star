@@ -21,6 +21,14 @@ FIRST_BUNKER = 140
 # Gas goes to Tanks first: in the baseline2 Babylon loss the bot trained 67 Marauders and 13 Medivacs after 14:00
 # but only 16 Tanks (Jev wins: 22-32), and its Tanks fell from 15 to 1-5.
 GAS_SPARE = 200
+# Save minerals for a Command Center that is due: in round1 the Rush game lost its natural at 4:00 and never had
+# 400 minerals again (every mineral went on Marines), so it played on one base and 21-23 SCVs to the end.
+SAVE_FOR_BASE_ALLOWS = ("BUILD SUPPLYDEPOT", "TRAIN SCV")
+# Once Ultralisks (or their Cavern) are seen, Marauders before Marines: in round1's Babylon and Neohumanity losses
+# Ultralisks killed 138 and 167 army supply of a Marine-and-Tank army with almost no Marauders.
+ULTRALISK_SIGNS = {"ULTRALISK", "ULTRALISKBURROWED", "ULTRALISKCAVERN"}
+MARINE_CAP_AGAINST_ULTRALISKS = 20
+MARAUDER_GAS_AGAINST_ULTRALISKS = 100
 FIRST_FACTORY = 150
 FIRST_STARPORT = 480
 MEDIVACS = 6
@@ -46,12 +54,13 @@ class ScriptedClient:
 
     def __init__(self, *args, **kwargs):
         self.instructions = self.plan_instructions = ""
+        self.memory = {}  # what the rules remember across decisions (e.g. Ultralisks seen)
 
     def payload(self, state: dict, choices: dict) -> dict:
         return {"model": self.model, "state": state, "choices": {str(k): v for k, v in choices.items()}}
 
     async def choose(self, payload: dict) -> dict:
-        choice = pick(payload["state"], payload["choices"])
+        choice = pick(payload["state"], payload["choices"], self.memory)
         probabilities = {key: float(key == choice) for key in payload["choices"]}
         return {"model": self.model, "usage": {},
                 "answer": {"type": "choice", "choice": choice, "confidence": 1.0, "probabilities": probabilities}}
@@ -60,18 +69,34 @@ class ScriptedClient:
         pass
 
 
-def pick(state: dict, choices: dict) -> str:
+def pick(state: dict, choices: dict, memory: dict = None) -> str:
     """The id (as a string) of the first wanted action that is legal now."""
     by_name = {name: key for key, name in choices.items()}
-    for name in wanted_actions(state):
+    wanted = wanted_actions(state, {} if memory is None else memory)
+    if ("BUILD COMMANDCENTER" in wanted and "BUILD COMMANDCENTER" not in by_name and behind_on_bases(state)
+            and not state.get("base_under_attack") and state["resource"].get("mineral", 0) < 400):
+        wanted = [name for name in wanted if name in SAVE_FOR_BASE_ALLOWS]
+    for name in wanted:
         if name in by_name:
             return by_name[name]
     return by_name.get("EMPTY ACTION", next(iter(choices)))
 
 
-def wanted_actions(state: dict):
+def behind_on_bases(state: dict) -> bool:
+    """Fewer bases than the schedule wants by now (not merely more workers than the bases can use)."""
+    building, planning = state.get("building", {}), state.get("planning", {})
+    bases = sum(building.get(k, 0) + planning.get(k, 0)
+                for k in ("COMMANDCENTER", "ORBITALCOMMAND", "PLANETARYFORTRESS"))
+    return bases < _planned(EXPANSIONS, state.get("game_loop", 0) / 22.4)
+
+
+def wanted_actions(state: dict, memory: dict = None):
     """Action names in priority order; the first legal one is taken."""
+    memory = {} if memory is None else memory
     resource, building, unit = state["resource"], state.get("building", {}), state.get("unit", {})
+    enemy = state.get("enemy", {})
+    if ULTRALISK_SIGNS & (set(enemy.get("unit", {})) | set(enemy.get("structure", {}))):
+        memory["ultralisks"] = True
     planning = state.get("planning", {})
     seconds = state.get("game_loop", 0) / 22.4
     have = lambda *kinds: sum(building.get(k, 0) + unit.get(k, 0) + planning.get(k, 0) for k in kinds)
@@ -107,9 +132,15 @@ def wanted_actions(state: dict):
     wanted += [f"RESEARCH {r}" for r in RESEARCH if not research.get(r)]
     wanted.append("TRAIN SIEGETANK")
     gas_to_spare = resource.get("gas", 0) >= GAS_SPARE
+    if memory.get("ultralisks"):
+        if resource.get("gas", 0) >= MARAUDER_GAS_AGAINST_ULTRALISKS:
+            wanted.append("TRAIN MARAUDER")
+        marine_cap = MARINE_CAP_AGAINST_ULTRALISKS
+    else:
+        marine_cap = MARINE_CAP
     if gas_to_spare and have("MARAUDER") * 2 < have("MARINE") + 4:
         wanted.append("TRAIN MARAUDER")
-    if have("MARINE") < MARINE_CAP:
+    if have("MARINE") < marine_cap:
         wanted.append("TRAIN MARINE")
     if gas_to_spare and have("MEDIVAC") < MEDIVACS:
         wanted.append("TRAIN MEDIVAC")

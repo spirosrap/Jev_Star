@@ -767,6 +767,24 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         rax.train.assert_not_called()
         self.bot._build_one.assert_not_awaited()  # The Academy is there.
 
+    async def test_ghosts_snipe_ultralisks_when_no_caster_is_near(self):
+        ghost = FakeTerranUnit(60, U.GHOST, (30, 30))
+        ghost.energy = 50
+        ultra = FakeTerranUnit(80, U.ULTRALISK, (36, 30))
+        self.set_world([self.scv, ghost], [self.cc], [ultra])
+        self.bot.cautious_attacks = True
+        self.bot.state.game_loop = int(1200 * 22.4)
+        self.bot._fast_micro()
+        self.assertIn((A.EFFECT_GHOSTSNIPE, ultra), ghost.commands)
+        ghost.commands.clear()
+        infestor = FakeTerranUnit(81, U.INFESTOR, (40, 30))
+        self.set_world([self.scv, ghost], [self.cc], [ultra, infestor])
+        ghost.energy = 60  # Below EMP energy, but an Infestor is in reach: keep the energy for EMP.
+        self.bot.unit_tags_received_action = set()
+        self.bot._snipes = {}
+        self.bot._fast_micro()
+        self.assertNotIn((A.EFFECT_GHOSTSNIPE, ultra), ghost.commands)
+
     async def test_ghosts_emp_the_densest_group_of_casters_once(self):
         ghost, tired = FakeTerranUnit(60, U.GHOST, (30, 30)), FakeTerranUnit(61, U.GHOST, (30, 31))
         ghost.energy, tired.energy = 75, 74

@@ -86,6 +86,12 @@ EMP_ENERGY = 75
 EMP_REACH = 13  # EMP range is 10; a Ghost walks the last cells itself
 EMP_RADIUS = 1.5
 EMP_REPEAT = 10  # seconds before a drained caster is worth another EMP
+# Ghosts with Snipe energy and no caster to EMP snipe Ultralisks (170 damage to biological units, range 10): in
+# round1's Babylon and Neohumanity losses Ultralisks were the top killer of our army after 20:00.
+SNIPE_ENERGY = 50
+SNIPE_REACH = 11
+SNIPES_PER_ULTRALISK = 3  # 500 hit points
+SNIPE_TARGETS = {U.ULTRALISK}
 MEDIVAC_FRONT = 8  # the bio units nearest the army's heading that Medivacs stay over
 MEDIVAC_SLACK = 6
 # Against CheatMoney and stronger, surplus minerals grow the bot into the map (T70-T73 sat on 3,000-17,000 unused
@@ -1255,9 +1261,34 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _fast_micro(self):
         self._emp_casters()
+        self._snipe_ultralisks()
         self._workers_flee_banelings()
         self._dodge_banelings()
         self._scan_for_burrowed()
+
+    def _snipe_ultralisks(self):
+        """Ghosts with the energy, and no Infestor or Viper in EMP reach, snipe the nearest Ultralisk."""
+        if not self.cautious_attacks:
+            return
+        targets = [e for e in self.enemy_units if e.type_id in SNIPE_TARGETS and e.is_visible]
+        if not targets:
+            return
+        casters = [e for e in self.enemy_units if e.type_id in CASTERS and e.is_visible]
+        now = self.time
+        self._snipes = {tag: [t for t in times if t > now] for tag, times in getattr(self, "_snipes", {}).items()}
+        for ghost in self.units(U.GHOST).ready:
+            if ghost.energy < SNIPE_ENERGY or ghost.tag in self.unit_tags_received_action:
+                continue
+            if any(ghost.distance_to(c) <= EMP_REACH for c in casters) or ghost.is_using_ability(A.EFFECT_GHOSTSNIPE):
+                continue
+            near = [t for t in targets if ghost.distance_to(t) <= SNIPE_REACH
+                    and len(self._snipes.get(t.tag, [])) < SNIPES_PER_ULTRALISK]
+            if not near:
+                continue
+            target = min(near, key=lambda t: ghost.distance_to(t))
+            ghost(A.EFFECT_GHOSTSNIPE, target)
+            self._snipes.setdefault(target.tag, []).append(now + 2)
+            self._action_stats["ghost_snipes"] += 1
 
     def _workers_flee_banelings(self):
         """SCVs near Banelings run behind their Command Center and stay off the minerals until the Banelings are gone."""
