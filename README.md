@@ -679,6 +679,23 @@ The Rush game never banked 1,000 minerals, so the new rule never applied: its ar
 
 Batch `round5a` (commit `6be0f4c`: once 10 or more Mutalisks are seen at once, the Ultralisk rule gives way and Marines go back to 40 before Marauders; no other game ever saw more than 8, so only Rush could change): **Defeat at 30:00**, sooner than round4's 36:30. The deciding fight came first: at 20:50 a push 48 cells from home met Mutalisks, Ultralisks, Banelings and Spore Crawlers and lost about 100 army supply in both versions, at the moment the swarm was first seen. The extra Marines then killed 15 Mutalisks in one fight, but the rebuilt army fell faster to the Brood Lords. Reverted (`0370641`). Two other explanations were checked and rejected: the winning games also push with 100-109 army supply and gain from it, and their pushes also hop between 5-13 targets. Round4 (`7406165`, 9/10) is kept as the finished scripted Terran version; only the Rush build still beats it.
 
+Batch `seeds23` (round4's code, `7406165`, unchanged): the ten games again with random seeds 2 and 3, to see whether 9/10 holds beyond the one game per matchup it was tuned on. **14 wins, 3 ties, 3 losses**; with seed 1, **23 wins, 3 ties and 4 losses in 30 games (77%)**.
+
+| Map / Zerg build | Seed 2 | Seed 3 |
+|---|---|---|
+| Ancient Cistern / Macro | Tie (45:00 limit) | **Victory** 21:18 |
+| Babylon / Macro | **Victory** 18:54 | **Victory** 19:00 |
+| Altitude / Macro | **Victory** 42:18 | **Victory** 16:00 |
+| Neohumanity / Macro | **Victory** 17:18 | **Victory** 27:18 |
+| Gresvan / Macro | **Victory** 23:30 | **Victory** 33:00 |
+| Dragon Scales / Macro | Tie (45:00 limit) | **Victory** 28:06 |
+| Ancient Cistern / Rush | Tie (45:00 limit) | **Victory** 16:42 |
+| Ancient Cistern / Timing | Defeat 8:48 | **Victory** 18:24 |
+| Ancient Cistern / Power | **Victory** 19:36 | Defeat 30:12 |
+| Ancient Cistern / Air | **Victory** 34:24 | Defeat 37:12 |
+
+The seed changes the game (Gresvan: 20:06 with seed 1, 23:30 with seed 2), so these are new games. Ancient Cistern against Rush, lost with seed 1, tied with seed 2 and won with seed 3 (16:42, the first win against Rush): seed 1 was an unusually hard game, and tuning on it would have fitted one game. The losses: Timing (seed 2) at 8:48 to 18 Zerglings and 6 Roaches at 4:38, against an opening of 31 SCVs and 4-8 Marines at 4:00; Power and Air (seed 3) late. Three games tied at the 45-minute limit, alive but unable to finish the Zerg. From here a change is judged on all three seeds (30 games), not on the game it targets.
+
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
 In T22 the upgrades came on time (Engineering Bay 5:37, Armory 6:45), but the army never reached the attack size: CheatVision brought 19 Banelings before 10:00 on Babylon (17–20 in T20–T21 as well) and destroyed a mostly-Marine defense with one or two Siege Tanks at 9:00 and again at 13:30. The schedule now also asks for a Factory with a Tech Lab by 5:30, two Siege Tanks by 6:30, and four Widow Mines by 7:00, and for a Planetary Fortress at the most exposed base once Banelings are seen; sieged Tanks and burrowed Mines now count toward those numbers.
@@ -1361,6 +1378,23 @@ round3 的改动没有修好目标对局（Cistern Macro 和 Rush 再次失利�
 对 Rush 的比赛从未积存 1,000 矿物，新规则从未生效：从 14:00 到 26:00 每两分钟的部队、矿物、瓦斯和单位数量都与 round2 的对局一致，因此作为已知败局停止。该局第一次进攻（14:38）在离家 73 格处损失了全部 14 辆坦克，其中 9 辆是被我方架起的坦克击毁的（Zerg 有 Neural Parasite，Infestor 在场）；20:00 以后 Zerg 转为 12-20 只 Mutalisk、Brood Lord 和 Corruptor，而我方部队是 30-37 个 Marauder（不能对空）、20 个 Marine，没有 Thor。下一个目标是 Rush。
 
 批次 `round5a`（提交 `6be0f4c`：同时见到 10 只以上 Mutalisk 后，Ultralisk 规则让位，Marine 恢复到 40 并优先于 Marauder；其他对局最多只见过 8 只，所以只有 Rush 会改变）：**30:00 失败**，比 round4 的 36:30 更早。决定性的战斗发生在规则生效之前：20:50 一次进攻在离家 48 格处遇到 Mutalisk、Ultralisk、Baneling 和 Spore Crawler，两个版本都损失了约 100 部队人口，正是首次见到这群 Mutalisk 的时刻。之后多出的 Marine 在一次战斗中击杀 15 只 Mutalisk，但重建的部队更快败给 Brood Lord。已撤销（`0370641`）。另外两种解释经检查被否定：胜局同样以 100-109 部队人口进攻并且获利，胜局的进攻同样在 5-13 个目标之间切换。保留 round4（`7406165`，10 局 9 胜）作为完成的脚本 Terran 版本；只有 Rush 战术仍能击败它。
+
+批次 `seeds23`（round4 的代码 `7406165`，未改动）：用随机种子 2 和 3 重打这十局，检验 9/10 是否只适用于调试时用的那一局。**14 胜 3 平 3 负**；加上种子 1，**30 局 23 胜 3 平 4 负（77%）**。
+
+| 地图 / Zerg 战术 | 种子 2 | 种子 3 |
+|---|---|---|
+| Ancient Cistern / Macro | 平局（45:00 时限） | **胜利** 21:18 |
+| Babylon / Macro | **胜利** 18:54 | **胜利** 19:00 |
+| Altitude / Macro | **胜利** 42:18 | **胜利** 16:00 |
+| Neohumanity / Macro | **胜利** 17:18 | **胜利** 27:18 |
+| Gresvan / Macro | **胜利** 23:30 | **胜利** 33:00 |
+| Dragon Scales / Macro | 平局（45:00 时限） | **胜利** 28:06 |
+| Ancient Cistern / Rush | 平局（45:00 时限） | **胜利** 16:42 |
+| Ancient Cistern / Timing | 失败 8:48 | **胜利** 18:24 |
+| Ancient Cistern / Power | **胜利** 19:36 | 失败 30:12 |
+| Ancient Cistern / Air | **胜利** 34:24 | 失败 37:12 |
+
+种子会改变对局（Gresvan：种子 1 为 20:06，种子 2 为 23:30），所以这些是新的对局。Ancient Cistern 对 Rush 在种子 1 下失败，种子 2 平局，种子 3 胜利（16:42，第一次战胜 Rush）：种子 1 是一局特别难的对局，针对它调整只会适配那一局。失利：Timing（种子 2）在 8:48 失败，4:38 遭到 18 只 Zergling 和 6 只 Roach 进攻，而开局在 4:00 时有 31 个 SCV、只有 4-8 个 Marine；Power 和 Air（种子 3）败在后期。三局在 45 分钟时限内平局：活着但无法消灭 Zerg。今后每个改动都在三个种子（30 局）上评估，而不是只看目标对局。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
