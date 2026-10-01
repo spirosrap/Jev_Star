@@ -80,18 +80,6 @@ class ScriptedPolicyTests(unittest.TestCase):
         late["resource"]["gas"] = 50
         self.assertEqual(pick(late, army, memory), "69")  # Remembered: Marines stay at 20 now.
 
-    def test_a_mutalisk_swarm_brings_the_marines_back(self):
-        army = {"2": "TRAIN MARAUDER", "1": "TRAIN MARINE", "69": "EMPTY ACTION"}
-        late = state(seconds=1300, workers=76, building={"COMMANDCENTER": 5}, unit={"MARINE": 20, "MARAUDER": 30})
-        late["resource"]["gas"] = 150
-        memory = {}
-        late["enemy"] = {"unit": {"ULTRALISK": 2, "MUTALISK": 9}, "structure": {}}
-        self.assertEqual(pick(late, army, memory), "2")  # Nine Mutalisks: still the Ultralisk rule.
-        late["enemy"] = {"unit": {"MUTALISK": 10}, "structure": {}}
-        self.assertEqual(pick(late, army, memory), "1")  # A swarm: Marines to 40 before Marauders.
-        late["enemy"] = {"unit": {}, "structure": {}}
-        self.assertEqual(pick(late, army, memory), "1")  # Remembered.
-
     def test_client_answers_in_the_jev_shape(self):
         client = ScriptedClient()
         response = asyncio.run(client.choose(client.payload(state(needs_supply=True), CHOICES)))

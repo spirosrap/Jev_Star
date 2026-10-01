@@ -29,10 +29,6 @@ SAVE_FOR_BASE_ALLOWS = ("BUILD SUPPLYDEPOT", "TRAIN SCV")
 ULTRALISK_SIGNS = {"ULTRALISK", "ULTRALISKBURROWED", "ULTRALISKCAVERN"}
 MARINE_CAP_AGAINST_ULTRALISKS = 20
 MARAUDER_GAS_AGAINST_ULTRALISKS = 100
-# A Mutalisk swarm overrides that: Marauders cannot shoot air. In round4's Rush loss (identical to round2's) 12-20
-# Mutalisks with Brood Lords met an army of 30-37 Marauders and 20 Marines and killed 102-111 army supply a fight
-# from 20:50. No other round4 game saw more than 8 Mutalisks at once (Air), so only this game changes.
-MUTALISK_SWARM = 10
 FIRST_FACTORY = 150
 FIRST_STARPORT = 480
 MEDIVACS = 6
@@ -101,8 +97,6 @@ def wanted_actions(state: dict, memory: dict = None):
     enemy = state.get("enemy", {})
     if ULTRALISK_SIGNS & (set(enemy.get("unit", {})) | set(enemy.get("structure", {}))):
         memory["ultralisks"] = True
-    if enemy.get("unit", {}).get("MUTALISK", 0) >= MUTALISK_SWARM:
-        memory["mutalisk_swarm"] = True
     planning = state.get("planning", {})
     seconds = state.get("game_loop", 0) / 22.4
     have = lambda *kinds: sum(building.get(k, 0) + unit.get(k, 0) + planning.get(k, 0) for k in kinds)
@@ -138,7 +132,7 @@ def wanted_actions(state: dict, memory: dict = None):
     wanted += [f"RESEARCH {r}" for r in RESEARCH if not research.get(r)]
     wanted.append("TRAIN SIEGETANK")
     gas_to_spare = resource.get("gas", 0) >= GAS_SPARE
-    if memory.get("ultralisks") and not memory.get("mutalisk_swarm"):
+    if memory.get("ultralisks"):
         if resource.get("gas", 0) >= MARAUDER_GAS_AGAINST_ULTRALISKS:
             wanted.append("TRAIN MARAUDER")
         marine_cap = MARINE_CAP_AGAINST_ULTRALISKS
