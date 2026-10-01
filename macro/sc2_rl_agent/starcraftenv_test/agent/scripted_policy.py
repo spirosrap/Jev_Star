@@ -28,14 +28,7 @@ SAVE_FOR_BASE_ALLOWS = ("BUILD SUPPLYDEPOT", "TRAIN SCV")
 # Ultralisks killed 138 and 167 army supply of a Marine-and-Tank army with almost no Marauders.
 ULTRALISK_SIGNS = {"ULTRALISK", "ULTRALISKBURROWED", "ULTRALISKCAVERN"}
 MARINE_CAP_AGAINST_ULTRALISKS = 20
-# Round2's Cistern and Rush losses: Marauders at 100 spare gas took the gas Tanks need (Tanks fell to 1-8 while
-# Marauders rose to 21-25), and Tanks kill 2.2 Zerg supply per supply lost against 0.9 for Marauders. So against
-# Ultralisks Marauders still wait for TANKS_WANTED Tanks or MARAUDER_GAS_AGAINST_ULTRALISKS spare gas.
-MARAUDER_GAS_AGAINST_ULTRALISKS = 250
-TANKS_WANTED = 12
-# Marines are the anti-air: with Zerg air seen they stay at MARINE_CAP even against Ultralisks (round2's Rush loss:
-# Mutalisks and Brood Lords killed 274 army supply of an army capped at 20 Marines).
-ZERG_AIR = {"MUTALISK", "CORRUPTOR", "BROODLORD", "BROODLORDCOCOON", "SPIRE", "GREATERSPIRE"}
+MARAUDER_GAS_AGAINST_ULTRALISKS = 100
 FIRST_FACTORY = 150
 FIRST_STARPORT = 480
 MEDIVACS = 6
@@ -102,11 +95,8 @@ def wanted_actions(state: dict, memory: dict = None):
     memory = {} if memory is None else memory
     resource, building, unit = state["resource"], state.get("building", {}), state.get("unit", {})
     enemy = state.get("enemy", {})
-    seen = set(enemy.get("unit", {})) | set(enemy.get("structure", {}))
-    if ULTRALISK_SIGNS & seen:
+    if ULTRALISK_SIGNS & (set(enemy.get("unit", {})) | set(enemy.get("structure", {}))):
         memory["ultralisks"] = True
-    if ZERG_AIR & seen:
-        memory["zerg_air"] = True
     planning = state.get("planning", {})
     seconds = state.get("game_loop", 0) / 22.4
     have = lambda *kinds: sum(building.get(k, 0) + unit.get(k, 0) + planning.get(k, 0) for k in kinds)
@@ -143,10 +133,9 @@ def wanted_actions(state: dict, memory: dict = None):
     wanted.append("TRAIN SIEGETANK")
     gas_to_spare = resource.get("gas", 0) >= GAS_SPARE
     if memory.get("ultralisks"):
-        tanks = have("SIEGETANK", "SIEGETANKSIEGED")
-        if tanks >= TANKS_WANTED or resource.get("gas", 0) >= MARAUDER_GAS_AGAINST_ULTRALISKS:
+        if resource.get("gas", 0) >= MARAUDER_GAS_AGAINST_ULTRALISKS:
             wanted.append("TRAIN MARAUDER")
-        marine_cap = MARINE_CAP if memory.get("zerg_air") else MARINE_CAP_AGAINST_ULTRALISKS
+        marine_cap = MARINE_CAP_AGAINST_ULTRALISKS
     else:
         marine_cap = MARINE_CAP
     if gas_to_spare and have("MARAUDER") * 2 < have("MARINE") + 4:

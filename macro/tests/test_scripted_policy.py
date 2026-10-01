@@ -75,23 +75,10 @@ class ScriptedPolicyTests(unittest.TestCase):
         memory = {}
         self.assertEqual(pick(late, army, memory), "1")  # No Ultralisks seen: Marines to 40.
         late["enemy"] = {"unit": {"ULTRALISK": 2}, "structure": {}}
-        self.assertEqual(pick(late, army, memory), "69")  # Few Tanks and 150 gas: the gas waits for a Tank.
-        late["unit"]["SIEGETANK"] = 12
-        self.assertEqual(pick(late, army, memory), "2")  # Tanks at their target: Marauders.
-        del late["unit"]["SIEGETANK"]
+        self.assertEqual(pick(late, army, memory), "2")
         late["enemy"] = {"unit": {}, "structure": {}}
         late["resource"]["gas"] = 50
         self.assertEqual(pick(late, army, memory), "69")  # Remembered: Marines stay at 20 now.
-
-    def test_marines_stay_at_forty_against_ultralisks_when_zerg_air_is_seen(self):
-        army = {"1": "TRAIN MARINE", "69": "EMPTY ACTION"}
-        late = state(seconds=1200, workers=76, building={"COMMANDCENTER": 5}, unit={"MARINE": 30})
-        late["resource"]["gas"] = 50
-        memory = {}
-        late["enemy"] = {"unit": {"ULTRALISK": 2}, "structure": {}}
-        self.assertEqual(pick(late, army, memory), "69")  # Cap 20 against Ultralisks alone.
-        late["enemy"] = {"unit": {"MUTALISK": 6}, "structure": {}}
-        self.assertEqual(pick(late, army, memory), "1")  # Air seen: back to 40.
 
     def test_client_answers_in_the_jev_shape(self):
         client = ScriptedClient()
