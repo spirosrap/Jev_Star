@@ -215,6 +215,31 @@ class RunnerFailureTests(unittest.TestCase):
             self.assertTrue((output / "report.html").is_file())
             self.assertIn("test graphics startup failure", (output / "engine.log").read_text())
 
+    def test_codex_planner_plays_the_planning_bot(self):
+        # The Codex branch once built no bot at all (only the Claude branch did), so the run crashed before the game.
+        from unittest.mock import AsyncMock, MagicMock
+        from sc2_rl_agent.starcraftenv_test import run_jev
+        from sc2_rl_agent.starcraftenv_test.agent import astra_planner
+        from sc2_rl_agent.starcraftenv_test.env.bot.hierarchical_terran_bot import HierarchicalTerranBot
+        from sc2_rl_agent.starcraftenv_test.utils import sc2_runtime
+        players = []
+
+        def start(game_map, game_players, **kwargs):
+            players.extend(game_players)
+            raise RuntimeError("stop before SC2")
+
+        planner = MagicMock(instructions="", close=AsyncMock())
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "codex-run"
+            with patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-no-network"}), \
+                 patch("sys.argv", ["run_jev", "--race", "Terran", "--planner", "codex", "--output-dir", str(output)]), \
+                 patch("sc2.maps.get", return_value=SimpleNamespace(path=Path(tmp) / "test.SC2Map", data=b"test-map")), \
+                 patch.object(astra_planner, "CodexPlannerClient", return_value=planner), \
+                 patch.object(sc2_runtime, "run_windowed_game", side_effect=start), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(run_jev.main(), 1)
+            self.assertIsInstance(players[0].ai, HierarchicalTerranBot)
+
 
 if __name__ == "__main__":
     unittest.main()
