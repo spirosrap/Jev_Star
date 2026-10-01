@@ -155,6 +155,7 @@ def main():
                     planner_client = ClaudePlannerClient(output, args.claude_path, args.planner_model,
                                                         args.planner_timeout, args.planner_effort,
                                                         contract=contract)
+                if planner_client is not None:
                     bot = PlannedBot(client, output, args.decision_interval, args.max_decision_age,
                                                  args.max_requests, planner_client=planner_client, run_log=log,
                                                  planner_interval=args.planner_interval, plan_ttl=args.plan_ttl,
