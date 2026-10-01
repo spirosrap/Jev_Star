@@ -594,11 +594,24 @@ class TerranAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.bot._push_active)
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_1")
+        self.bot._ready_army_supply = Mock(return_value=90)  # Lost more than 15%: no extension.
         self.bot.state.game_loop = int(991 * 22.4)  # The 90 s push is over.
         self.bot._counter_attack()
         self.assertFalse(self.bot._push_active)
         self.bot._army_target_id = "enemy_1"
         self.assertEqual(self.bot._attack_position()[0], "enemy_2")
+
+    async def test_a_push_that_keeps_its_army_extends_up_to_the_limit(self):
+        self.counter_world(supply_used=190, minerals=2000, upgrades={UpgradeId.TERRANINFANTRYWEAPONSLEVEL2})
+        self.bot._counter_attack()  # Starts at 900 s with 110 army supply.
+        self.bot._ready_army_supply = Mock(return_value=94)  # 85% kept.
+        for second in (991, 1052, 1113, 1174):
+            self.bot.state.game_loop = int(second * 22.4)
+            self.bot._counter_attack()
+            self.assertTrue(self.bot._push_active, second)
+        self.bot.state.game_loop = int(1235 * 22.4)  # 330 s since the start: the push ends however it goes.
+        self.bot._counter_attack()
+        self.assertFalse(self.bot._push_active)
 
     async def test_each_wave_is_logged_with_what_it_cost_both_sides(self):
         marine = FakeTerranUnit(60, U.MARINE, (40, 40))

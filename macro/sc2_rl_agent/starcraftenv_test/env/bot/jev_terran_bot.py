@@ -152,6 +152,14 @@ COUNTER_RECALL_THREAT = 8  # enemy army supply near a base that ends the window 
 COUNTER_RECALL_DISTANCE = 30
 PUSH_MIN_SUPPLY = 185
 PUSH_WINDOW = 90
+# A push that is going well keeps going: in scripted batch seeds23's three ties (45:00 limit, Dragon Scales, Ancient
+# Cistern Macro and Rush) the pushes after 22:00 lost little or gained army supply, yet each turned home after 90 s
+# and the Zerg, with CheatMoney's income, rebuilt bases about as fast as one push a window cleared them (Dragon
+# Scales still had 4-8 Hatcheries until 40:00). While the army keeps this share of its supply at the push's start,
+# the window extends, up to PUSH_MAX_SECONDS in all; a push that is losing still ends on time.
+PUSH_KEEP_SHARE = .85
+PUSH_EXTENSION = 60
+PUSH_MAX_SECONDS = 330
 # The push also goes when the Zerg have not attacked for this long: in T102 the army sat maxed at home with 4,800
 # minerals from 36:14 on, because the push waited for a wave that did not come.
 PUSH_IDLE = 60
@@ -259,6 +267,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
         self._enemy_army_supply = {}  # tag -> supply of enemy army units seen, to count what dies
         self._enemy_losses = deque()  # (game seconds, supply)
         self._counter_until = None
+        self._push_army_start = 0
         self._last_counter = -1000
         self._push_active = False
         self._last_threat_seen = 0.0
@@ -812,6 +821,14 @@ class JevTerranBot(JevMacroBot, TerranObservation):
             threat = sum(self.calculate_supply_cost(e.type_id) for e in threats)
             far = (army and self.townhalls and threat >= COUNTER_RECALL_THREAT and army.center.distance_to(
                 min(self.townhalls, key=lambda b: threats.closest_distance_to(b))) >= COUNTER_RECALL_DISTANCE)
+            extended = min(self.time + PUSH_EXTENSION, self._last_counter + PUSH_MAX_SECONDS)
+            if (self.time >= self._counter_until and army and not far and self._push_active
+                    and self._ready_army_supply() >= PUSH_KEEP_SHARE * self._push_army_start
+                    and extended > self.time + 1):
+                self._counter_until = extended
+                self.log("push_extended", game_loop=self.state.game_loop, army_supply=self._ready_army_supply(),
+                         army_at_start=self._push_army_start)
+                return
             if self.time >= self._counter_until or not army or far:
                 self._end_counter("base_attacked" if far else "window_over" if army else "army_gone")
             return
@@ -838,6 +855,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
                  if m["type"] in {b.name for b in ZERG_BASES} and self._attack_allowed(m["position"])]
         target = min(bases, key=lambda m: army.center.distance_to(Point2(m["position"])))["id"] if bases else None
         self._counter_until = self.time + (PUSH_WINDOW if self._push_active else COUNTER_WINDOW)
+        self._push_army_start = self._ready_army_supply()
         self._last_counter = self.time
         self._enemy_losses.clear()
         self.army_intent = "attack"
@@ -866,6 +884,7 @@ class JevTerranBot(JevMacroBot, TerranObservation):
 
     def _end_counter(self, why):
         self._counter_until = None
+        self._push_army_start = 0
         self._push_active = False
         self._set_army_intent("defend")
         self.log("counter_attack_end", game_loop=self.state.game_loop, reason=why)
