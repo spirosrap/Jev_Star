@@ -61,11 +61,11 @@ def run_command(host, command, out, log):
                    stderr=subprocess.STDOUT)
 
 
-def play(host, index, spec, folder, minutes, difficulty, game_step, seed=1):
+def play(host, index, spec, folder, minutes, difficulty, game_step, race="Terran", opponent="Zerg", seed=1):
     game_map, build = spec.split(":")
     out = folder / (f"{index:02d}-{game_map.split()[0].lower()}-{build.lower()}" + ("" if seed == 1 else f"-s{seed}"))
-    command = [str(PYTHON), "-m", "sc2_rl_agent.starcraftenv_test.run_jev", "--race", "Terran",
-               "--map", game_map, "--opponent-race", "Zerg", "--difficulty", difficulty, "--ai-build", build,
+    command = [str(PYTHON), "-m", "sc2_rl_agent.starcraftenv_test.run_jev", "--race", race,
+               "--map", game_map, "--opponent-race", opponent, "--difficulty", difficulty, "--ai-build", build,
                "--game-time-limit", str(minutes * 60), "--seed", str(seed), "--policy", "scripted", "--fast",
                "--game-step", str(game_step),
                "--output-dir"]
@@ -80,7 +80,8 @@ def play(host, index, spec, folder, minutes, difficulty, game_step, seed=1):
         if data.get("game_seconds", 0) > 60:
             break
     out = target
-    row = {"game": out.name, "map": game_map, "build": build, "seed": seed, "host": host,
+    row = {"game": out.name, "race": race, "opponent": opponent, "map": game_map, "build": build, "seed": seed,
+           "host": host,
            "result": data.get("result", "no summary"), "game_time": round(data.get("game_seconds", 0) / 60, 1),
            "wall_minutes": round((time.time() - started) / 60, 1)}
     print(f"{row['game']:40s} {row['result']:10s} game {row['game_time']:5.1f} min  wall {row['wall_minutes']:5.1f} min"
@@ -107,6 +108,8 @@ def main():
     parser.add_argument("--hosts", nargs="*", help="HOST:GAMES_AT_ONCE entries, e.g. local:3 dell-pc:1")
     parser.add_argument("--minutes", type=int, default=45, help="game minutes before a game counts as a tie")
     parser.add_argument("--difficulty", default="CheatMoney")
+    parser.add_argument("--race", default="Terran", help="our race (needs a scripted policy)")
+    parser.add_argument("--opponent-race", default="Zerg")
     parser.add_argument("--game-step", type=int, default=4)
     parser.add_argument("--games", nargs="*", default=DEFAULT_GAMES, help="MAP:BUILD entries")
     parser.add_argument("--seeds", nargs="*", type=int, default=[1],
@@ -130,7 +133,8 @@ def main():
                 index, (spec, seed) = games.get_nowait()
             except queue.Empty:
                 return
-            row = play(host, index, spec, folder, args.minutes, args.difficulty, args.game_step, seed)
+            row = play(host, index, spec, folder, args.minutes, args.difficulty, args.game_step, args.race,
+                       args.opponent_race, seed)
             with lock:
                 rows.append((index, row))
 
