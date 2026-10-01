@@ -589,6 +589,7 @@ Batch `baseline1` (commit `cc63b5e`): Ancient Cistern / Macro **Victory** 24:06;
 
 Batch `baseline2` (commit `a8ef3d4`):
 
+
 | Game | Map / Zerg build | Result | Game time |
 |---|---|---|---|
 | 01 | Ancient Cistern / Macro | **Victory** | 23:30 |
@@ -603,6 +604,23 @@ Batch `baseline2` (commit `a8ef3d4`):
 | 10 | Ancient Cistern / Air | killed with the batch at 21:50 (116 army supply) | - |
 
 The batch runner was stopped by a two-hour limit on background commands, which killed the last three games; later batches run detached. The losses: against the Rush build the bot had one Barracks and no Bunker until 5:30 (T124, with Jev, had a Bunker before 3:03); on Babylon it trained 67 Marauders and 13 Medivacs after 14:00 but only 16 Tanks (the Jev wins T128 and T130: 22 and 32), and its Tanks fell from 15 to 1-5 while gas stayed under 100. Batch `round1` (commit `8f434b4`) adds a Bunker at the natural and a second Barracks at 2:30, and keeps gas for Tanks (Marauders, Medivacs and bank spending wait for 200 spare gas).
+
+Batch `round1` (commit `8f434b4`, Bunker at the natural, second Barracks at 2:30, gas kept for Tanks): **6/10 wins**.
+
+| Game | Map / Zerg build | Result | Game time |
+|---|---|---|---|
+| 01 | Ancient Cistern / Macro | **Victory** | 23:48 |
+| 02 | Babylon / Macro | Defeat | 29:54 |
+| 03 | Altitude / Macro | **Victory** | 35:00 |
+| 04 | Neohumanity / Macro | Defeat | 28:30 |
+| 05 | Gresvan / Macro | **Victory** | 28:06 |
+| 06 | Dragon Scales / Macro | **Victory** | 20:30 |
+| 07 | Ancient Cistern / Rush | Defeat | 14:42 |
+| 08 | Ancient Cistern / Timing | **Victory** | 21:12 |
+| 09 | Ancient Cistern / Power | Defeat | 36:42 |
+| 10 | Ancient Cistern / Air | **Victory** (first win against the Air build) | 27:48 |
+
+The gas rule held the Tanks (16-20 at 12:00-14:00 on Babylon, against 1-5 in baseline2), and the Rush game had its Bunker before 3:00. The losses: on Babylon, Neohumanity and Power, Ultralisks were the top killer of an army of 40 Marines and Tanks with almost no Marauders (Ultralisks killed 138, 167 and 235 army supply; on Neohumanity collapsible rock towers also fell on a push and killed 42 supply); against the Rush build the natural fell at 4:00 and the bot never had 400 minerals again (every mineral went on Marines; the Command Center was blocked for resources in 1,078 decisions), so it stayed on one base and 21-23 SCVs. Batch `round2` (commit `9da085d`) saves for a Command Center when the bot has fewer bases than its schedule (unless a base is under attack), and once Ultralisks are seen stops Marines at 20, puts Marauders first and has Ghosts snipe Ultralisks.
 
 Phase 2 showed what the 90-supply rule fixes and what it leaves open. Both Babylon losses followed the same pattern: while the army attacked, Zerg raided a base behind it (about 30 SCVs lost in T20, a base and 14 SCVs in T21), and the army fought the late game without level 2–3 upgrades (T20's Armory failed to build; T21 never planned one), losing about 60 supply in single fights. Two Siege Tanks now stay home during an attack, a raid on a base far from the army brings the army back, and an Engineering Bay, an Armory and infantry upgrades are recommended on a fixed schedule.
 
@@ -1212,6 +1230,23 @@ T131 是第一局没有 Jev、也没有任何 LLM 的比赛。`--policy scripted
 | 10 | Ancient Cistern / Air | 批次在 21:50 被终止（部队 116） | - |
 
 批量运行器被后台命令的两小时限制终止，最后三局也随之结束；之后的批次改为独立运行。失利原因：对 Rush 构建时，Bot 直到 5:30 只有一座 Barracks、没有 Bunker（T124 用 Jev 时 3:03 前就有 Bunker）；在 Babylon，14:00 之后训练了 67 个 Marauder 和 13 个 Medivac，却只有 16 辆坦克（Jev 胜局 T128 和 T130：22 和 32 辆），坦克从 15 辆降到 1-5 辆，瓦斯一直低于 100。批次 `round1`（提交 `8f434b4`）在分基地建 Bunker、2:30 建第二座 Barracks，并把瓦斯留给坦克（Marauder、Medivac 和存款消费都要等到有 200 余量瓦斯）。
+
+批次 `round1`（提交 `8f434b4`，分基地 Bunker、2:30 第二座 Barracks、瓦斯留给坦克）：**10 局 6 胜**。
+
+| 局 | 地图 / Zerg 构建 | 结果 | 游戏时间 |
+|---|---|---|---|
+| 01 | Ancient Cistern / Macro | **胜** | 23:48 |
+| 02 | Babylon / Macro | 负 | 29:54 |
+| 03 | Altitude / Macro | **胜** | 35:00 |
+| 04 | Neohumanity / Macro | 负 | 28:30 |
+| 05 | Gresvan / Macro | **胜** | 28:06 |
+| 06 | Dragon Scales / Macro | **胜** | 20:30 |
+| 07 | Ancient Cistern / Rush | 负 | 14:42 |
+| 08 | Ancient Cistern / Timing | **胜** | 21:12 |
+| 09 | Ancient Cistern / Power | 负 | 36:42 |
+| 10 | Ancient Cistern / Air | **胜**（首次战胜 Air 构建） | 27:48 |
+
+瓦斯规则保住了坦克（Babylon 上 12:00-14:00 有 16-20 辆，baseline2 只有 1-5 辆），对 Rush 的比赛在 3:00 前就有了 Bunker。失利原因：在 Babylon、Neohumanity 和 Power 中，Ultralisk 是杀伤主力，对手是一支 40 个 Marine 加坦克、几乎没有 Marauder 的部队（Ultralisk 分别杀了 138、167 和 235 人口；Neohumanity 上可坍塌的岩石塔还砸中一次推进，杀了 42 人口）；对 Rush 时分基地在 4:00 失守，之后 Bot 再没攒到 400 矿（所有矿都花在 Marine 上；Command Center 在 1078 次决策中因资源不足被阻止），一直停在一个基地和 21-23 个 SCV。批次 `round2`（提交 `9da085d`）在基地数少于计划时攒钱造 Command Center（基地遭攻击时除外），看到 Ultralisk 后 Marine 上限降到 20、优先 Marauder，并让 Ghost 狙击 Ultralisk。
 
 第 2 阶段显示了 90 人口规则解决了什么、还留下什么。两局 Babylon 失利模式相同：部队进攻时，Zerg 袭击其身后的基地（T20 损失约 30 个 SCV，T21 损失一个基地和 14 个 SCV）；而且部队在没有 2–3 级升级的情况下进入后期（T20 的 Armory 未能建成，T21 从未计划建造），单次交战损失约 60 人口。现在进攻期间两辆 Siege Tank 留守，远离部队的基地遭袭时部队回防，Engineering Bay、Armory 和步兵升级按固定时间表推荐。
 
